@@ -38,7 +38,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDcxNjA2N0VGQzhDMDZEMkUKUldRdWJjREk3MmRnY1gwK1FXaklBWndxTndBSjNCTCtPYWt2U1A1ZklrakFDYTVyUytIU1hqaGMK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgxQ0RFMTdBNjJEMkE5NDYKUldSR3FkSmlldUhOZ2JUUkcrT1l0TFZJR2swZ0grNVAzZWRkL0FRZDRIYXdjZHRIMnp6eDRWWU0K",
       "endpoints": [
         "https://github.com/NmMarcoz/mangalize/releases/latest/download/latest.json"
       ],
