@@ -119,12 +119,16 @@ A folder the user owns, with a SQLite index beside the files:
   series you already have is something users do constantly.
 - `build_volume` scans the *whole* chapters folder and then filters, because the
   page-size norm is more reliable across a series than across one volume.
+- Volume cover art is stored in the series folder (`volumes/v1.jpg`), not a
+  cache: it is what the shelf shows and should survive going offline.
+  `volumes_missing_covers` treats a recorded path whose file has gone as missing,
+  so a half-cleaned library heals itself.
 - Schema changes need a new step in `schema.rs` and a `CURRENT` bump. A newer
   index than the build understands is refused, never downgraded.
 
 ## Getting chapters (`crates/mangalize-fetch`)
 
-Two halves, both driven by a URL the user pastes, and nothing site-specific.
+Three parts, all driven by a URL the user pastes, and nothing site-specific.
 
 - `extract.rs` scans markup for attributes rather than building a DOM: reader
   pages are frequently malformed, and every question asked ("what is this tag's
@@ -138,6 +142,25 @@ Two halves, both driven by a URL the user pastes, and nothing site-specific.
   common reason a scraped image 403s, and there is a test that covers it.
 - Downloads are 4-wide at most: the images all come from one host.
 - Stored page names are positional (`0001.jpg`), never derived from the URL.
+- `series.rs` finds the chapter number *inside a URL* and factors it into a
+  template, which is what makes batch download possible. A `chapter`-style marker
+  wins over a bare digit run, so `/manga/86-chapter-3/` is chapter 3, not 86.
+  Only the path is searched — a `?page=2` is not a chapter number.
+- `chapter_links` keeps only links matching the **dominant** URL shape on the
+  page. That one rule is what separates a chapter list from navigation, related
+  series and adverts, without knowing anything about the site.
+
+### The batch rule worth keeping
+
+`plan_batch` is bounded by the library's list of *missing* chapters. It never
+crawls outward, and a constructed URL is fetched once to confirm it loads before
+being offered. The user then sees the plan and confirms. Anything that would
+turn this into an open-ended crawler is a change in kind, not degree.
+
+Batches take chapters one at a time with a pause between them
+(`BETWEEN_CHAPTERS` in `src-tauri/src/fetch.rs`). The images come from one host,
+usually a small one. A per-chapter failure is recorded and the run continues —
+one dead page in chapter 30 must not cost the user chapters 31 to 50.
 
 ## The harvest window (`src-tauri/src/harvest.rs`)
 
@@ -227,8 +250,13 @@ mangalize library add "Ichi the Witch"
 mangalize library status 1
 mangalize library peek "https://…/chapter-7"     # list what a page offers
 mangalize library get 1 7 "https://…/chapter-7"
+mangalize library batch 1 "https://…/chapter-1" --dry-run   # show the plan only
+mangalize library batch 1 "https://…/chapter-1"
 mangalize library build 1 1 -o v01.epub
 ```
+
+`batch --dry-run` is the fastest way to find out whether a site's URL shape is
+one the detector understands, and it downloads nothing.
 
 Three integration suites, none of which mock the thing they are testing:
 
@@ -239,6 +267,7 @@ Three integration suites, none of which mock the thing they are testing:
   sync, download, delete, reopen, build.
 - `crates/mangalize-fetch/tests/fetch.rs` — a real `TcpListener` serving a
   chapter page with lazy-loaded images, a spread, a banner and hotlink
-  protection. The failures that actually happen here (range requests, `Referer`
-  checks, mislabelled content types) only exist at the HTTP layer, so mocking
-  the transport would test nothing.
+  protection, plus a numbered chapter run that 404s past its last chapter. The
+  failures that actually happen here (range requests, `Referer` checks,
+  mislabelled content types, chapters the site does not have) only exist at the
+  HTTP layer, so mocking the transport would test nothing.

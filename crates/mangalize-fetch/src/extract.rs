@@ -111,14 +111,14 @@ fn base_href(page: &str, html: &str) -> String {
 }
 
 /// A start tag and its raw attribute text.
-struct Tag {
-    name: String,
+pub(crate) struct Tag {
+    pub(crate) name: String,
     body: String,
 }
 
 impl Tag {
     /// Attribute value by lowercase name. Quoted and unquoted forms both work.
-    fn attr(&self, name: &str) -> Option<&str> {
+    pub(crate) fn attr(&self, name: &str) -> Option<&str> {
         let body = self.body.as_str();
         let lower = body.to_ascii_lowercase();
         let mut from = 0;
@@ -154,7 +154,7 @@ impl Tag {
 ///
 /// Quotes are tracked so a `>` inside an attribute value does not end the tag
 /// early, which is how naive scanners truncate URLs containing one.
-fn tags(html: &str) -> impl Iterator<Item = Tag> + '_ {
+pub(crate) fn tags(html: &str) -> impl Iterator<Item = Tag> + '_ {
     let bytes = html.as_bytes();
     let mut i = 0;
 

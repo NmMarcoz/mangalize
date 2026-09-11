@@ -13,6 +13,7 @@ import {
   effectiveCover,
   suggestFilename,
   volumePageCount,
+  withExtension,
   type BuildReport,
   type Format,
   type Metadata,
@@ -59,13 +60,41 @@ export function EditorView({
   const [building, setBuilding] = useState<{ done: number; total: number } | null>(null);
   const [report, setReport] = useState<BuildReport | null>(null);
 
-  // A different volume means the previous one's selection is meaningless.
+  /** Empty means "use whatever the metadata suggests". */
+  const [fileName, setFileName] = useState("");
+  const [suggested, setSuggested] = useState("");
+
+  // A different volume means the previous one's selection is meaningless, and
+  // an export name typed for it certainly is.
   useEffect(() => {
     setActiveChapter(null);
     setSelection(new Set());
     setAnchor(null);
     setReport(null);
+    setFileName("");
   }, [volume.root]);
+
+  /**
+   * Keep the suggested name in step with the metadata.
+   *
+   * Derived in the backend rather than here so there is one definition of what
+   * a volume file is called, shared with the CLI. Only the fields it actually
+   * uses are watched, so typing a description does not re-derive it.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    suggestFilename(volume, format)
+      .then((name) => {
+        if (!cancelled) setSuggested(name);
+      })
+      .catch(() => {
+        if (!cancelled) setSuggested("");
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [volume.metadata.series, volume.metadata.volume, format]);
 
   useEffect(() => {
     const pending = listen<{ done: number; total: number }>("build-progress", (e) => {
@@ -300,9 +329,13 @@ export function EditorView({
   const handleExport = useCallback(async () => {
     onError(null);
     try {
-      const suggested = await suggestFilename(volume, format);
+      // What the user typed wins; the derived name is only ever a default.
+      const chosen = fileName.trim()
+        ? withExtension(fileName, format)
+        : suggested || (await suggestFilename(volume, format));
+
       const out = await save({
-        defaultPath: suggested,
+        defaultPath: chosen,
         filters: [{ name: format.toUpperCase(), extensions: [format] }],
       });
       if (!out) return;
@@ -316,7 +349,7 @@ export function EditorView({
     } finally {
       setBuilding(null);
     }
-  }, [volume, format, onError]);
+  }, [volume, format, fileName, suggested, onError]);
 
   const pickCover = useCallback(async () => {
     const picked = await open({
@@ -383,6 +416,9 @@ export function EditorView({
           onPickCover={() => void pickCover()}
           onFetchMetadata={() => setLookupOpen(true)}
           onClearCover={() => setVolume((c) => (c ? { ...c, cover: null } : c))}
+          fileName={fileName}
+          suggestedFileName={suggested}
+          onFileName={setFileName}
         />
       </div>
 

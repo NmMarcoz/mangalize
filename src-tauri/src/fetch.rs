@@ -5,11 +5,14 @@
 //! look broken.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 
-use mangalize_fetch::{Candidate, Extraction};
+use mangalize_fetch::{BatchItem, BatchPlan, Candidate, Extraction};
 use mangalize_library::{ChapterStatus, Library, SeriesId};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::settings;
 use crate::util::blocking;
@@ -174,6 +177,160 @@ pub async fn import_chapter(
         library.record_chapter(series, &chapter, count as u32, None)
     })
     .await
+}
+
+/* --------------------------------------------------------------- batch fetch */
+
+/// Lets a running batch be stopped from the UI.
+///
+/// A batch is the one operation here long enough that the user will change their
+/// mind halfway through, and abandoning the command future would not stop the
+/// blocking work already on the pool.
+#[derive(Default)]
+pub struct BatchControl {
+    cancelled: Arc<AtomicBool>,
+}
+
+/// How long to wait between chapters.
+///
+/// The images all come from one host, usually a small one. Downloading fifty
+/// chapters back to back as fast as the pool allows is both rude and the fastest
+/// way to get the user rate-limited out of their own batch.
+const BETWEEN_CHAPTERS: Duration = Duration::from_millis(400);
+
+#[derive(Clone, Serialize)]
+struct BatchProgress {
+    chapter: String,
+    /// 1-based position of this chapter in the batch.
+    index: usize,
+    total: usize,
+    stage: &'static str,
+    done: usize,
+    page_total: usize,
+}
+
+#[derive(Serialize)]
+pub struct BatchFailure {
+    number: String,
+    error: String,
+}
+
+#[derive(Serialize)]
+pub struct BatchReport {
+    downloaded: Vec<String>,
+    failed: Vec<BatchFailure>,
+    cancelled: bool,
+}
+
+/// Work out how to reach each wanted chapter from one URL the user pasted.
+#[tauri::command]
+pub async fn plan_batch(
+    app: AppHandle,
+    url: String,
+    wanted: Vec<String>,
+) -> Result<BatchPlan, String> {
+    blocking(move || mangalize_fetch::plan_batch(&url, &wanted, &mut emit(&app, "checking"))).await
+}
+
+/// Stop the batch currently running, if any.
+#[tauri::command]
+pub fn cancel_batch(control: State<BatchControl>) {
+    control.cancelled.store(true, Ordering::Relaxed);
+}
+
+/// Download a whole planned batch into the library.
+///
+/// Chapters are taken one at a time and a failure is recorded against that
+/// chapter rather than ending the run: one dead page in chapter 30 should not
+/// cost the user chapters 31 to 50. Where each chapter lands is decided entirely
+/// by the library, so the published volume layout organises the result for free.
+#[tauri::command]
+pub async fn download_batch(
+    app: AppHandle,
+    control: State<'_, BatchControl>,
+    id: i64,
+    items: Vec<BatchItem>,
+) -> Result<BatchReport, String> {
+    let cancelled = control.cancelled.clone();
+    cancelled.store(false, Ordering::Relaxed);
+
+    blocking(move || {
+        let library = Library::open(settings::library_root(&app)?)?;
+        let series = SeriesId(id);
+        let total = items.len();
+
+        let mut downloaded = Vec::new();
+        let mut failed = Vec::new();
+
+        for (index, item) in items.iter().enumerate() {
+            if cancelled.load(Ordering::Relaxed) {
+                return Ok(BatchReport { downloaded, failed, cancelled: true });
+            }
+            if index > 0 {
+                std::thread::sleep(BETWEEN_CHAPTERS);
+            }
+
+            let report = |stage: &'static str, done: usize, page_total: usize| {
+                let _ = app.emit(
+                    "batch-progress",
+                    BatchProgress {
+                        chapter: item.number.clone(),
+                        index: index + 1,
+                        total,
+                        stage,
+                        done,
+                        page_total,
+                    },
+                );
+            };
+            report("reading", 0, 0);
+
+            match fetch_one(&library, series, item, &report) {
+                Ok(pages) => downloaded.push(format!("{} ({pages} pages)", item.number)),
+                Err(e) => failed.push(BatchFailure {
+                    number: item.number.clone(),
+                    error: format!("{e:#}"),
+                }),
+            }
+        }
+
+        Ok(BatchReport { downloaded, failed, cancelled: false })
+    })
+    .await
+}
+
+/// One chapter of a batch: find its pages, save them, record it.
+fn fetch_one(
+    library: &Library,
+    series: SeriesId,
+    item: &BatchItem,
+    report: &dyn Fn(&'static str, usize, usize),
+) -> anyhow::Result<usize> {
+    // No picker here, so the size sieve does the choosing. A page that offers
+    // nothing it recognises is reported rather than silently stored empty.
+    let pages = mangalize_fetch::chapter_pages(&item.url, &mut |done, total| {
+        report("reading", done, total)
+    })?;
+
+    if pages.is_empty() {
+        anyhow::bail!("no page images found at {}", item.url);
+    }
+
+    let dest = library.chapter_dir(series, &item.number)?;
+    if dest.exists() {
+        std::fs::remove_dir_all(&dest)?;
+    }
+
+    let page_total = pages.len();
+    let written = mangalize_fetch::download_pages(
+        &pages,
+        &dest,
+        Some(&item.url),
+        &mut |done, _| report("downloading", done, page_total),
+    )?;
+
+    library.record_chapter(series, &item.number, written.len() as u32, Some(&item.url))?;
+    Ok(written.len())
 }
 
 /// A progress callback that emits `fetch-progress`, coalesced.

@@ -117,6 +117,32 @@ pub fn download_all(
     Ok(written)
 }
 
+/// Which of these URLs actually load.
+///
+/// Used to confirm constructed chapter URLs before offering them. Only the first
+/// few bytes are read: this is an existence check, not a download.
+pub fn reachable(urls: &[String], referer: Option<&str>, progress: &mut Progress) -> Vec<bool> {
+    parallel(urls, referer, progress, |url, referer| {
+        let mut request = ureq::get(url)
+            .set("User-Agent", USER_AGENT)
+            .set("Accept", "text/html,application/xhtml+xml")
+            .set("Range", "bytes=0-2047")
+            .timeout(TIMEOUT);
+        if let Some(referer) = referer {
+            request = request.set("Referer", referer);
+        }
+
+        // `ureq` treats 4xx and 5xx as errors, so success here means the page is
+        // really there. The content type is checked too, because plenty of sites
+        // answer an unknown chapter with a 200 and a redirect to the series page
+        // — still HTML, but at least a hard 404 is ruled out cheaply.
+        request
+            .call()
+            .map(|response| response.content_type().to_ascii_lowercase().contains("html"))
+            .unwrap_or(false)
+    })
+}
+
 /// Fetch one image whole, refusing anything that is not one.
 pub fn fetch_image(url: &str, referer: Option<&str>) -> Result<(Vec<u8>, &'static str)> {
     // One retry: a single failed page ruins a whole chapter, and the usual cause

@@ -55,6 +55,18 @@ pub fn chapter_slug(number: &str) -> String {
     }
 }
 
+/// A file stem for a volume's cover art, e.g. `v1` or `v7.5`.
+pub fn volume_slug(number: &str) -> String {
+    let safe: String = number
+        .trim()
+        .chars()
+        .map(|c| if ILLEGAL.contains(c) || c.is_control() { '-' } else { c })
+        .take(32)
+        .collect();
+    let safe = safe.trim().to_string();
+    if safe.is_empty() { "v-unnamed".into() } else { format!("v{safe}") }
+}
+
 /// Numeric ordering for a volume or chapter label.
 ///
 /// Returns `None` for labels that are not numbers at all, which callers sort
@@ -103,6 +115,13 @@ mod tests {
     #[test]
     fn named_chapters_keep_their_name() {
         assert_eq!(chapter_slug("Oneshot"), "c-Oneshot");
+    }
+
+    #[test]
+    fn volume_covers_are_named_after_their_volume() {
+        assert_eq!(volume_slug("1"), "v1");
+        assert_eq!(volume_slug("7.5"), "v7.5");
+        assert_eq!(volume_slug("a/b"), "va-b");
     }
 
     #[test]

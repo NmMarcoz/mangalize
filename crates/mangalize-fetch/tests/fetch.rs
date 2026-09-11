@@ -37,9 +37,53 @@ fn chapter_html() -> String {
         .to_string()
 }
 
+/// A chapter page shaped like a real reader's: its own pages, plus links to the
+/// neighbouring chapters but *not* to the whole run.
+fn numbered_chapter_html(n: u32) -> String {
+    let mut html = String::from("<!doctype html><html><body>");
+    for page in 1..=3 {
+        html += &format!(r#"<img data-src="/pages/{page:02}.jpg">"#);
+    }
+    if n > 1 {
+        html += &format!(r#"<a href="/manga/x-chapter-{}/">Previous</a>"#, n - 1);
+    }
+    html += &format!(r#"<a href="/manga/x-chapter-{}/">Next</a>"#, n + 1);
+    html += "</body></html>";
+    html
+}
+
+/// A series index page linking every chapter that exists.
+fn index_html() -> String {
+    let mut html = String::from("<!doctype html><html><body>");
+    for n in 1..=CHAPTERS {
+        html += &format!(r#"<a href="/manga/x-chapter-{n}/">Chapter {n}</a>"#);
+    }
+    // Site furniture that must not be mistaken for the chapter list.
+    html += r#"<a href="/about-2024/">About</a>"#;
+    html += "</body></html>";
+    html
+}
+
+/// How many chapters the fixture site has published.
+const CHAPTERS: u32 = 6;
+
 /// Body for a path, or `None` for 404.
 fn body_for(path: &str) -> Option<(&'static str, Vec<u8>)> {
+    // Chapter pages exist only up to `CHAPTERS`; anything beyond 404s, which is
+    // what a constructed URL for a chapter the site does not have would hit.
+    if let Some(rest) = path.strip_prefix("/manga/x-chapter-") {
+        let number: u32 = rest.trim_end_matches('/').parse().ok()?;
+        if number == 0 || number > CHAPTERS {
+            return None;
+        }
+        return Some((
+            "text/html; charset=utf-8",
+            numbered_chapter_html(number).into_bytes(),
+        ));
+    }
+
     match path {
+        "/manga/x/" => Some(("text/html; charset=utf-8", index_html().into_bytes())),
         "/chapter-7" => Some(("text/html; charset=utf-8", chapter_html().into_bytes())),
         "/pages/01.jpg" | "/pages/02.jpg" | "/pages/04.jpg" => {
             Some(("image/jpeg", jpeg(800, 1168)))
@@ -302,4 +346,117 @@ fn a_dead_image_url_is_reported_against_that_page_not_the_whole_chapter() {
         .unwrap_err()
         .to_string();
     assert!(failure.contains("page 2"), "unhelpful message: {failure}");
+}
+
+
+/* ------------------------------------------------------------------- batches */
+
+#[test]
+fn an_index_page_resolves_every_wanted_chapter_from_its_links() {
+    let server = Server::start(false);
+    let wanted: Vec<String> = (1..=6).map(|n| n.to_string()).collect();
+
+    let plan = mangalize_fetch::plan_batch(
+        &format!("{}/manga/x/", server.base),
+        &wanted,
+        &mut silent(),
+    )
+    .unwrap();
+
+    assert_eq!(plan.items.len(), 6);
+    assert!(plan.unresolved.is_empty());
+    // The index linked them all, so nothing had to be guessed at.
+    assert!(plan
+        .items
+        .iter()
+        .all(|i| i.found == mangalize_fetch::Found::Linked));
+
+    let numbers: Vec<&str> = plan.items.iter().map(|i| i.number.as_str()).collect();
+    assert_eq!(numbers, ["1", "2", "3", "4", "5", "6"]);
+}
+
+#[test]
+fn a_single_chapter_url_still_reaches_the_whole_run_by_pattern() {
+    let server = Server::start(false);
+    let wanted: Vec<String> = (1..=6).map(|n| n.to_string()).collect();
+
+    // This page links only chapters 2 and 4; the rest must be constructed.
+    let plan = mangalize_fetch::plan_batch(
+        &format!("{}/manga/x-chapter-3/", server.base),
+        &wanted,
+        &mut silent(),
+    )
+    .unwrap();
+
+    assert_eq!(plan.items.len(), 6);
+    assert!(plan.unresolved.is_empty());
+    assert!(plan
+        .items
+        .iter()
+        .any(|i| i.found == mangalize_fetch::Found::Guessed));
+    assert!(plan.pattern.unwrap().contains("{n}"));
+}
+
+#[test]
+fn chapters_the_site_does_not_have_are_reported_rather_than_offered() {
+    let server = Server::start(false);
+    // The library thinks 8 chapters exist; the site published 6.
+    let wanted: Vec<String> = (1..=8).map(|n| n.to_string()).collect();
+
+    let plan = mangalize_fetch::plan_batch(
+        &format!("{}/manga/x-chapter-1/", server.base),
+        &wanted,
+        &mut silent(),
+    )
+    .unwrap();
+
+    assert_eq!(plan.items.len(), 6);
+    assert_eq!(plan.unresolved, ["7", "8"]);
+}
+
+#[test]
+fn a_batch_only_looks_for_the_chapters_it_was_asked_about() {
+    let server = Server::start(false);
+
+    let plan = mangalize_fetch::plan_batch(
+        &format!("{}/manga/x/", server.base),
+        &["2".to_string(), "5".to_string()],
+        &mut silent(),
+    )
+    .unwrap();
+
+    // No crawling outward: exactly the gaps the library reported.
+    let numbers: Vec<&str> = plan.items.iter().map(|i| i.number.as_str()).collect();
+    assert_eq!(numbers, ["2", "5"]);
+}
+
+#[test]
+fn each_planned_chapter_yields_its_pages() {
+    let server = Server::start(false);
+    let plan = mangalize_fetch::plan_batch(
+        &format!("{}/manga/x/", server.base),
+        &["4".to_string()],
+        &mut silent(),
+    )
+    .unwrap();
+
+    let pages = mangalize_fetch::chapter_pages(&plan.items[0].url, &mut silent()).unwrap();
+    assert_eq!(pages.len(), 3);
+    assert!(pages.iter().all(|u| u.contains("/pages/")));
+}
+
+#[test]
+fn a_url_with_no_number_and_no_links_cannot_be_planned_from() {
+    let server = Server::start(false);
+    let plan = mangalize_fetch::plan_batch(
+        &format!("{}/chapter-7", server.base),
+        &["1".to_string()],
+        &mut silent(),
+    )
+    .unwrap();
+
+    // That page has images but no chapter links and no usable pattern, so the
+    // honest answer is "could not resolve", not a fabricated URL.
+    assert!(plan.items.is_empty());
+    assert_eq!(plan.unresolved, ["1"]);
 }

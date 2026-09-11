@@ -81,6 +81,40 @@ export interface Harvested {
   height: number;
 }
 
+/** Whether a chapter URL was published by the site or constructed from its pattern. */
+export type Found = "linked" | "guessed";
+
+/** Mirrors `mangalize_fetch::BatchItem`. */
+export interface BatchItem {
+  number: string;
+  url: string;
+  found: Found;
+}
+
+export interface BatchPlan {
+  /** The recognised URL shape, e.g. `…/x-chapter-{n}/`. */
+  pattern: string | null;
+  items: BatchItem[];
+  /** Wanted chapters no URL could be found for. */
+  unresolved: string[];
+}
+
+export interface BatchReport {
+  downloaded: string[];
+  failed: { number: string; error: string }[];
+  cancelled: boolean;
+}
+
+/** Progress emitted on the `batch-progress` event. */
+export interface BatchProgress {
+  chapter: string;
+  index: number;
+  total: number;
+  stage: "reading" | "downloading";
+  done: number;
+  page_total: number;
+}
+
 /** Progress emitted on the `fetch-progress` event. */
 export interface FetchProgress {
   stage: "measuring" | "downloading";
@@ -114,6 +148,9 @@ export const libraryUpdateSeries = (
 export const libraryVolumes = (id: number) =>
   invoke<VolumeStatus[]>("library_volumes", { id });
 
+export const libraryDownloadCovers = (id: number) =>
+  invoke<number>("library_download_covers", { id });
+
 export const libraryBuildVolume = (id: number, volume: string) =>
   invoke<Volume>("library_build_volume", { id, volume });
 
@@ -144,6 +181,14 @@ export const downloadChapter = (args: {
 
 export const importChapter = (id: number, chapter: string, folder: string) =>
   invoke<ChapterStatus>("import_chapter", { id, chapter, folder });
+
+export const planBatch = (url: string, wanted: string[]) =>
+  invoke<BatchPlan>("plan_batch", { url, wanted });
+
+export const downloadBatch = (id: number, items: BatchItem[]) =>
+  invoke<BatchReport>("download_batch", { id, items });
+
+export const cancelBatch = () => invoke<void>("cancel_batch");
 
 /* ------------------------------------------------------------------ helpers */
 

@@ -54,6 +54,16 @@ pub enum LibraryCommand {
         #[arg(long)]
         all: bool,
     },
+    /// Find and download every missing chapter from one URL.
+    Batch {
+        series: i64,
+        /// A chapter page, or the series index. Either is enough to learn the
+        /// site's URL pattern.
+        url: String,
+        /// Show the plan and stop, without downloading anything.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Build a stored volume into an EPUB or CBZ.
     Build {
         series: i64,
@@ -78,6 +88,9 @@ pub fn run(root: Option<PathBuf>, command: LibraryCommand) -> Result<()> {
         LibraryCommand::Peek { url } => peek(&url),
         LibraryCommand::Get { series, chapter, url, all } => {
             get(&library, SeriesId(series), &chapter, &url, all)
+        }
+        LibraryCommand::Batch { series, url, dry_run } => {
+            batch(&library, SeriesId(series), &url, dry_run)
         }
         LibraryCommand::Build { series, volume, out } => {
             build(&library, SeriesId(series), &volume, &out)
@@ -307,6 +320,92 @@ fn get(library: &Library, id: SeriesId, chapter: &str, url: &str, all: bool) -> 
         dest.display()
     );
     Ok(())
+}
+
+fn batch(library: &Library, id: SeriesId, url: &str, dry_run: bool) -> Result<()> {
+    let series = library.series(id)?;
+
+    // Only the gaps. There is no crawling outward: the published layout decides
+    // what is worth looking for, and the library decides what is already here.
+    let wanted: Vec<String> = library
+        .volumes(id)?
+        .iter()
+        .flat_map(|v| v.chapters.iter())
+        .filter(|c| !c.downloaded())
+        .map(|c| c.number.clone())
+        .collect();
+
+    if wanted.is_empty() {
+        println!("{} has no missing chapters.", series.title);
+        return Ok(());
+    }
+    println!("{} is missing {} chapters.", series.title, wanted.len());
+
+    let plan = mangalize_fetch::plan_batch(url, &wanted, &mut progress("checking"))?;
+    eprintln!();
+
+    if let Some(pattern) = &plan.pattern {
+        println!("pattern  {pattern}");
+    }
+    println!("found    {} chapters", plan.items.len());
+    if !plan.unresolved.is_empty() {
+        println!("no url   {}", plan.unresolved.join(", "));
+    }
+    if plan.items.is_empty() {
+        bail!("nothing to download from that URL");
+    }
+
+    for item in plan.items.iter().take(5) {
+        println!("    {:<6} {:?}  {}", item.number, item.found, item.url);
+    }
+    if plan.items.len() > 5 {
+        println!("    … and {} more", plan.items.len() - 5);
+    }
+
+    if dry_run {
+        return Ok(());
+    }
+
+    let mut failures = 0usize;
+    for (index, item) in plan.items.iter().enumerate() {
+        // One host, often a small one: take these one at a time.
+        if index > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+        }
+        eprint!("\r[{}/{}] chapter {}          ", index + 1, plan.items.len(), item.number);
+
+        match fetch_one(library, id, &item.number, &item.url) {
+            Ok(pages) => println!("\rchapter {:<6} {pages} pages", item.number),
+            Err(e) => {
+                failures += 1;
+                println!("\rchapter {:<6} failed: {e:#}", item.number);
+            }
+        }
+    }
+
+    println!(
+        "\n{} of {} chapters downloaded",
+        plan.items.len() - failures,
+        plan.items.len()
+    );
+    Ok(())
+}
+
+/// Fetch one chapter of a batch into the library.
+fn fetch_one(library: &Library, id: SeriesId, number: &str, url: &str) -> Result<usize> {
+    let pages = mangalize_fetch::chapter_pages(url, &mut |_, _| {})?;
+    if pages.is_empty() {
+        bail!("no page images found");
+    }
+
+    let dest = library.chapter_dir(id, number)?;
+    if dest.exists() {
+        std::fs::remove_dir_all(&dest)?;
+    }
+
+    let written = mangalize_fetch::download_pages(&pages, &dest, Some(url), &mut |_, _| {})?;
+    library.record_chapter(id, number, written.len() as u32, Some(url))?;
+    Ok(written.len())
 }
 
 fn build(library: &Library, id: SeriesId, volume_number: &str, out: &PathBuf) -> Result<()> {

@@ -16,6 +16,7 @@
 
 pub mod download;
 pub mod extract;
+pub mod series;
 pub mod url;
 
 use std::time::Duration;
@@ -110,6 +111,121 @@ pub fn download_pages(
     progress: &mut Progress,
 ) -> Result<Vec<std::path::PathBuf>> {
     download::download_all(urls, dest, referer, progress)
+}
+
+/* ------------------------------------------------------------ batch planning */
+
+/// Where a chapter URL came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Found {
+    /// The page linked it, so it certainly exists.
+    Linked,
+    /// Constructed from the URL pattern and then confirmed to load.
+    Guessed,
+}
+
+/// One chapter a batch would fetch.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchItem {
+    pub number: String,
+    pub url: String,
+    pub found: Found,
+}
+
+/// What a batch download would do, for the user to confirm.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchPlan {
+    /// The URL shape that was recognised, for display, e.g. `…/x-chapter-{n}/`.
+    pub pattern: Option<String>,
+    pub items: Vec<BatchItem>,
+    /// Wanted chapters no URL could be found for.
+    pub unresolved: Vec<String>,
+}
+
+/// Work out how to reach each of `wanted` from one URL the user supplied.
+///
+/// The page is read for links first, because a link the site published is
+/// evidence and a constructed URL is only a guess. Guesses fill the gaps and are
+/// each fetched once to confirm they load, so the user is never shown a plan
+/// that is mostly 404s.
+///
+/// `wanted` is normally the library's list of missing chapters, which is what
+/// makes this bounded: there is no blind crawling outward, only a check for the
+/// specific chapters that are known to exist and known to be absent.
+pub fn plan_batch(
+    page_url: &str,
+    wanted: &[String],
+    progress: &mut Progress,
+) -> Result<BatchPlan> {
+    let html = fetch_html(page_url)?;
+    let links = series::chapter_links(page_url, &html);
+
+    // A template from the URL the user pasted describes the site better than one
+    // inferred from a link, because it is the page they know works.
+    let template = series::split(page_url)
+        .map(|(t, _)| t)
+        .or_else(|| links.first().and_then(|l| series::split(&l.url).map(|(t, _)| t)));
+
+    let by_number: std::collections::HashMap<&str, &series::ChapterLink> =
+        links.iter().map(|l| (l.number.as_str(), l)).collect();
+
+    let mut items = Vec::new();
+    let mut unresolved = Vec::new();
+    let mut guesses = Vec::new();
+
+    for number in wanted {
+        let key = series::normalise(number);
+        if let Some(link) = by_number.get(key.as_str()) {
+            items.push(BatchItem {
+                number: number.clone(),
+                url: link.url.clone(),
+                found: Found::Linked,
+            });
+        } else if let Some(template) = &template {
+            guesses.push((number.clone(), template.apply(&key)));
+        } else {
+            unresolved.push(number.clone());
+        }
+    }
+
+    // Confirm the guesses concurrently; this is the slow part of planning.
+    let urls: Vec<String> = guesses.iter().map(|(_, url)| url.clone()).collect();
+    let alive = download::reachable(&urls, Some(page_url), progress);
+
+    for ((number, url), ok) in guesses.into_iter().zip(alive) {
+        if ok {
+            items.push(BatchItem { number, url, found: Found::Guessed });
+        } else {
+            unresolved.push(number);
+        }
+    }
+
+    items.sort_by(|a, b| {
+        let ka = a.number.parse::<f64>().unwrap_or(f64::MAX);
+        let kb = b.number.parse::<f64>().unwrap_or(f64::MAX);
+        ka.partial_cmp(&kb).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    Ok(BatchPlan {
+        pattern: template.map(|t| t.pattern()),
+        items,
+        unresolved,
+    })
+}
+
+/// The pages one chapter offers, already sieved down to what looks like a page.
+///
+/// Used by the batch path, where there is no picker: the size sieve is doing the
+/// job the user would otherwise do by eye.
+pub fn chapter_pages(page_url: &str, progress: &mut Progress) -> Result<Vec<String>> {
+    let found = extract_page(page_url, progress)?;
+    Ok(found
+        .candidates
+        .into_iter()
+        .filter(|c| c.selected)
+        .map(|c| c.url)
+        .collect())
 }
 
 /// Fetch a page's markup.

@@ -149,6 +149,21 @@ export const excludeLabel = (reason: ExcludeReason): string => {
 
 export const fileName = (path: string) => path.split(/[/\\]/).pop() ?? path;
 
+/**
+ * Make sure a user-typed export name carries the extension for the format.
+ *
+ * Typing "Ichi the Witch v01" and getting a file with no extension is a real
+ * way to end up with something a Kindle refuses to open, so the extension is
+ * added when it is missing rather than assumed.
+ */
+export const withExtension = (name: string, format: Format) => {
+  const trimmed = name.trim();
+  if (!trimmed) return trimmed;
+  return trimmed.toLowerCase().endsWith(`.${format}`)
+    ? trimmed
+    : `${trimmed}.${format}`;
+};
+
 export const formatBytes = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
   const units = ["KB", "MB", "GB"];

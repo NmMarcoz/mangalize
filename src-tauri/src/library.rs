@@ -130,6 +130,30 @@ pub async fn library_volumes(app: AppHandle, id: i64) -> Result<Vec<VolumeStatus
     blocking(move || open(&app)?.volumes(SeriesId(id))).await
 }
 
+/// Download any published volume covers we do not already hold.
+///
+/// Returns how many were fetched. Individual failures are skipped rather than
+/// failing the call: a missing cover is a cosmetic problem, and retrying is just
+/// opening the series again.
+#[tauri::command]
+pub async fn library_download_covers(app: AppHandle, id: i64) -> Result<usize, String> {
+    blocking(move || {
+        let library = open(&app)?;
+        let series = SeriesId(id);
+        let mut fetched = 0;
+
+        for (number, url) in library.volumes_missing_covers(series)? {
+            if let Ok(bytes) = mangalize_meta::download_image(&url) {
+                if library.set_volume_cover(series, &number, &bytes).is_ok() {
+                    fetched += 1;
+                }
+            }
+        }
+        Ok(fetched)
+    })
+    .await
+}
+
 /// Hand a stored volume to the editor the folder path already uses.
 #[tauri::command]
 pub async fn library_build_volume(

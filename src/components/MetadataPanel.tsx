@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useThumbnail } from "@/hooks/useThumbnail";
 import {
   effectiveCover,
-  fileName,
+  fileName as baseName,
   type Direction,
   type Metadata,
   type Volume,
@@ -27,6 +27,11 @@ interface MetadataPanelProps {
   onPickCover: () => void;
   onClearCover: () => void;
   onFetchMetadata: () => void;
+  /** What the user typed for the output name. Empty means "use the suggestion". */
+  fileName: string;
+  /** The name derived from the metadata, shown as the placeholder. */
+  suggestedFileName: string;
+  onFileName: (name: string) => void;
 }
 
 export function MetadataPanel({
@@ -35,6 +40,9 @@ export function MetadataPanel({
   onPickCover,
   onClearCover,
   onFetchMetadata,
+  fileName: exportName,
+  suggestedFileName,
+  onFileName,
 }: MetadataPanelProps) {
   const cover = effectiveCover(volume);
   const { metadata } = volume;
@@ -64,7 +72,7 @@ export function MetadataPanel({
         </div>
         <p className="text-[11px] leading-snug text-muted-foreground">
           {volume.cover
-            ? fileName(volume.cover)
+            ? baseName(volume.cover)
             : "Using page one. Press C on any page to promote it."}
         </p>
       </section>
@@ -147,6 +155,23 @@ export function MetadataPanel({
             onChange={(e) => onChange({ description: e.target.value })}
           />
         </div>
+      </section>
+
+      <Separator />
+
+      <section className="flex flex-col gap-1.5">
+        <Label htmlFor="filename">Export as</Label>
+        <Input
+          id="filename"
+          value={exportName}
+          placeholder={suggestedFileName}
+          onChange={(e) => onFileName(e.target.value)}
+        />
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          {exportName.trim()
+            ? "Used as the file name when you export."
+            : "Taken from the series and volume above. Type to override."}
+        </p>
       </section>
     </aside>
   );

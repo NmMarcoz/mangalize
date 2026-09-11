@@ -79,6 +79,26 @@ pub fn path_of(url: &str) -> &str {
     path.split(['?', '#']).next().unwrap_or(path)
 }
 
+/// Byte range of a URL's path within the string, excluding query and fragment.
+///
+/// Chapter-number detection has to stay inside this range: a `?page=2` is not a
+/// chapter number, and rewriting it would produce nonsense for every chapter.
+pub(crate) fn path_bounds(url: &str) -> (usize, usize) {
+    let after_scheme = match url.find("://") {
+        Some(i) => i + 3,
+        None => 0,
+    };
+    let start = match url[after_scheme..].find('/') {
+        Some(i) => after_scheme + i,
+        None => url.len(),
+    };
+    let end = url[start..]
+        .find(['?', '#'])
+        .map(|i| start + i)
+        .unwrap_or(url.len());
+    (start, end)
+}
+
 /// The origin, for use as a `Referer` header.
 ///
 /// Plenty of image hosts refuse requests that do not carry the page's origin,
@@ -158,6 +178,20 @@ mod tests {
         assert_eq!(extension_of("https://a.test/1.jpg?w=800").as_deref(), Some("jpg"));
         assert_eq!(extension_of("https://a.test/1.JPEG").as_deref(), Some("jpeg"));
         assert_eq!(extension_of("https://a.test/page/7"), None);
+    }
+
+    #[test]
+    fn path_bounds_exclude_the_query() {
+        let url = "https://a.test/m/x-chapter-3/?page=2";
+        let (start, end) = path_bounds(url);
+        assert_eq!(&url[start..end], "/m/x-chapter-3/");
+    }
+
+    #[test]
+    fn a_url_with_no_path_has_an_empty_range() {
+        let url = "https://a.test";
+        let (start, end) = path_bounds(url);
+        assert_eq!(&url[start..end], "");
     }
 
     #[test]

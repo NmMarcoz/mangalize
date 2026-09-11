@@ -22,6 +22,7 @@ mod volume;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(fetch::BatchControl::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -41,6 +42,7 @@ pub fn run() {
             library::library_remove_series,
             library::library_update_series,
             library::library_volumes,
+            library::library_download_covers,
             library::library_build_volume,
             library::library_delete_chapter,
             fetch::extract_chapter,
@@ -48,6 +50,9 @@ pub fn run() {
             fetch::preview_image,
             fetch::download_chapter,
             fetch::import_chapter,
+            fetch::plan_batch,
+            fetch::download_batch,
+            fetch::cancel_batch,
             harvest::harvest_images,
         ])
         .run(tauri::generate_context!())

@@ -183,6 +183,53 @@ impl Library {
         Ok(path)
     }
 
+    /// Store a downloaded volume cover, and return where it landed.
+    ///
+    /// Kept inside the series folder rather than a cache, because unlike a
+    /// search thumbnail this is part of the collection: it is what the shelf
+    /// shows, and it should survive going offline.
+    pub fn set_volume_cover(&self, id: SeriesId, number: &str, bytes: &[u8]) -> Result<PathBuf> {
+        let folder = self.series(id)?.folder;
+        let dir = folder.join("volumes");
+        std::fs::create_dir_all(&dir)
+            .with_context(|| format!("creating {}", dir.display()))?;
+
+        let relative = format!("volumes/{}.jpg", paths::volume_slug(number));
+        let path = folder.join(&relative);
+        std::fs::write(&path, bytes).with_context(|| format!("writing {}", path.display()))?;
+
+        // The volume row may not exist when the cover arrives before a sync.
+        self.db.execute(
+            "INSERT INTO volumes (series_id, number, sort_key, cover_path)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(series_id, number) DO UPDATE SET cover_path = excluded.cover_path",
+            params![id.0, number, paths::sort_key(number), relative],
+        )?;
+        Ok(path)
+    }
+
+    /// Volumes that have published cover art but no local copy of it yet.
+    pub fn volumes_missing_covers(&self, id: SeriesId) -> Result<Vec<(String, String)>> {
+        let folder = self.series(id)?.folder;
+        let mut stmt = self.db.prepare(
+            "SELECT number, cover_url, cover_path FROM volumes
+              WHERE series_id = ?1 AND cover_url IS NOT NULL",
+        )?;
+        let rows: Vec<(String, String, Option<String>)> = stmt
+            .query_map(params![id.0], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+
+        Ok(rows
+            .into_iter()
+            // A recorded path whose file has since been deleted counts as missing,
+            // so a half-cleaned library heals itself on the next refresh.
+            .filter(|(_, _, path)| !path.as_ref().is_some_and(|p| folder.join(p).exists()))
+            .map(|(number, url, _)| (number, url))
+            .collect())
+    }
+
     /* ------------------------------------------------------------- layout */
 
     /// Merge a published volume/chapter layout into what we already know.

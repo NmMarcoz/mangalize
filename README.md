@@ -25,6 +25,7 @@ The desktop app and the CLI both work. PDF output is not written yet.
 | Online metadata lookup (MangaDex / Kitsu) | done |
 | Library: series, volumes, missing chapters | done |
 | Downloading a chapter from a pasted URL | done |
+| Batch download of every missing chapter | done |
 | PDF writer | not started |
 
 ## The library
@@ -48,9 +49,11 @@ The flow:
 
 1. **Add a series.** Searches MangaDex, stores the metadata and cover, and pulls
    the published volume-to-chapter map.
-2. **See the gaps.** Each volume shows what you hold and what you do not —
-   `missing 4–6, 11` rather than a wall of chapter numbers.
-3. **Get a chapter.** Paste the URL of the page holding its images.
+2. **See the gaps.** The series page is a shelf of volume covers, each showing
+   how much of it you hold. Volumes you have nothing of are dimmed. Selecting one
+   lists its chapters — `missing 4–6, 11` rather than a wall of numbers.
+3. **Get chapters.** Paste the URL of one chapter page, or fill the whole series
+   in one go with a batch download.
 4. **Build.** The volume goes into the editor you already had: exclude pages,
    split spreads, pick a cover, export.
 
@@ -83,6 +86,28 @@ Two details that matter in practice: the page URL is always sent as the
 fails; and downloaded pages are named positionally (`0001.jpg`), because source
 filenames are frequently hashes and reading order is the thing that must survive.
 
+## Batch download
+
+Chapter URLs on a reader site are nearly always the same string with one number
+changed. Paste any one of them — or the series index — and Mangalize factors the
+number out into a pattern.
+
+It then looks for **only the chapters your library says are missing**. Links the
+page actually published are used first, since a link is evidence; the remaining
+gaps get a URL built from the pattern, and each of those is fetched once to
+confirm it really loads. What you see is the plan: how many chapters were found,
+which came from links and which from the pattern, and which could not be reached
+at all. Nothing downloads until you press the button.
+
+Chapters are then fetched one at a time, with a pause between them — the images
+all come from one host, usually a small one. A chapter that fails is reported and
+the run carries on rather than throwing away the forty that would have followed,
+and you can stop a long batch at any point. Each chapter lands in the volume the
+published layout puts it in, so the shelf fills itself in.
+
+There is no crawling. The published chapter list bounds the search, and the plan
+is always shown first.
+
 ## Why fixed-layout EPUB
 
 For reading manga on a Kindle, the format matters more than it looks:
@@ -105,8 +130,9 @@ bun run tauri dev        # development
 bun run tauri build      # bundled installer for the current platform
 ```
 
-The app opens on your library. Add a series, open it to see its volumes, and
-build one once you have its chapters.
+The app opens on your library. Add a series, open it to see its volumes as a
+cover gallery, and build one once you have its chapters. The export name is
+derived from the series and volume and can be edited before you save.
 
 To skip the library entirely, drop a volume folder onto the window or use the
 folder button. Pages can be excluded, spreads split and a cover chosen before
@@ -167,6 +193,8 @@ cargo build --release
 ./target/release/mangalize library status 1
 ./target/release/mangalize library peek "https://…/chapter-7"
 ./target/release/mangalize library get 1 7 "https://…/chapter-7"
+./target/release/mangalize library batch 1 "https://…/chapter-1" --dry-run
+./target/release/mangalize library batch 1 "https://…/chapter-1"
 ./target/release/mangalize library build 1 1 -o ichi-v01.epub
 ./target/release/mangalize library remove 1                # keeps the files
 ./target/release/mangalize library remove 1 --delete-files # does not
@@ -247,6 +275,7 @@ crates/
   mangalize-meta/     MangaDex and Kitsu clients
   mangalize-library/  the stored collection: SQLite index + files on disk
   mangalize-fetch/    page URL -> image candidates -> downloaded pages
+    series.rs         chapter-number-in-URL detection, for batch download
   mangalize-cli/      thin wrapper over the above
 ```
 
