@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Image as ImageIcon, Star } from "lucide-react";
+import { ArrowLeftRight, Image as ImageIcon, Sparkles, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ interface MetadataPanelProps {
   onChange: (patch: Partial<Metadata>) => void;
   onPickCover: () => void;
   onClearCover: () => void;
+  onFetchMetadata: () => void;
 }
 
 export function MetadataPanel({
@@ -33,12 +34,17 @@ export function MetadataPanel({
   onChange,
   onPickCover,
   onClearCover,
+  onFetchMetadata,
 }: MetadataPanelProps) {
   const cover = effectiveCover(volume);
   const { metadata } = volume;
 
   return (
     <aside className="scrollbar-thin flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l border-border bg-card/40 p-4">
+      <Button variant="secondary" size="sm" onClick={onFetchMetadata}>
+        <Sparkles /> Fetch metadata online
+      </Button>
+
       <section className="flex flex-col gap-2">
         <Label>Cover</Label>
         <CoverPreview path={cover} />

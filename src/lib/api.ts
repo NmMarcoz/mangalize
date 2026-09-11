@@ -53,6 +53,53 @@ export interface BuildReport {
   pages: number;
 }
 
+/* ---------------------------------------------------- online metadata lookup */
+
+export type MetaSource = "mangadex" | "kitsu";
+
+/** Mirrors `mangalize_meta::SeriesMatch`. */
+export interface SeriesMatch {
+  source: MetaSource;
+  id: string;
+  title_english: string | null;
+  title_romaji: string | null;
+  title_native: string | null;
+  author: string | null;
+  artist: string | null;
+  description: string | null;
+  year: number | null;
+  status: string | null;
+  demographic: string | null;
+  thumbnail_url: string | null;
+  site_url: string | null;
+}
+
+export interface VolumeCover {
+  volume: string | null;
+  url: string;
+  thumbnail_url: string;
+}
+
+export interface VolumeChapters {
+  volume: string;
+  chapters: string[];
+}
+
+export const searchSeries = (query: string) =>
+  invoke<SeriesMatch[]>("search_series", { query });
+
+export const seriesCovers = (source: MetaSource, id: string) =>
+  invoke<VolumeCover[]>("series_covers", { source, id });
+
+export const seriesChapters = (source: MetaSource, id: string) =>
+  invoke<VolumeChapters[]>("series_chapters", { source, id });
+
+/** Download a cover into the app cache and return its local path. */
+export const saveCover = (url: string) => invoke<string>("save_cover", { url });
+
+export const sourceLabel = (source: MetaSource) =>
+  source === "mangadex" ? "MangaDex" : "Kitsu";
+
 export const scanFolder = (path: string) => invoke<Volume>("scan", { path });
 
 export const buildVolume = (volume: Volume, out: string, format: Format) =>

@@ -13,6 +13,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 mangalize-core = { path = "../crates/mangalize-core" }
+mangalize-meta = { path = "../crates/mangalize-meta" }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"

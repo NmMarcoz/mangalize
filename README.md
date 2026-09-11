@@ -18,6 +18,7 @@ The desktop app and the CLI both work. PDF output is not written yet.
 | EPUB 3 fixed-layout writer (Kindle) | done |
 | CBZ writer (Komga, Kavita, Tachiyomi) | done |
 | Tauri desktop UI | done |
+| Online metadata lookup (MangaDex / Kitsu) | done |
 | PDF writer | not started |
 
 ## Why fixed-layout EPUB
@@ -58,6 +59,37 @@ Click selects, `Ctrl`/`Cmd`-click toggles, `Shift`-click extends a range.
 Thumbnails are generated on demand as cards scroll into view, capped to a few
 concurrent decodes, and cached on disk keyed by each file's identity. That is
 what keeps a several-hundred-page volume responsive.
+
+## Metadata lookup
+
+"Fetch metadata online" searches [MangaDex], falling back to [Kitsu]. It fills in
+the series title, author and description, offers the official per-volume cover
+art, and checks your folder against the published volume layout.
+
+Lookup is always user-initiated. Scanning and exporting never touch the network.
+
+```sh
+mangalize lookup "Ichi the Witch" --detail
+```
+
+### Why MangaDex
+
+MangaDex is the only free, key-less API that publishes **per-volume** cover art
+and a volume-to-chapter map, which is exactly what assembling a volume needs.
+Everything else returns a single series poster.
+
+AniList would otherwise be the obvious pick, but its public API currently
+responds `403 The AniList API has been temporarily disabled due to severe
+stability issues`. Jikan depends on MyAnimeList being up, and Google Books needs
+your own key to avoid a shared quota.
+
+One trap worth recording: query `/aggregate` **without** a `translatedLanguage`
+filter. Volume tagging is per-translation and crowd-sourced, so filtering to
+English returns a sparse, misleading map, while the unfiltered view gives the
+real tankoubon structure.
+
+[MangaDex]: https://api.mangadex.org/docs/
+[Kitsu]: https://kitsu.docs.apiary.io/
 
 ## The CLI
 
@@ -131,7 +163,8 @@ crates/
     writers/
       epub.rs         EPUB 3 fixed-layout, Kindle-tuned
       cbz.rs          zip + ComicInfo.xml
-  mangalize-cli/      thin wrapper over core
+  mangalize-meta/     MangaDex and Kitsu clients; the only networked code
+  mangalize-cli/      thin wrapper over core and meta
 ```
 
 The core crate deliberately knows nothing about Tauri, or any UI. The CLI, the

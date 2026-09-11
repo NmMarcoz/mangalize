@@ -7,6 +7,7 @@ import { AlertTriangle, X } from "lucide-react";
 
 import { ChapterSidebar } from "@/components/ChapterSidebar";
 import { EmptyState } from "@/components/EmptyState";
+import { MetadataDialog, type AppliedMetadata } from "@/components/MetadataDialog";
 import { MetadataPanel } from "@/components/MetadataPanel";
 import { PageGrid, type PageGroup } from "@/components/PageGrid";
 import { Toolbar } from "@/components/Toolbar";
@@ -39,6 +40,7 @@ export default function App() {
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [anchor, setAnchor] = useState<string | null>(null);
 
+  const [lookupOpen, setLookupOpen] = useState(false);
   const [format, setFormat] = useState<Format>("epub");
   const [building, setBuilding] = useState<{ done: number; total: number } | null>(null);
   const [report, setReport] = useState<BuildReport | null>(null);
@@ -217,6 +219,27 @@ export default function App() {
     setVolume((current) => (current ? { ...current, cover: path } : current));
   }, []);
 
+  /**
+   * Merge a lookup result in without clobbering anything the user already typed
+   * that the source had no value for.
+   */
+  const applyLookup = useCallback((applied: AppliedMetadata) => {
+    setVolume((current) =>
+      current
+        ? {
+            ...current,
+            cover: applied.cover ?? current.cover,
+            metadata: {
+              ...current.metadata,
+              series: applied.series || current.metadata.series,
+              author: applied.author || current.metadata.author,
+              description: applied.description || current.metadata.description,
+            },
+          }
+        : current,
+    );
+  }, []);
+
   const patchMetadata = useCallback((patch: Partial<Metadata>) => {
     setVolume((current) =>
       current ? { ...current, metadata: { ...current.metadata, ...patch } } : current,
@@ -388,6 +411,7 @@ export default function App() {
                 volume={volume}
                 onChange={patchMetadata}
                 onPickCover={() => void pickCover()}
+                onFetchMetadata={() => setLookupOpen(true)}
                 onClearCover={() =>
                   setVolume((c) => (c ? { ...c, cover: null } : c))
                 }
@@ -400,6 +424,17 @@ export default function App() {
             scanning={scanning}
             error={error}
             onOpenFolder={() => void pickFolder()}
+          />
+        )}
+
+        {volume && (
+          <MetadataDialog
+            open={lookupOpen}
+            onOpenChange={setLookupOpen}
+            initialQuery={volume.metadata.series}
+            volumeNumber={volume.metadata.volume}
+            chapterCount={volume.chapters.length}
+            onApply={applyLookup}
           />
         )}
 

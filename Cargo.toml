@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/mangalize-core", "crates/mangalize-cli", "src-tauri"]
+members = ["crates/mangalize-core", "crates/mangalize-meta", "crates/mangalize-cli", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"
@@ -16,6 +16,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 zip = { version = "2", default-features = false, features = ["deflate"] }
 walkdir = "2"
 clap = { version = "4", features = ["derive"] }
+ureq = { version = "2", features = ["json"] }
 
 # Image encoding in the test fixtures is unusably slow when `image` is built
 # unoptimised. Our own crates stay debuggable.

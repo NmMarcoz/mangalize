@@ -25,6 +25,14 @@ enum Command {
         #[arg(short, long)]
         verbose: bool,
     },
+    /// Look up series metadata online.
+    Lookup {
+        /// Series name to search for.
+        query: String,
+        /// Also list volume covers and the published chapter layout.
+        #[arg(short, long)]
+        detail: bool,
+    },
     /// Build a volume file.
     Build {
         folder: PathBuf,
@@ -57,6 +65,7 @@ enum Format {
 fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Scan { folder, verbose } => scan(folder, verbose),
+        Command::Lookup { query, detail } => lookup(&query, detail),
         Command::Build {
             folder,
             out,
@@ -116,6 +125,62 @@ fn scan(folder: PathBuf, verbose: bool) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn lookup(query: &str, detail: bool) -> Result<()> {
+    let hits = mangalize_meta::search(query, 5)?;
+    if hits.is_empty() {
+        println!("no matches for {query:?}");
+        return Ok(());
+    }
+
+    for hit in &hits {
+        println!("{} [{:?}]", hit.display_title(), hit.source);
+        for (label, value) in [
+            ("english", &hit.title_english),
+            ("romaji", &hit.title_romaji),
+            ("native", &hit.title_native),
+            ("author", &hit.author),
+            ("artist", &hit.artist),
+        ] {
+            if let Some(v) = value {
+                println!("    {label:<8} {v}");
+            }
+        }
+        if let Some(y) = hit.year {
+            println!("    {:<8} {y}", "year");
+        }
+        if let Some(d) = &hit.demographic {
+            println!("    {:<8} {d}", "demo");
+        }
+        if let Some(u) = &hit.site_url {
+            println!("    {:<8} {u}", "url");
+        }
+
+        if detail {
+            let covers = mangalize_meta::volume_covers(hit.source, &hit.id)?;
+            println!("    covers   {} volumes", covers.len());
+            for cover in covers.iter().take(3) {
+                println!(
+                    "      vol {:<4} {}",
+                    cover.volume.as_deref().unwrap_or("-"),
+                    cover.url
+                );
+            }
+
+            let volumes = mangalize_meta::volume_chapters(hit.source, &hit.id)?;
+            for volume in volumes.iter().take(3) {
+                println!(
+                    "      volume {} = {} chapters ({})",
+                    volume.volume,
+                    volume.chapters.len(),
+                    volume.chapters.join(", ")
+                );
+            }
+        }
+        println!();
+    }
     Ok(())
 }
 
