@@ -9,7 +9,7 @@ Kindle.
 
 ## Status
 
-The core pipeline and CLI work. The desktop UI is not built yet.
+The desktop app and the CLI both work. PDF output is not written yet.
 
 | Piece | State |
 | --- | --- |
@@ -17,7 +17,7 @@ The core pipeline and CLI work. The desktop UI is not built yet.
 | Double-page spread detection and splitting | done |
 | EPUB 3 fixed-layout writer (Kindle) | done |
 | CBZ writer (Komga, Kavita, Tachiyomi) | done |
-| Tauri desktop UI | not started |
+| Tauri desktop UI | done |
 | PDF writer | not started |
 
 ## Why fixed-layout EPUB
@@ -34,7 +34,32 @@ For reading manga on a Kindle, the format matters more than it looks:
   viewport matching each image, and Amazon's `book-type: comic` hints, you get
   proper page turns, right-to-left reading order and a real cover.
 
-## Usage
+## The desktop app
+
+```sh
+bun install
+bun run tauri dev        # development
+bun run tauri build      # bundled installer for the current platform
+```
+
+Drop a volume folder onto the window, or use the folder button. Pages can be
+excluded, spreads split and a cover chosen before exporting.
+
+| Key | Action |
+| --- | --- |
+| `X` | Exclude or restore the selected pages |
+| `S` | Split or rejoin the selected spreads |
+| `C` | Use the selected page as the cover |
+| `Ctrl`/`Cmd` + `A` | Select everything currently visible |
+| `Esc` | Clear the selection |
+
+Click selects, `Ctrl`/`Cmd`-click toggles, `Shift`-click extends a range.
+
+Thumbnails are generated on demand as cards scroll into view, capped to a few
+concurrent decodes, and cached on disk keyed by each file's identity. That is
+what keeps a several-hundred-page volume responsive.
+
+## The CLI
 
 ```sh
 cargo build --release

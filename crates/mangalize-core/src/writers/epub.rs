@@ -16,7 +16,7 @@ use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
 use super::timestamp::now_utc;
-use super::{ensure_parent, esc, media_type, render_page};
+use super::{ensure_parent, esc, media_type, render_page, Progress};
 use crate::page::PageKind;
 use crate::project::{Direction, Volume};
 
@@ -54,7 +54,13 @@ struct Layout {
 
 /// Write `volume` to `out` as a fixed-layout EPUB 3.
 pub fn write(volume: &Volume, out: &Path) -> Result<()> {
-    let Layout { slots, chapters } = build_slots(volume)?;
+    write_with_progress(volume, out, &mut |_, _| {})
+}
+
+/// As [`write`], reporting `(pages_done, pages_total)` as each page is encoded.
+/// Encoding dominates export time, so this is where a UI wants its progress.
+pub fn write_with_progress(volume: &Volume, out: &Path, progress: &mut Progress) -> Result<()> {
+    let Layout { slots, chapters } = build_slots(volume, progress)?;
     if slots.is_empty() {
         bail!("volume has no pages to write");
     }
@@ -104,10 +110,12 @@ pub fn write(volume: &Volume, out: &Path) -> Result<()> {
 /// When the user picked a cover that is not already the first page, it is
 /// prepended as its own slot. Otherwise the first page doubles as the cover, so
 /// the image is stored once and simply marked `cover-image` in the manifest.
-fn build_slots(volume: &Volume) -> Result<Layout> {
+fn build_slots(volume: &Volume, progress: &mut Progress) -> Result<Layout> {
     let mut slots: Vec<Slot> = Vec::new();
     let mut chapters: Vec<ChapterStart> = Vec::new();
     let direction = volume.metadata.direction;
+    let total = volume.total_included();
+    let mut done = 0usize;
 
     let first_page = volume.included_pages().next().map(|p| p.path.clone());
     if let Some(cover) = volume.cover.clone() {
@@ -142,7 +150,10 @@ fn build_slots(volume: &Volume) -> Result<Layout> {
         });
 
         for page in chapter.included() {
-            for rendered in render_page(page, direction)? {
+            let rendered_pages = render_page(page, direction)?;
+            done += 1;
+            progress(done, total);
+            for rendered in rendered_pages {
                 slots.push(Slot {
                     stem: format!("p{:04}", slots.len() + 1),
                     ext: rendered.ext,

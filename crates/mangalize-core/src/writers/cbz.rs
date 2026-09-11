@@ -9,11 +9,16 @@ use anyhow::{Context, Result};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
-use super::{ensure_parent, esc, render_page};
+use super::{ensure_parent, esc, render_page, Progress};
 use crate::project::{Direction, Volume};
 
 /// Write `volume` to `out` as a CBZ.
 pub fn write(volume: &Volume, out: &Path) -> Result<()> {
+    write_with_progress(volume, out, &mut |_, _| {})
+}
+
+/// As [`write`], reporting `(pages_done, pages_total)` as each page is encoded.
+pub fn write_with_progress(volume: &Volume, out: &Path, progress: &mut Progress) -> Result<()> {
     ensure_parent(out)?;
     let file = File::create(out).with_context(|| format!("creating {}", out.display()))?;
     let mut zip = ZipWriter::new(file);
@@ -24,10 +29,15 @@ pub fn write(volume: &Volume, out: &Path) -> Result<()> {
 
     let direction = volume.metadata.direction;
     let mut page_no = 0usize;
+    let total = volume.total_included();
+    let mut done = 0usize;
 
     for (ci, chapter) in volume.chapters.iter().enumerate() {
         for page in chapter.included() {
-            for rendered in render_page(page, direction)? {
+            let rendered_pages = render_page(page, direction)?;
+            done += 1;
+            progress(done, total);
+            for rendered in rendered_pages {
                 page_no += 1;
                 // Flat, zero-padded names so every reader sorts them identically.
                 let name = format!("{:03}_{page_no:04}.{}", ci + 1, rendered.ext);

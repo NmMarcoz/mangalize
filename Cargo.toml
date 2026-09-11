@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/mangalize-core", "crates/mangalize-cli"]
+members = ["crates/mangalize-core", "crates/mangalize-cli", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"

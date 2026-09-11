@@ -12,6 +12,9 @@ use anyhow::{Context, Result};
 use crate::page::{Page, PageKind};
 use crate::project::Direction;
 
+/// Callback invoked as `(pages_done, pages_total)` while a volume is written.
+pub type Progress<'a> = dyn FnMut(usize, usize) + 'a;
+
 /// One image as it will appear in the output: raw bytes, the extension they
 /// should be stored under, and the dimensions the page must be laid out at.
 pub struct Rendered {
