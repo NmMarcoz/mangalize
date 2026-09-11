@@ -4,11 +4,13 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { AlertTriangle, X } from "lucide-react";
 
 import { EmptyState } from "@/components/EmptyState";
+import { UpdateBanner } from "@/components/UpdateBanner";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { EditorView } from "@/views/EditorView";
 import { LibraryView } from "@/views/LibraryView";
 import { SeriesView } from "@/views/SeriesView";
+import { useUpdater } from "@/hooks/useUpdater";
 import { scanFolder, type Volume } from "@/lib/api";
 import { clearThumbnails } from "@/lib/thumbs";
 
@@ -29,6 +31,8 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const updater = useUpdater();
 
   /* ---------------------------------------------------------------- scanning */
 
@@ -94,6 +98,8 @@ export default function App() {
           onOpenSeries={(id) => setView({ kind: "series", id })}
           onOpenFolder={() => void pickFolder()}
           onError={setError}
+          updateStage={updater.state.stage}
+          onCheckUpdates={updater.checkNow}
         />
       );
     }
@@ -144,6 +150,14 @@ export default function App() {
     <TooltipProvider delayDuration={400}>
       <div className="flex h-full flex-col">
         {body()}
+
+        <UpdateBanner
+          state={updater.state}
+          dismissed={updater.dismissed}
+          onInstall={updater.install}
+          onRestart={updater.restart}
+          onDismiss={updater.dismiss}
+        />
 
         {dragging && (
           <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">

@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { BookOpen, FolderOpen, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import {
+  BookOpen,
+  CloudDownload,
+  FolderOpen,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 
 import { AddSeriesDialog } from "@/components/AddSeriesDialog";
 import { RemoveSeriesDialog } from "@/components/RemoveSeriesDialog";
@@ -8,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
 import { useThumbnail } from "@/hooks/useThumbnail";
+import type { UpdateStage } from "@/hooks/useUpdater";
 import {
   libraryRoot,
   librarySeries,
@@ -20,10 +29,18 @@ interface LibraryViewProps {
   /** Escape hatch to the original scan-a-folder path. */
   onOpenFolder: () => void;
   onError: (message: string | null) => void;
+  updateStage: UpdateStage;
+  onCheckUpdates: () => void;
 }
 
 /** The shelf: every series in the library, and the way to add another. */
-export function LibraryView({ onOpenSeries, onOpenFolder, onError }: LibraryViewProps) {
+export function LibraryView({
+  onOpenSeries,
+  onOpenFolder,
+  onError,
+  updateStage,
+  onCheckUpdates,
+}: LibraryViewProps) {
   const [root, setRoot] = useState<string | null>(null);
   const [series, setSeries] = useState<Series[] | null>(null);
   const [adding, setAdding] = useState(false);
@@ -69,6 +86,26 @@ export function LibraryView({ onOpenSeries, onOpenFolder, onError }: LibraryView
           </button>
         </div>
 
+        <Hint
+          label={
+            updateStage === "uptodate"
+              ? "You are on the latest version"
+              : "Check for updates"
+          }
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onCheckUpdates}
+            disabled={updateStage === "checking"}
+          >
+            {updateStage === "checking" ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <CloudDownload />
+            )}
+          </Button>
+        </Hint>
         <Hint label="Build a volume from a folder instead">
           <Button variant="ghost" size="icon" onClick={onOpenFolder}>
             <FolderOpen />

@@ -27,6 +27,8 @@ The desktop app and the CLI both work. PDF output is not written yet.
 | Downloading a chapter from a pasted URL | done |
 | Batch download of every missing chapter | done |
 | PDF writer | not started |
+| CI builds for macOS and Windows | done |
+| In-app auto-update from GitHub Releases | done |
 
 ## The library
 
@@ -182,6 +184,61 @@ real tankoubon structure.
 
 [MangaDex]: https://api.mangadex.org/docs/
 [Kitsu]: https://kitsu.docs.apiary.io/
+
+## Installing, and updates
+
+Releases carry a `.dmg` for macOS and both a `.exe` and an `.msi` for Windows.
+Builds are unsigned for now, so the first launch shows a warning: on macOS,
+right-click the app and choose Open; on Windows, "More info" then "Run anyway".
+Everything after that is normal, updates included.
+
+The app checks for a new release once on launch and shows a strip along the
+bottom if there is one. Nothing is downloaded until you click Update, and the
+check is silent when it fails — a machine with no network should not be nagged.
+There is also a manual check in the library header.
+
+### Cutting a release
+
+```sh
+# 1. bump the version in src-tauri/tauri.conf.json, commit it
+# 2. tag it, matching that version exactly
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+`.github/workflows/release.yml` builds on macOS and Windows runners, and opens a
+**draft** release with the installers attached. Review it, then publish — the
+in-app updater reads the latest *published* release, so a draft is invisible to
+users until you are happy with it.
+
+The workflow fails early if the tag and the version in `tauri.conf.json`
+disagree, because an updater that offers `v0.2.0` and installs something else is
+a miserable thing to debug.
+
+Running the workflow manually (`workflow_dispatch`) builds the same installers
+and attaches them as workflow artifacts without creating a release, which is how
+to test a CI change without spending a version number.
+
+### How updates are trusted
+
+Update artifacts are signed with a minisign key that never leaves your machine
+and GitHub Secrets; the app holds only the public half, in `tauri.conf.json`. An
+installed copy will refuse an update that is not signed by that key, so a
+compromised release page is not enough to push code to users.
+
+This is unrelated to OS code signing. Adding an Apple Developer certificate and
+a Windows code-signing certificate is what removes the first-launch warnings;
+the workflow has those steps written out and commented, needing only the secrets.
+
+Two secrets are required for releases to build:
+
+| Secret | Value |
+| --- | --- |
+| `TAURI_SIGNING_PRIVATE_KEY` | Contents of the generated private key file |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Its password, empty if none was set |
+
+Losing the private key means existing installs can no longer be updated — they
+would have to be reinstalled by hand. Keep a backup somewhere safe.
 
 ## The CLI
 

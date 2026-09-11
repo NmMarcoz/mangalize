@@ -217,6 +217,28 @@ that is only ever *offered* to the user, never acted on.
   at the URL, so they carry the same `Referer` the download will.
 - Keyboard handlers must bail out on `INPUT` / `TEXTAREA` / `contentEditable`.
 
+## Releases and the updater
+
+- Tagging `v*` is the release trigger. The tag and `version` in
+  `src-tauri/tauri.conf.json` **must** match; CI enforces it.
+- Releases are created as drafts. The updater reads the latest *published*
+  release, so a draft is invisible to users until someone publishes it.
+- `updaterJsonPreferNsis: true` in the workflow is load-bearing. Both a `.msi`
+  and an NSIS `.exe` are built, and tauri-action otherwise points `latest.json`
+  at the `.msi`, whose installer needs elevation and so prompts for UAC on every
+  update.
+- `createUpdaterArtifacts: true` in `tauri.conf.json` is what produces the `.sig`
+  files. Without it the release builds fine and updates silently never work.
+- macOS ships a universal binary (`--target universal-apple-darwin`), so the
+  runner needs both `aarch64-` and `x86_64-apple-darwin` Rust targets.
+- The updater keypair is *not* OS code signing. The private key lives only on the
+  maintainer's machine and in GitHub Secrets; `pubkey` in `tauri.conf.json` is
+  the public half and is meant to be committed. Losing the private key strands
+  every installed copy.
+- The startup check is silent by design (`useUpdater`): it fails in dev, offline,
+  and in any build not installed from a release. Only an explicit check reports
+  errors.
+
 ## Style
 
 Rust and TypeScript both follow the same comment discipline, and it is the main
