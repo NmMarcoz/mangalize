@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["crates/mangalize-core", "crates/mangalize-meta", "crates/mangalize-cli", "src-tauri"]
+members = [
+    "crates/mangalize-core",
+    "crates/mangalize-meta",
+    "crates/mangalize-library",
+    "crates/mangalize-fetch",
+    "crates/mangalize-cli",
+    "src-tauri",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -17,6 +24,9 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 walkdir = "2"
 clap = { version = "4", features = ["derive"] }
 ureq = { version = "2", features = ["json"] }
+# `bundled` compiles SQLite itself, so the library file behaves identically on
+# every machine regardless of what the OS happens to ship.
+rusqlite = { version = "0.37", features = ["bundled"] }
 
 # Image encoding in the test fixtures is unusably slow when `image` is built
 # unoptimised. Our own crates stay debuggable.

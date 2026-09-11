@@ -7,8 +7,10 @@ pub mod natsort;
 pub mod page;
 pub mod scan;
 pub mod project;
+pub mod sieve;
 pub mod writers;
 
 pub use page::{ExcludeReason, Page, PageKind};
 pub use project::{Chapter, Direction, Metadata, Volume};
 pub use scan::scan_volume;
+pub use sieve::{Norm, Verdict};

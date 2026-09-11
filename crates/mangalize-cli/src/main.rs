@@ -1,6 +1,8 @@
 //! Command line front end. Exercises exactly the same core pipeline the desktop
 //! app will, which makes it the fastest way to verify a scan against real data.
 
+mod library;
+
 use std::path::PathBuf;
 
 use anyhow::{bail, Result};
@@ -12,6 +14,10 @@ use mangalize_core::{scan_volume, writers};
 #[derive(Parser)]
 #[command(name = "mangalize", about = "Turn folders of manga chapters into readable volumes")]
 struct Cli {
+    /// Library folder. Defaults to $MANGALIZE_LIBRARY, else ~/Mangalize.
+    #[arg(long, global = true)]
+    library: Option<PathBuf>,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -24,6 +30,11 @@ enum Command {
         /// List every page, not just a summary.
         #[arg(short, long)]
         verbose: bool,
+    },
+    /// Manage the library: add series, fetch chapters, build volumes.
+    Library {
+        #[command(subcommand)]
+        command: library::LibraryCommand,
     },
     /// Look up series metadata online.
     Lookup {
@@ -63,7 +74,9 @@ enum Format {
 }
 
 fn main() -> Result<()> {
-    match Cli::parse().command {
+    let cli = Cli::parse();
+    match cli.command {
+        Command::Library { command } => library::run(cli.library, command),
         Command::Scan { folder, verbose } => scan(folder, verbose),
         Command::Lookup { query, detail } => lookup(&query, detail),
         Command::Build {

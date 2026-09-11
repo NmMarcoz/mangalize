@@ -7,7 +7,6 @@
 //! was held out so the UI can offer it back.
 
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -15,22 +14,7 @@ use anyhow::{Context, Result};
 use crate::natsort::{natural_cmp, trailing_number};
 use crate::page::{extension_verdict, probe_dimensions, ExcludeReason, Page, PageKind};
 use crate::project::{Chapter, Metadata, Volume};
-
-/// A page shorter or taller than this fraction of the volume's norm is site
-/// furniture, not a page.
-const HEIGHT_MIN: f32 = 0.55;
-const HEIGHT_MAX: f32 = 1.80;
-
-/// Width bounds for an ordinary single page, as a fraction of the norm.
-const WIDTH_MIN: f32 = 0.55;
-const WIDTH_MAX: f32 = 1.40;
-
-/// At or above this fraction of the norm width, a page is a double-page spread.
-const SPREAD_MIN: f32 = 1.55;
-
-/// Below this many readable images we cannot trust a modal size, so size-based
-/// filtering is skipped entirely.
-const MIN_SAMPLE: usize = 3;
+use crate::sieve::Norm;
 
 /// Scan `root` into a volume.
 ///
@@ -60,20 +44,22 @@ pub fn scan_volume(root: impl AsRef<Path>) -> Result<Volume> {
 
     // The modal page size is far more reliable across the whole volume than
     // within one chapter, since every chapter came from the same source.
-    let (norm_w, norm_h) = modal_size(&chapters);
-    let sample = chapters
-        .iter()
-        .flat_map(|c| &c.pages)
-        .filter(|p| p.width > 0)
-        .count();
+    let norm = Norm::from_sizes(
+        chapters
+            .iter()
+            .flat_map(|c| &c.pages)
+            .map(|p| (p.width, p.height)),
+    );
 
-    if sample >= MIN_SAMPLE && norm_w > 0 && norm_h > 0 {
+    if let Some(norm) = norm {
         for chapter in &mut chapters {
             for page in &mut chapter.pages {
                 if page.excluded.is_some() {
                     continue;
                 }
-                classify(page, norm_w, norm_h);
+                let verdict = norm.verdict(page.width, page.height);
+                page.kind = verdict.kind();
+                page.excluded = verdict.exclusion(page.width, page.height);
             }
         }
     }
@@ -91,31 +77,6 @@ pub fn scan_volume(root: impl AsRef<Path>) -> Result<Volume> {
         chapters,
         root: root.to_path_buf(),
     })
-}
-
-/// Decide whether a readable page is a single page, a spread, or off-size junk.
-fn classify(page: &mut Page, norm_w: u32, norm_h: u32) {
-    let rh = page.height as f32 / norm_h as f32;
-    let rw = page.width as f32 / norm_w as f32;
-
-    if !(HEIGHT_MIN..=HEIGHT_MAX).contains(&rh) {
-        page.excluded = Some(ExcludeReason::OffSize {
-            width: page.width,
-            height: page.height,
-        });
-        return;
-    }
-
-    if rw >= SPREAD_MIN {
-        page.kind = PageKind::Spread;
-    } else if !(WIDTH_MIN..=WIDTH_MAX).contains(&rw) {
-        page.excluded = Some(ExcludeReason::OffSize {
-            width: page.width,
-            height: page.height,
-        });
-    } else {
-        page.kind = PageKind::Single;
-    }
 }
 
 /// Read one folder's images, in natural filename order.
@@ -176,22 +137,6 @@ fn build_page(path: &Path) -> Option<Page> {
             split: false,
         }),
     }
-}
-
-/// The most common (width, height) pair among readable pages.
-fn modal_size(chapters: &[Chapter]) -> (u32, u32) {
-    let mut counts: HashMap<(u32, u32), usize> = HashMap::new();
-    for page in chapters.iter().flat_map(|c| &c.pages) {
-        if page.width > 0 && page.height > 0 {
-            *counts.entry((page.width, page.height)).or_insert(0) += 1;
-        }
-    }
-    // Ties break on the larger size, which is the safer norm to measure against.
-    counts
-        .into_iter()
-        .max_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)))
-        .map(|(size, _)| size)
-        .unwrap_or((0, 0))
 }
 
 fn subdirectories(root: &Path) -> Result<Vec<PathBuf>> {
@@ -327,45 +272,10 @@ mod tests {
     }
 
     #[test]
-    fn spreads_are_detected_by_width() {
-        let mut page = page_at(1600, 1168);
-        classify(&mut page, 800, 1168);
-        assert_eq!(page.kind, PageKind::Spread);
-        assert!(page.is_included());
-    }
-
-    #[test]
-    fn banners_are_excluded_by_height() {
-        let mut page = page_at(728, 90);
-        classify(&mut page, 800, 1168);
-        assert!(matches!(page.excluded, Some(ExcludeReason::OffSize { .. })));
-    }
-
-    #[test]
-    fn a_tiny_but_correctly_sized_page_is_kept() {
-        // A near-blank page compresses to a few KB; size alone must never exclude.
-        let mut page = Page { bytes: 3811, ..page_at(800, 1168) };
-        classify(&mut page, 800, 1168);
-        assert!(page.is_included());
-    }
-
-    #[test]
     fn identifier_is_stable_across_scans() {
         let a = stable_id(Path::new("/x/Itch The Witch Volume 01"));
         let b = stable_id(Path::new("/y/Itch The Witch Volume 01"));
         assert_eq!(a, b);
         assert_ne!(a, stable_id(Path::new("/x/Itch The Witch Volume 02")));
-    }
-
-    fn page_at(width: u32, height: u32) -> Page {
-        Page {
-            path: PathBuf::from("p.jpeg"),
-            width,
-            height,
-            bytes: 100_000,
-            kind: PageKind::Single,
-            excluded: None,
-            split: false,
-        }
     }
 }

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Check, CircleAlert, ExternalLink, Loader2, Search } from "lucide-react";
+import { Check, CircleAlert, ExternalLink, Loader2 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { SeriesDetail } from "@/components/SeriesDetail";
+import { SeriesSearch } from "@/components/SeriesSearch";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,23 +10,10 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import {
-  saveCover,
-  searchSeries,
-  seriesChapters,
-  seriesCovers,
-  sourceLabel,
-  type SeriesMatch,
-  type VolumeChapters,
-  type VolumeCover,
-} from "@/lib/api";
+import { saveCover, type SeriesMatch, type VolumeChapters } from "@/lib/api";
 import { cn } from "@/lib/utils";
-
-/** Which of a series' three titles to write into the Series field. */
-type TitleChoice = "english" | "romaji" | "native";
+import { useSeriesDetail } from "@/hooks/useSeriesDetail";
 
 export interface AppliedMetadata {
   series: string;
@@ -55,93 +43,44 @@ export function MetadataDialog({
   chapterCount,
   onApply,
 }: MetadataDialogProps) {
-  const [query, setQuery] = useState(initialQuery);
-  const [results, setResults] = useState<SeriesMatch[] | null>(null);
-  const [searching, setSearching] = useState(false);
+  const [session, setSession] = useState(0);
   const [error, setError] = useState<string | null>(null);
-
   const [selected, setSelected] = useState<SeriesMatch | null>(null);
-  const [titleChoice, setTitleChoice] = useState<TitleChoice>("english");
-  const [covers, setCovers] = useState<VolumeCover[]>([]);
-  const [layout, setLayout] = useState<VolumeChapters[]>([]);
-  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [titleChoice, setTitleChoice] = useState<"english" | "romaji" | "native">(
+    "english",
+  );
   const [chosenCover, setChosenCover] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+
+  const detail = useSeriesDetail(selected, setError);
 
   // Reopening should not show the previous session's results.
   useEffect(() => {
     if (!open) return;
-    setQuery(initialQuery);
-    setResults(null);
+    setSession((n) => n + 1);
     setSelected(null);
-    setCovers([]);
-    setLayout([]);
     setChosenCover(null);
     setError(null);
-  }, [open, initialQuery]);
-
-  // Auto-run the search when opened with a title already filled in.
-  useEffect(() => {
-    if (open && initialQuery.trim()) void runSearch();
-    // Only on open: re-running as the user edits the box would spam the API.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const choose = useCallback(
-    async (match: SeriesMatch) => {
-      setSelected(match);
-      setLoadingDetail(true);
-      setCovers([]);
-      setLayout([]);
-      setChosenCover(null);
-      // Prefer whichever title form this entry actually has.
-      setTitleChoice(
-        match.title_english ? "english" : match.title_romaji ? "romaji" : "native",
-      );
+  const choose = useCallback((match: SeriesMatch) => {
+    setSelected(match);
+    setChosenCover(null);
+    // Prefer whichever title form this entry actually has.
+    setTitleChoice(
+      match.title_english ? "english" : match.title_romaji ? "romaji" : "native",
+    );
+  }, []);
 
-      try {
-        const [foundCovers, foundLayout] = await Promise.all([
-          seriesCovers(match.source, match.id),
-          seriesChapters(match.source, match.id),
-        ]);
-        setCovers(foundCovers);
-        setLayout(foundLayout);
-
-        // Preselect the cover for the volume being assembled.
-        const wanted =
-          volumeNumber !== null
-            ? foundCovers.find((c) => c.volume === String(volumeNumber))
-            : undefined;
-        setChosenCover((wanted ?? foundCovers[0])?.url ?? null);
-      } catch (e) {
-        setError(String(e));
-      } finally {
-        setLoadingDetail(false);
-      }
-    },
-    [volumeNumber],
-  );
-
-  const runSearch = useCallback(async () => {
-    if (!query.trim()) return;
-    setSearching(true);
-    setError(null);
-    setSelected(null);
-    try {
-      const hits = await searchSeries(query);
-      setResults(hits);
-      if (hits.length === 0) {
-        setError("No matches. Try the original Japanese title.");
-      } else {
-        void choose(hits[0]);
-      }
-    } catch (e) {
-      setError(String(e));
-      setResults([]);
-    } finally {
-      setSearching(false);
-    }
-  }, [query, choose]);
+  // Preselect the cover for the volume being assembled, once covers arrive.
+  useEffect(() => {
+    if (detail.covers.length === 0) return;
+    const wanted =
+      volumeNumber !== null
+        ? detail.covers.find((c) => c.volume === String(volumeNumber))
+        : undefined;
+    setChosenCover((wanted ?? detail.covers[0]).url);
+  }, [detail.covers, volumeNumber]);
 
   const apply = useCallback(async () => {
     if (!selected) return;
@@ -177,9 +116,10 @@ export function MetadataDialog({
     }
   }, [selected, titleChoice, chosenCover, onApply, onOpenChange]);
 
-  const expected = volumeNumber !== null
-    ? layout.find((v) => v.volume === String(volumeNumber))
-    : undefined;
+  const expected =
+    volumeNumber !== null
+      ? detail.layout.find((v) => v.volume === String(volumeNumber))
+      : undefined;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -192,162 +132,32 @@ export function MetadataDialog({
           </DialogDescription>
         </div>
 
-        <div className="flex items-center gap-2 px-4 py-3">
-          <Input
-            autoFocus
-            value={query}
-            placeholder="Series name…"
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void runSearch();
-            }}
+        <div className="flex min-h-0 flex-1">
+          <SeriesSearch
+            initialQuery={initialQuery}
+            session={session}
+            selected={selected}
+            onSelect={choose}
+            onError={setError}
           />
-          <Button onClick={() => void runSearch()} disabled={searching}>
-            {searching ? <Loader2 className="animate-spin" /> : <Search />}
-            Search
-          </Button>
-        </div>
-
-        <div className="flex min-h-0 flex-1 border-t border-border">
-          <div className="scrollbar-thin w-72 shrink-0 overflow-y-auto border-r border-border">
-            {results === null && !searching && (
-              <p className="p-4 text-xs text-muted-foreground">
-                Press Enter to search.
-              </p>
-            )}
-            {results?.map((match) => (
-              <button
-                key={`${match.source}-${match.id}`}
-                onClick={() => void choose(match)}
-                className={cn(
-                  "flex w-full gap-2.5 border-b border-border/50 p-2.5 text-left transition-colors",
-                  selected?.id === match.id ? "bg-primary/10" : "hover:bg-accent",
-                )}
-              >
-                {match.thumbnail_url ? (
-                  <img
-                    src={match.thumbnail_url}
-                    alt=""
-                    loading="lazy"
-                    className="h-16 w-12 shrink-0 rounded object-cover"
-                  />
-                ) : (
-                  <div className="h-16 w-12 shrink-0 rounded bg-muted" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-medium">
-                    {match.title_english ?? match.title_romaji ?? match.title_native}
-                  </p>
-                  <p className="truncate text-[10px] text-muted-foreground">
-                    {match.author ?? "Unknown author"}
-                    {match.year ? ` · ${match.year}` : ""}
-                  </p>
-                  <Badge variant="outline" className="mt-1">
-                    {sourceLabel(match.source)}
-                  </Badge>
-                </div>
-              </button>
-            ))}
-          </div>
 
           <div className="scrollbar-thin min-w-0 flex-1 overflow-y-auto p-4">
-            {!selected ? (
-              <p className="text-xs text-muted-foreground">
-                Select a result to see titles, covers and the published volume
-                layout.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-4">
-                <section className="flex flex-col gap-2">
-                  <Label>Title to use</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(
-                      [
-                        ["english", selected.title_english],
-                        ["romaji", selected.title_romaji],
-                        ["native", selected.title_native],
-                      ] as const
-                    ).map(([choice, value]) =>
-                      value ? (
-                        <button
-                          key={choice}
-                          onClick={() => setTitleChoice(choice)}
-                          className={cn(
-                            "rounded-md border px-2.5 py-1.5 text-xs transition-colors",
-                            titleChoice === choice
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-border hover:bg-accent",
-                          )}
-                        >
-                          {value}
-                          <span className="ml-1.5 opacity-50">{choice}</span>
-                        </button>
-                      ) : null,
-                    )}
-                  </div>
-                </section>
-
-                {loadingDetail ? (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="size-3.5 animate-spin" /> Loading covers…
-                  </div>
-                ) : (
-                  <>
-                    {volumeNumber !== null && layout.length > 0 && (
-                      <ChapterCheck
-                        volumeNumber={volumeNumber}
-                        expected={expected}
-                        actual={chapterCount}
-                      />
-                    )}
-
-                    {covers.length > 0 && (
-                      <section className="flex flex-col gap-2">
-                        <Label>Cover ({covers.length} volumes)</Label>
-                        <div className="grid grid-cols-6 gap-2">
-                          {covers.map((cover) => (
-                            <button
-                              key={cover.url}
-                              onClick={() => setChosenCover(cover.url)}
-                              className={cn(
-                                "relative overflow-hidden rounded border-2 transition-colors",
-                                chosenCover === cover.url
-                                  ? "border-primary"
-                                  : "border-transparent hover:border-border",
-                              )}
-                            >
-                              <img
-                                src={cover.thumbnail_url}
-                                alt={`Volume ${cover.volume ?? "?"}`}
-                                loading="lazy"
-                                className="aspect-[10/15] w-full object-cover"
-                              />
-                              <span className="absolute bottom-0 left-0 right-0 bg-black/70 py-0.5 text-center text-[9px] text-white">
-                                {cover.volume ? `v${cover.volume}` : "—"}
-                              </span>
-                              {chosenCover === cover.url && (
-                                <span className="absolute right-0.5 top-0.5 rounded-full bg-primary p-0.5">
-                                  <Check className="size-2.5 text-primary-foreground" />
-                                </span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </section>
-                    )}
-                  </>
-                )}
-
-                {selected.description && (
-                  <section className="flex flex-col gap-1.5">
-                    <Label>Description</Label>
-                    <p className="line-clamp-4 text-xs leading-relaxed text-muted-foreground">
-                      {selected.description}
-                    </p>
-                  </section>
-                )}
-              </div>
-            )}
+            <SeriesDetail
+              selected={selected}
+              detail={detail}
+              titleChoice={titleChoice}
+              onTitleChoice={setTitleChoice}
+              chosenCover={chosenCover}
+              onChooseCover={setChosenCover}
+            >
+              {volumeNumber !== null && detail.layout.length > 0 && (
+                <ChapterCheck
+                  volumeNumber={volumeNumber}
+                  expected={expected}
+                  actual={chapterCount}
+                />
+              )}
+            </SeriesDetail>
           </div>
         </div>
 

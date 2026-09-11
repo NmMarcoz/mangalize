@@ -1,0 +1,15 @@
+[package]
+name = "mangalize-fetch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mangalize-core = { path = "../mangalize-core" }
+anyhow.workspace = true
+serde.workspace = true
+ureq.workspace = true
+image.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

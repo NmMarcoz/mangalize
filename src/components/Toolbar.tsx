@@ -1,4 +1,11 @@
-import { FolderOpen, Loader2, PackageCheck, RefreshCw, Upload } from "lucide-react";
+import {
+  ArrowLeft,
+  FolderOpen,
+  Loader2,
+  PackageCheck,
+  RefreshCw,
+  Upload,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +41,8 @@ interface ToolbarProps {
   onShowExcluded: (v: boolean) => void;
   onThumbWidth: (w: number) => void;
   onOpenFolder: () => void;
+  /** Return to where this volume came from. */
+  onBack: () => void;
   onRescan: () => void;
   onExport: () => void;
   onReveal: () => void;
@@ -51,6 +60,7 @@ export function Toolbar({
   onShowExcluded,
   onThumbWidth,
   onOpenFolder,
+  onBack,
   onRescan,
   onExport,
   onReveal,
@@ -61,6 +71,12 @@ export function Toolbar({
   return (
     <header className="flex shrink-0 flex-col border-b border-border bg-card/60">
       <div className="flex items-center gap-3 px-4 py-2.5">
+        <Hint label="Back to the library">
+          <Button variant="ghost" size="icon" onClick={onBack}>
+            <ArrowLeft />
+          </Button>
+        </Hint>
+
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h1 className="truncate text-sm font-semibold">

@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "harvest",
+  "description": "Lets the page-harvest window report back which images it loaded. Scoped to emitting events, and only from that window - see src/harvest.rs for why this is needed and what it deliberately does not allow.",
+  "windows": ["harvest"],
+  "remote": { "urls": ["http://*", "https://*"] },
+  "permissions": ["core:event:allow-emit"]
+}

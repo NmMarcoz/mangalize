@@ -1,11 +1,15 @@
 # mangalize
 
-Turn folders of downloaded manga chapters into a single volume your e-reader
+Keep a manga library on your own disk, and turn it into volumes your e-reader
 understands. Built because every web tool that does this caps you at 30 images
 and then asks for money.
 
-Point it at a folder of chapters, get back a fixed-layout EPUB you can send to a
-Kindle.
+Add a series, and it tells you which chapters you are missing, volume by volume.
+Paste the page holding a chapter's images and it pulls them in. Then you get a
+fixed-layout EPUB you can send to a Kindle.
+
+The original path still works untouched: drop a folder of chapters on the window
+and export it, no library involved.
 
 ## Status
 
@@ -19,7 +23,65 @@ The desktop app and the CLI both work. PDF output is not written yet.
 | CBZ writer (Komga, Kavita, Tachiyomi) | done |
 | Tauri desktop UI | done |
 | Online metadata lookup (MangaDex / Kitsu) | done |
+| Library: series, volumes, missing chapters | done |
+| Downloading a chapter from a pasted URL | done |
 | PDF writer | not started |
+
+## The library
+
+```
+~/Mangalize/
+  mangalize.db
+  series/
+    Ichi the Witch [1]/
+      cover.jpg
+      chapters/
+        c0007/0001.jpg …
+```
+
+A plain folder you own, with a SQLite index beside the files — the same shape
+Calibre uses, and for the same reason: you should be able to back it up, move it
+and look inside it without the app's help. The CLI and the desktop app default to
+the same location, so they see the same collection.
+
+The flow:
+
+1. **Add a series.** Searches MangaDex, stores the metadata and cover, and pulls
+   the published volume-to-chapter map.
+2. **See the gaps.** Each volume shows what you hold and what you do not —
+   `missing 4–6, 11` rather than a wall of chapter numbers.
+3. **Get a chapter.** Paste the URL of the page holding its images.
+4. **Build.** The volume goes into the editor you already had: exclude pages,
+   split spreads, pick a cover, export.
+
+Deleting files is always opt-in. Removing a series from the library leaves the
+folder alone unless you explicitly ask otherwise, and re-syncing a series never
+removes a chapter you hold just because the upstream index stopped listing it.
+
+## Getting a chapter's images
+
+This is the part that used to mean copying a URL into some image-extractor site.
+
+Paste the page URL and Mangalize reads its markup for images — unpacking
+`srcset`, preferring the real image over a lazy-loading placeholder, and finding
+page lists embedded in scripts. Nothing site-specific; it works on whatever you
+point it at.
+
+Every candidate is then **measured before anything is saved**, using a range
+request that reads only the image header. Those dimensions go through the same
+size sieve the folder scanner uses, so real pages come pre-ticked, double-page
+spreads are marked as spreads, and banners and favicons are shown but left
+unticked. You confirm the selection; only then is anything downloaded.
+
+Pages that build themselves in JavaScript have no images in their markup to find.
+For those, **Open page** renders the URL in a real window — log in, dismiss the
+banner, scroll until the pages load — and captures the images the page actually
+loaded when you click Capture.
+
+Two details that matter in practice: the page URL is always sent as the
+`Referer`, because hotlink protection is the most common reason a scraped image
+fails; and downloaded pages are named positionally (`0001.jpg`), because source
+filenames are frequently hashes and reading order is the thing that must survive.
 
 ## Why fixed-layout EPUB
 
@@ -43,8 +105,12 @@ bun run tauri dev        # development
 bun run tauri build      # bundled installer for the current platform
 ```
 
-Drop a volume folder onto the window, or use the folder button. Pages can be
-excluded, spreads split and a cover chosen before exporting.
+The app opens on your library. Add a series, open it to see its volumes, and
+build one once you have its chapters.
+
+To skip the library entirely, drop a volume folder onto the window or use the
+folder button. Pages can be excluded, spreads split and a cover chosen before
+exporting.
 
 | Key | Action |
 | --- | --- |
@@ -96,6 +162,15 @@ real tankoubon structure.
 ```sh
 cargo build --release
 
+# The library, end to end
+./target/release/mangalize library add "Ichi the Witch"
+./target/release/mangalize library status 1
+./target/release/mangalize library peek "https://…/chapter-7"
+./target/release/mangalize library get 1 7 "https://…/chapter-7"
+./target/release/mangalize library build 1 1 -o ichi-v01.epub
+./target/release/mangalize library remove 1                # keeps the files
+./target/release/mangalize library remove 1 --delete-files # does not
+
 # See what the scanner found, without writing anything
 ./target/release/mangalize scan ~/Downloads/"Itch The Witch Volume 01"
 
@@ -116,6 +191,11 @@ Useful flags:
 | `--title`, `--author` | Override what was guessed from the folder name. |
 | `--ltr` | Left-to-right reading. Default is right-to-left. |
 | `--split-spreads` | Cut every double-page spread into two pages. |
+
+`library peek` is worth knowing about on its own: it lists what a page offers,
+with dimensions and whether each image looks like a page, without downloading
+anything. The library lives at `~/Mangalize` unless you set `$MANGALIZE_LIBRARY`
+or pass `--library`.
 
 ## What the scanner does
 
@@ -158,26 +238,43 @@ crates/
   mangalize-core/     pipeline; no UI dependency of any kind
     natsort.rs        natural filename ordering
     page.rs           per-image facts and classification
+    sieve.rs          page vs. spread vs. site furniture, by size
     scan.rs           folder -> Volume, junk filtering, spread detection
     project.rs        the editable model (volume, chapters, metadata)
     writers/
       epub.rs         EPUB 3 fixed-layout, Kindle-tuned
       cbz.rs          zip + ComicInfo.xml
-  mangalize-meta/     MangaDex and Kitsu clients; the only networked code
-  mangalize-cli/      thin wrapper over core and meta
+  mangalize-meta/     MangaDex and Kitsu clients
+  mangalize-library/  the stored collection: SQLite index + files on disk
+  mangalize-fetch/    page URL -> image candidates -> downloaded pages
+  mangalize-cli/      thin wrapper over the above
 ```
 
 The core crate deliberately knows nothing about Tauri, or any UI. The CLI, the
-tests and the eventual desktop app all drive the same code, which keeps the
-pipeline testable without launching a GUI and keeps the UI shell replaceable.
+tests and the desktop app all drive the same code, which keeps the pipeline
+testable without launching a GUI and keeps the UI shell replaceable.
+
+`mangalize-library` never touches the network either — it is handed metadata that
+was already fetched, and bytes that were already downloaded. That is what lets
+the whole library be tested against a real folder with no network at all.
+
+The size sieve is shared rather than duplicated: the folder scanner applies it to
+files, and the download picker applies it to images that are still only URLs, so
+both agree on what a page is.
 
 ## Development
 
 ```sh
-cargo test        # unit tests plus end-to-end tests over a synthetic scrape
+cargo test        # unit tests plus three end-to-end suites
 cargo clippy --all-targets
 ```
 
-The integration tests build a fixture that reproduces the quirks of a real
-scrape — mixed filename schemes, site furniture, a spread, a chapter numbered 10
-— and assert on the resulting EPUB and CBZ structure.
+Requires rustc 1.88 or newer.
+
+The end-to-end tests avoid mocking the thing under test. The pipeline suite
+builds a fixture reproducing the quirks of a real scrape — mixed filename
+schemes, site furniture, a spread, a chapter numbered 10 — and asserts on the
+resulting EPUB and CBZ structure. The library suite works against a real library
+folder. The fetch suite runs an actual HTTP server serving a chapter page with
+lazy-loaded images, a spread, a banner and hotlink protection, because the
+failures that happen in practice only exist at the HTTP layer.

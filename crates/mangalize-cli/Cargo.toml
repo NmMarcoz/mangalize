@@ -11,5 +11,7 @@ path = "src/main.rs"
 [dependencies]
 mangalize-core = { path = "../mangalize-core" }
 mangalize-meta = { path = "../mangalize-meta" }
+mangalize-library = { path = "../mangalize-library" }
+mangalize-fetch = { path = "../mangalize-fetch" }
 anyhow.workspace = true
 clap.workspace = true

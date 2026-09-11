@@ -1,72 +1,59 @@
 import { fetchThumbnail } from "@/lib/api";
+import { createImageCache } from "@/lib/imagecache";
+import { previewImage } from "@/lib/library";
 
 /**
- * Thumbnail loading, shared across every card on screen.
+ * Thumbnails of files on disk, and previews of images still out on the web.
  *
- * Each card asking for its own thumbnail independently would fire hundreds of
- * concurrent IPC calls and saturate the blocking thread pool on the Rust side,
- * so requests are funnelled through a small concurrency gate. Results are
- * memoised as object URLs because the grid remounts cards constantly while
- * scrolling and filtering.
+ * Both go through the same concurrency gate — see `imagecache.ts` for why — and
+ * differ only in how the bytes are obtained. Local thumbnails are keyed by
+ * `width|path`; remote previews by `width|referer|url`, because the same image
+ * fetched without its page's `Referer` is frequently a 403 rather than a page.
  */
-const LIMIT = 6;
 
-const cache = new Map<string, string>();
-const inflight = new Map<string, Promise<string>>();
-const waiting: (() => void)[] = [];
-let active = 0;
+const local = createImageCache((key) => {
+  const [max, path] = splitKey(key);
+  return fetchThumbnail(path, Number(max));
+});
 
-const key = (path: string, max: number) => `${max}|${path}`;
+const remote = createImageCache((key) => {
+  const [max, referer, url] = splitKey(key, 3);
+  return previewImage(url, referer || null, Number(max));
+});
 
-function acquire(): Promise<void> {
-  if (active < LIMIT) {
-    active += 1;
-    return Promise.resolve();
+/** Split on the first `n - 1` separators, leaving the payload intact. */
+function splitKey(key: string, parts = 2): string[] {
+  const head: string[] = [];
+  let rest = key;
+  for (let i = 0; i < parts - 1; i += 1) {
+    const at = rest.indexOf("|");
+    head.push(rest.slice(0, at));
+    rest = rest.slice(at + 1);
   }
-  return new Promise((resolve) => waiting.push(resolve));
+  return [...head, rest];
 }
 
-function release() {
-  const next = waiting.shift();
-  if (next) {
-    next();
-  } else {
-    active -= 1;
-  }
+const localKey = (path: string, max: number) => `${max}|${path}`;
+const remoteKey = (url: string, referer: string | null, max: number) =>
+  `${max}|${referer ?? ""}|${url}`;
+
+export function cachedThumbnail(path: string, max: number) {
+  return local.peek(localKey(path, max));
 }
 
-export function cachedThumbnail(path: string, max: number): string | undefined {
-  return cache.get(key(path, max));
+export function loadThumbnail(path: string, max: number) {
+  return local.load(localKey(path, max));
 }
 
-export function loadThumbnail(path: string, max: number): Promise<string> {
-  const k = key(path, max);
+export function cachedPreview(url: string, referer: string | null, max: number) {
+  return remote.peek(remoteKey(url, referer, max));
+}
 
-  const hit = cache.get(k);
-  if (hit) return Promise.resolve(hit);
-
-  const pending = inflight.get(k);
-  if (pending) return pending;
-
-  const task = (async () => {
-    await acquire();
-    try {
-      const bytes = await fetchThumbnail(path, max);
-      const url = URL.createObjectURL(new Blob([bytes], { type: "image/jpeg" }));
-      cache.set(k, url);
-      return url;
-    } finally {
-      release();
-      inflight.delete(k);
-    }
-  })();
-
-  inflight.set(k, task);
-  return task;
+export function loadPreview(url: string, referer: string | null, max: number) {
+  return remote.load(remoteKey(url, referer, max));
 }
 
 /** Drop every cached thumbnail. Called when a different folder is opened. */
 export function clearThumbnails() {
-  for (const url of cache.values()) URL.revokeObjectURL(url);
-  cache.clear();
+  local.clear();
 }
