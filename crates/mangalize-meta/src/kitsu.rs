@@ -37,6 +37,11 @@ fn parse_series(item: &Value) -> Option<SeriesMatch> {
         // round trip; not worth it for a fallback source.
         author: None,
         artist: None,
+        // Kitsu carries none of these. Left empty rather than guessed at, so
+        // the UI simply shows nothing where MangaDex would show a tag list.
+        content_rating: None,
+        tags: Vec::new(),
+        available_languages: Vec::new(),
         description: attrs["synopsis"].as_str().map(String::from),
         year: attrs["startDate"]
             .as_str()

@@ -1,6 +1,8 @@
 //! Commands for online metadata lookup. Always user-initiated.
 
-use mangalize_meta::{BrowsePage, BrowseQuery, SeriesMatch, Source, Tag, VolumeChapters, VolumeCover};
+use mangalize_meta::{
+    BrowsePage, BrowseQuery, SeriesMatch, Source, Statistics, Tag, VolumeChapters, VolumeCover,
+};
 use tauri::{AppHandle, Manager};
 
 use crate::util::blocking;
@@ -30,6 +32,35 @@ pub async fn mangadex_tags() -> Result<Vec<Tag>, String> {
 #[tauri::command]
 pub async fn series_covers(source: Source, id: String) -> Result<Vec<VolumeCover>, String> {
     blocking(move || mangalize_meta::volume_covers(source, &id)).await
+}
+
+/// Rating and follow counts for a series.
+#[tauri::command]
+pub async fn series_statistics(source: Source, id: String) -> Result<Statistics, String> {
+    blocking(move || mangalize_meta::statistics(source, &id)).await
+}
+
+/// Other series filed under the same genres.
+///
+/// Not a recommendation: MangaDex publishes no similarity ranking, so this is a
+/// tag search and the UI labels it as one.
+#[tauri::command]
+pub async fn similar_series(
+    source: Source,
+    tags: Vec<String>,
+    exclude: String,
+) -> Result<Vec<SeriesMatch>, String> {
+    blocking(move || mangalize_meta::similar(source, &tags, &exclude)).await
+}
+
+/// The volume-to-chapter layout for one translation.
+#[tauri::command]
+pub async fn series_chapters_in(
+    source: Source,
+    id: String,
+    language: Option<String>,
+) -> Result<Vec<VolumeChapters>, String> {
+    blocking(move || mangalize_meta::volume_chapters_in(source, &id, language.as_deref())).await
 }
 
 /// The published volume-to-chapter layout, for checking a folder against it.

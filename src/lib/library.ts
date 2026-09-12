@@ -141,8 +141,14 @@ export const setLibraryRoot = (path: string) =>
 
 export const librarySeries = () => invoke<Series[]>("library_series");
 
-export const libraryAddSeries = (series: SeriesMatch) =>
-  invoke<Series>("library_add_series", { series });
+/**
+ * Add a series, optionally fixing which translation it tracks.
+ *
+ * The language decides which chapters the library knows about and what an
+ * exported EPUB declares, so it is set at add time rather than left to default.
+ */
+export const libraryAddSeries = (series: SeriesMatch, language: string | null = null) =>
+  invoke<Series>("library_add_series", { series, language });
 
 export const librarySyncSeries = (id: number) =>
   invoke<SyncReport>("library_sync_series", { id });

@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::{
     get_json, volume_sort_key, BrowsePage, BrowseQuery, ChapterRef, ContentRating, SeriesMatch,
-    Sort, Source, Tag, VolumeChapters, VolumeCover,
+    Sort, Source, Statistics, Tag, VolumeChapters, VolumeCover,
 };
 
 const API: &str = "https://api.mangadex.org";
@@ -168,8 +168,79 @@ fn parse_series(item: &Value) -> Option<SeriesMatch> {
         year: attrs["year"].as_u64().map(|y| y as u32),
         status: attrs["status"].as_str().map(String::from),
         demographic: attrs["publicationDemographic"].as_str().map(String::from),
+        content_rating: attrs["contentRating"].as_str().map(String::from),
+        tags: parse_tags(attrs),
+        available_languages: attrs["availableTranslatedLanguages"]
+            .as_array()
+            .map(|items| items.iter().filter_map(|l| l.as_str().map(String::from)).collect())
+            .unwrap_or_default(),
         id,
     })
+}
+
+/// Tags as they hang off a manga entity, already named.
+///
+/// The ids alone would mean the UI could not label them without fetching the
+/// whole tag list first.
+fn parse_tags(attrs: &Value) -> Vec<Tag> {
+    attrs["tags"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|tag| {
+                    Some(Tag {
+                        id: tag["id"].as_str()?.to_string(),
+                        name: tag["attributes"]["name"]["en"].as_str()?.to_string(),
+                        group: tag["attributes"]["group"]
+                            .as_str()
+                            .unwrap_or("other")
+                            .to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Rating and follow counts.
+pub fn statistics(manga_id: &str) -> Result<Statistics> {
+    let body = get_json(&format!("{API}/statistics/manga/{manga_id}"), &[])?;
+    let entry = &body["statistics"][manga_id];
+
+    Ok(Statistics {
+        rating: entry["rating"]["average"].as_f64(),
+        bayesian: entry["rating"]["bayesian"].as_f64(),
+        follows: entry["follows"].as_u64(),
+    })
+}
+
+/// Other series filed under the same genres.
+///
+/// MangaDex publishes no similarity ranking, so this is a tag search ordered by
+/// follows — "more of this kind", not "you will like this". Only genre tags are
+/// used: matching on a theme like "Cooking" alone turns up almost anything.
+pub fn similar(tags: &[String], exclude: &str) -> Result<Vec<SeriesMatch>> {
+    if tags.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let page = browse(&BrowseQuery {
+        // Two tags is the sweet spot: one is far too broad, three rarely
+        // matches anything outside the series' own sequels.
+        included_tags: tags.iter().take(2).cloned().collect(),
+        sort: Sort::Follows,
+        descending: true,
+        limit: 13,
+        ..BrowseQuery::default()
+    })?;
+
+    Ok(page
+        .series
+        .into_iter()
+        .filter(|hit| hit.id != exclude)
+        .take(12)
+        .collect())
 }
 
 /// Find a title in `language`, checking the canonical title first and then the
@@ -239,45 +310,95 @@ pub fn volume_covers(manga_id: &str) -> Result<Vec<VolumeCover>> {
 /// sparse and misleading map, while the unfiltered view reflects the actual
 /// tankoubon structure.
 pub fn volume_chapters(manga_id: &str) -> Result<Vec<VolumeChapters>> {
-    let body = get_json(&format!("{API}/manga/{manga_id}/aggregate"), &[])?;
+    volume_chapters_in(manga_id, None)
+}
 
-    let mut volumes: Vec<VolumeChapters> = body["volumes"]
-        .as_object()
-        .map(|map| {
-            map.iter()
-                .filter(|(name, _)| name.as_str() != "none")
-                .map(|(name, value)| {
-                    // The id is the useful part and was previously thrown away:
-                    // it is what `/at-home/server` needs to hand back real page
-                    // URLs, which beats reading the site's markup outright.
-                    let mut chapters: Vec<ChapterRef> = value["chapters"]
-                        .as_object()
-                        .map(|entries| {
-                            entries
-                                .iter()
-                                .map(|(number, entry)| ChapterRef {
-                                    number: number.clone(),
-                                    id: entry["id"].as_str().map(String::from),
-                                    unavailable: entry["isUnavailable"]
-                                        .as_bool()
-                                        .unwrap_or(false),
+/// As [`volume_chapters`], for one translation.
+///
+/// Two requests on purpose. Filtering the aggregate to a language gives the
+/// chapters that actually exist in it, with the right ids — but volume tagging
+/// is per-translation and crowd-sourced, so a language whose uploaders never
+/// tagged volumes comes back with everything under `none`. The unfiltered map is
+/// asked for as well and used to place anything the filtered one left untagged,
+/// which keeps the tankoubon structure without pretending chapters exist in a
+/// language they were never translated into.
+pub fn volume_chapters_in(
+    manga_id: &str,
+    language: Option<&str>,
+) -> Result<Vec<VolumeChapters>> {
+    let params: Vec<(&str, &str)> = match language {
+        Some(lang) if !lang.is_empty() => vec![("translatedLanguage[]", lang)],
+        _ => Vec::new(),
+    };
+    let body = get_json(&format!("{API}/manga/{manga_id}/aggregate"), &params)?;
+
+    // Where each chapter belongs according to every translation together.
+    let fallback: std::collections::HashMap<String, String> = if language.is_some() {
+        get_json(&format!("{API}/manga/{manga_id}/aggregate"), &[])
+            .ok()
+            .and_then(|all| {
+                Some(
+                    all["volumes"]
+                        .as_object()?
+                        .iter()
+                        .filter(|(name, _)| name.as_str() != "none")
+                        .flat_map(|(name, value)| {
+                            value["chapters"]
+                                .as_object()
+                                .map(|chapters| {
+                                    chapters
+                                        .keys()
+                                        .map(|number| (number.clone(), name.clone()))
+                                        .collect::<Vec<_>>()
                                 })
-                                .collect()
+                                .unwrap_or_default()
                         })
-                        .unwrap_or_default();
-                    chapters.sort_by(|a, b| {
-                        volume_sort_key(&a.number)
-                            .partial_cmp(&volume_sort_key(&b.number))
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                    });
-                    VolumeChapters {
-                        volume: name.clone(),
-                        chapters,
+                        .collect(),
+                )
+            })
+            .unwrap_or_default()
+    } else {
+        std::collections::HashMap::new()
+    };
+
+    // Rebuilt rather than mapped, because a chapter the filtered map left under
+    // `none` may belong to a volume the unfiltered map knows about.
+    let mut by_volume: std::collections::BTreeMap<String, Vec<ChapterRef>> =
+        std::collections::BTreeMap::new();
+
+    if let Some(map) = body["volumes"].as_object() {
+        for (name, value) in map {
+            let Some(chapters) = value["chapters"].as_object() else { continue };
+            for (number, entry) in chapters {
+                let volume = if name == "none" {
+                    match fallback.get(number) {
+                        Some(known) => known.clone(),
+                        None => continue,
                     }
-                })
-                .collect()
+                } else {
+                    name.clone()
+                };
+
+                by_volume.entry(volume).or_default().push(ChapterRef {
+                    number: number.clone(),
+                    id: entry["id"].as_str().map(String::from),
+                    unavailable: entry["isUnavailable"].as_bool().unwrap_or(false),
+                });
+            }
+        }
+    }
+
+    let mut volumes: Vec<VolumeChapters> = by_volume
+        .into_iter()
+        .map(|(volume, mut chapters)| {
+            chapters.sort_by(|a, b| {
+                volume_sort_key(&a.number)
+                    .partial_cmp(&volume_sort_key(&b.number))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            VolumeChapters { volume, chapters }
         })
-        .unwrap_or_default();
+        .collect();
 
     volumes.sort_by(|a, b| {
         volume_sort_key(&a.volume)

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { SeriesMatch } from "@/lib/api";
+import type { SeriesMatch, Tag } from "@/lib/api";
 
 /** Mirrors `mangalize_meta::Sort`. */
 export type Sort =
@@ -14,12 +14,9 @@ export type Sort =
 /** Mirrors `mangalize_meta::ContentRating`. */
 export type ContentRating = "safe" | "suggestive" | "erotica" | "pornographic";
 
-export interface Tag {
-  id: string;
-  name: string;
-  /** `genre`, `theme`, `format` or `content`. */
-  group: string;
-}
+// `Tag` lives in api.ts, since a series carries its own; re-exported here so
+// the filter code reads as one thing.
+export type { Tag };
 
 export interface BrowseQuery {
   title: string | null;

@@ -57,6 +57,26 @@ export interface BuildReport {
 
 export type MetaSource = "mangadex" | "kitsu";
 
+/**
+ * Mirrors `mangalize_meta::Tag`.
+ *
+ * Defined here rather than beside the browse filters because a series carries
+ * its own tags; putting it there and importing back would be circular.
+ */
+export interface Tag {
+  id: string;
+  name: string;
+  /** `genre`, `theme`, `format` or `content`. */
+  group: string;
+}
+
+/** Mirrors `mangalize_meta::Statistics`. */
+export interface Statistics {
+  rating: number | null;
+  bayesian: number | null;
+  follows: number | null;
+}
+
 /** Mirrors `mangalize_meta::SeriesMatch`. */
 export interface SeriesMatch {
   source: MetaSource;
@@ -72,6 +92,11 @@ export interface SeriesMatch {
   demographic: string | null;
   thumbnail_url: string | null;
   site_url: string | null;
+  /** `safe` | `suggestive` | `erotica` | `pornographic` */
+  content_rating: string | null;
+  tags: Tag[];
+  /** Translations that exist, as language codes. Crowd-sourced, so it varies. */
+  available_languages: string[];
 }
 
 export interface VolumeCover {
@@ -102,6 +127,43 @@ export const seriesCovers = (source: MetaSource, id: string) =>
 
 export const seriesChapters = (source: MetaSource, id: string) =>
   invoke<VolumeChapters[]>("series_chapters", { source, id });
+
+/** The volume layout for one translation. `null` merges every language. */
+export const seriesChaptersIn = (
+  source: MetaSource,
+  id: string,
+  language: string | null,
+) => invoke<VolumeChapters[]>("series_chapters_in", { source, id, language });
+
+export const seriesStatistics = (source: MetaSource, id: string) =>
+  invoke<Statistics>("series_statistics", { source, id });
+
+/** Series sharing these tags. A tag search, not a recommendation. */
+export const similarSeries = (source: MetaSource, tags: string[], exclude: string) =>
+  invoke<SeriesMatch[]>("similar_series", { source, tags, exclude });
+
+/**
+ * Language codes as they should read on screen.
+ *
+ * MangaDex uses a mix of plain and regioned codes, and `Intl.DisplayNames`
+ * handles both; the map only covers the few it renders unhelpfully.
+ */
+export const languageName = (code: string): string => {
+  const special: Record<string, string> = {
+    "pt-br": "Portuguese (Brazil)",
+    "es-la": "Spanish (Latin America)",
+    "zh-hk": "Chinese (Hong Kong)",
+    "ja-ro": "Japanese (romanised)",
+    "ko-ro": "Korean (romanised)",
+    "zh-ro": "Chinese (romanised)",
+  };
+  if (special[code]) return special[code];
+  try {
+    return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+};
 
 /** Download a cover into the app cache and return its local path. */
 export const saveCover = (url: string) => invoke<string>("save_cover", { url });

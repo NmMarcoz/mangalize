@@ -54,6 +54,15 @@ pub struct SeriesMatch {
     /// Small cover for the picker, not for embedding.
     pub thumbnail_url: Option<String>,
     pub site_url: Option<String>,
+    /// `safe`, `suggestive`, `erotica` or `pornographic`.
+    pub content_rating: Option<String>,
+    /// Genres and themes, already named rather than left as ids.
+    pub tags: Vec<Tag>,
+    /// Languages this series has been translated into, as BCP-47-ish codes.
+    ///
+    /// MangaDex is crowd-translated, so a popular series carries a dozen and an
+    /// obscure one may not carry the reader's at all.
+    pub available_languages: Vec<String>,
 }
 
 impl SeriesMatch {
@@ -65,6 +74,16 @@ impl SeriesMatch {
             .or(self.title_native.as_deref())
             .unwrap_or("Untitled")
     }
+}
+
+/// How a series is received, which the catalogue tracks separately.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Statistics {
+    /// Mean score out of ten, when enough people have voted.
+    pub rating: Option<f64>,
+    /// The site's own weighting, which is steadier on a small sample.
+    pub bayesian: Option<f64>,
+    pub follows: Option<u64>,
 }
 
 /// One volume's cover art.
@@ -262,6 +281,38 @@ pub fn report_page_fetch(url: &str, success: bool, cached: bool, bytes: usize, m
 /// something to explore.
 pub fn browse(query: &BrowseQuery) -> Result<BrowsePage> {
     mangadex::browse(query)
+}
+
+/// Ratings and follow counts for a series.
+pub fn statistics(source: Source, id: &str) -> Result<Statistics> {
+    match source {
+        Source::MangaDex => mangadex::statistics(id),
+        Source::Kitsu => Ok(Statistics::default()),
+    }
+}
+
+/// Series sharing a set of tags, for "more like this".
+///
+/// Not a recommendation engine and not presented as one: MangaDex publishes no
+/// similarity ranking, so this is "other things filed under the same genres",
+/// which is a useful but much weaker claim.
+pub fn similar(source: Source, tags: &[String], exclude: &str) -> Result<Vec<SeriesMatch>> {
+    match source {
+        Source::MangaDex => mangadex::similar(tags, exclude),
+        Source::Kitsu => Ok(Vec::new()),
+    }
+}
+
+/// The volume-to-chapter map for one translation.
+pub fn volume_chapters_in(
+    source: Source,
+    id: &str,
+    language: Option<&str>,
+) -> Result<Vec<VolumeChapters>> {
+    match source {
+        Source::MangaDex => mangadex::volume_chapters_in(id, language),
+        Source::Kitsu => Ok(Vec::new()),
+    }
 }
 
 /// Every tag a series can carry, for building a filter picker.

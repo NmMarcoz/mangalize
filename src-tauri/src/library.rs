@@ -60,7 +60,11 @@ pub async fn library_series(app: AppHandle) -> Result<Vec<Series>, String> {
 /// All three happen together because a series with no layout cannot answer the
 /// question the library exists to answer — which chapters am I missing.
 #[tauri::command]
-pub async fn library_add_series(app: AppHandle, series: SeriesMatch) -> Result<Series, String> {
+pub async fn library_add_series(
+    app: AppHandle,
+    series: SeriesMatch,
+    language: Option<String>,
+) -> Result<Series, String> {
     blocking(move || {
         let mut library = open(&app)?;
         let added = library.add_series(NewSeries {
@@ -77,9 +81,28 @@ pub async fn library_add_series(app: AppHandle, series: SeriesMatch) -> Result<S
             site_url: series.site_url.clone(),
         })?;
 
+        // The translation chosen when adding decides which chapters the library
+        // tracks, and doubles as the language written into an exported EPUB.
+        if let Some(language) = language.as_deref().filter(|l| !l.is_empty()) {
+            let _ = library.update_series(
+                added.id,
+                &added.title,
+                &added.author,
+                &added.description,
+                language,
+                &added.direction,
+            );
+        }
+
         // Best effort from here: a series in the library with no layout yet is
         // recoverable with the Refresh button, a failed add is not.
-        let _ = pull_layout(&mut library, added.id, series.source, &series.id);
+        let _ = pull_layout(
+            &mut library,
+            added.id,
+            series.source,
+            &series.id,
+            language.as_deref(),
+        );
         if let Some(url) = &series.thumbnail_url {
             if let Ok(bytes) = mangalize_meta::download_image(url) {
                 let _ = library.set_cover(added.id, &bytes);
@@ -101,7 +124,16 @@ pub async fn library_sync_series(app: AppHandle, id: i64) -> Result<SyncReport, 
             (Some(source), Some(source_id)) => (parse_source(source)?, source_id.clone()),
             _ => anyhow::bail!("{} was added by hand; there is no source to sync from", series.title),
         };
-        pull_layout(&mut library, series.id, source, &source_id)
+        // Whatever translation the series was added in; syncing must not
+        // silently widen it back to every language.
+        let language = series.language.clone();
+        pull_layout(
+            &mut library,
+            series.id,
+            source,
+            &source_id,
+            Some(language.as_str()),
+        )
     })
     .await
 }
@@ -369,8 +401,9 @@ fn pull_layout(
     id: SeriesId,
     source: Source,
     source_id: &str,
+    language: Option<&str>,
 ) -> Result<SyncReport> {
-    let published = mangalize_meta::volume_chapters(source, source_id)?;
+    let published = mangalize_meta::volume_chapters_in(source, source_id, language)?;
     let covers = mangalize_meta::volume_covers(source, source_id)?;
 
     let volumes: Vec<PublishedVolume> = published
