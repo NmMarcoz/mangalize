@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { AlertTriangle, X } from "lucide-react";
 
 import { EmptyState } from "@/components/EmptyState";
+import { Sidebar, type Section } from "@/components/Sidebar";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -114,7 +115,6 @@ export default function App() {
     if (view.kind === "settings") {
       return (
         <SettingsView
-          onBack={() => setView({ kind: "library" })}
           onSaved={setSettings}
           onError={setError}
         />
@@ -127,9 +127,6 @@ export default function App() {
           onOpenSeries={(id) => setView({ kind: "series", id })}
           onOpenFolder={() => void pickFolder()}
           onError={setError}
-          updateStage={updater.state.stage}
-          onCheckUpdates={updater.checkNow}
-          onOpenSettings={() => setView({ kind: "settings" })}
         />
       );
     }
@@ -178,10 +175,26 @@ export default function App() {
     );
   };
 
+  // A series and the editor both sit under the library as far as navigation is
+  // concerned, so neither gets its own rail entry.
+  const section: Section = view.kind === "settings" ? "settings" : "library";
+  const chrome = settings !== null && settings.welcomed;
+
   return (
     <TooltipProvider delayDuration={400}>
-      <div className="flex h-full flex-col">
-        {body()}
+      <div className="flex h-full">
+        {chrome && (
+          <Sidebar
+            active={section}
+            onNavigate={(to) =>
+              setView(to === "settings" ? { kind: "settings" } : { kind: "library" })
+            }
+            updateStage={updater.state.stage}
+            onCheckUpdates={updater.checkNow}
+          />
+        )}
+
+        <div className="flex min-w-0 flex-1 flex-col">{body()}</div>
 
         <UpdateBanner
           state={updater.state}

@@ -2,12 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   BookOpen,
-  CloudDownload,
   FolderOpen,
   Loader2,
   Plus,
   RefreshCw,
-  Settings,
   Trash2,
 } from "lucide-react";
 
@@ -17,7 +15,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
 import { useThumbnail } from "@/hooks/useThumbnail";
-import type { UpdateStage } from "@/hooks/useUpdater";
 import {
   libraryRoot,
   librarySeries,
@@ -30,9 +27,6 @@ interface LibraryViewProps {
   /** Escape hatch to the original scan-a-folder path. */
   onOpenFolder: () => void;
   onError: (message: string | null) => void;
-  updateStage: UpdateStage;
-  onCheckUpdates: () => void;
-  onOpenSettings: () => void;
 }
 
 /** The shelf: every series in the library, and the way to add another. */
@@ -40,9 +34,6 @@ export function LibraryView({
   onOpenSeries,
   onOpenFolder,
   onError,
-  updateStage,
-  onCheckUpdates,
-  onOpenSettings,
 }: LibraryViewProps) {
   const [root, setRoot] = useState<string | null>(null);
   const [series, setSeries] = useState<Series[] | null>(null);
@@ -89,31 +80,6 @@ export function LibraryView({
           </button>
         </div>
 
-        <Hint
-          label={
-            updateStage === "uptodate"
-              ? "You are on the latest version"
-              : "Check for updates"
-          }
-        >
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onCheckUpdates}
-            disabled={updateStage === "checking"}
-          >
-            {updateStage === "checking" ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <CloudDownload />
-            )}
-          </Button>
-        </Hint>
-        <Hint label="Settings">
-          <Button variant="ghost" size="icon" onClick={onOpenSettings}>
-            <Settings />
-          </Button>
-        </Hint>
         <Hint label="Build a volume from a folder instead">
           <Button variant="ghost" size="icon" onClick={onOpenFolder}>
             <FolderOpen />

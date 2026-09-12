@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { ArrowLeft, Check, FolderOpen, Loader2 } from "lucide-react";
+import { Check, FolderOpen, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -17,14 +17,13 @@ import { Switch } from "@/components/ui/switch";
 import { getSettings, setSettings, type Settings } from "@/lib/settings";
 
 interface SettingsViewProps {
-  onBack: () => void;
   /** Lets the rest of the app pick up a changed library or output folder. */
   onSaved: (settings: Settings) => void;
   onError: (message: string | null) => void;
 }
 
 /** Where things live and what Build does by default. */
-export function SettingsView({ onBack, onSaved, onError }: SettingsViewProps) {
+export function SettingsView({ onSaved, onError }: SettingsViewProps) {
   const [settings, setLocal] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -64,9 +63,6 @@ export function SettingsView({ onBack, onSaved, onError }: SettingsViewProps) {
   return (
     <div className="flex h-full flex-col">
       <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-4 py-2.5">
-        <Button variant="ghost" size="icon" onClick={onBack}>
-          <ArrowLeft />
-        </Button>
         <h1 className="flex-1 text-sm font-semibold">Settings</h1>
         <Button onClick={() => void save()} disabled={!settings || saving}>
           {saving ? <Loader2 className="animate-spin" /> : saved ? <Check /> : null}
