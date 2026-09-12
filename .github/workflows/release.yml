@@ -238,6 +238,11 @@ jobs:
             - **macOS** — `.dmg`. Unsigned for now, so the first launch needs
               right-click → Open. Updates afterwards are automatic.
             - **Windows** — `.exe` for a normal install, `.msi` if you prefer it.
+            - **Android** — `.apk`, arm64. Sideload it; there is no store
+              listing, so the phone will ask you to allow installing from this
+              source. Reading and downloading work; building a volume writes it
+              to the app's own storage, and the Share button on a built volume
+              is how it gets anywhere else.
 
             The `.sig`, `.tar.gz` and `latest.json` files are what the in-app
             updater reads. You do not need to download them.
@@ -264,3 +269,113 @@ jobs:
             target/**/release/bundle/dmg/*.dmg
             target/**/release/bundle/msi/*.msi
             target/**/release/bundle/nsis/*.exe
+
+  # Android is a separate job rather than another entry in the build matrix:
+  # tauri-action knows nothing about APKs, the signing is ours, and the runner
+  # needs a JDK and an NDK that no desktop platform wants.
+  android:
+    # After the desktop build rather than beside it, so the release already
+    # exists and tauri-action owns its body. Both jobs attaching to the same tag
+    # at once means whichever lost would create the release with no notes.
+    needs: [check, prepare, check-version, build]
+    if: |
+      always()
+      && needs.check.result == 'success'
+      && needs.build.result == 'success'
+      && needs.prepare.result != 'failure'
+      && needs.check-version.result != 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.tag || github.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # The Android Gradle Plugin this project generates needs 17 or newer, and
+      # the runner's default has been older than that before now.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # arm64 only. Every phone sold in years is arm64, and building the
+          # other three would triple the time for an APK almost nobody installs.
+          targets: aarch64-linux-android
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+          key: android
+
+      # The runner image ships several NDKs. Picking the newest rather than
+      # pinning one means this does not break when the image is updated.
+      - name: Locate the NDK
+        run: |
+          set -euo pipefail
+          ndk=$(find "$ANDROID_HOME/ndk" -maxdepth 1 -mindepth 1 -type d | sort -V | tail -1)
+          if [ -z "$ndk" ]; then
+            echo "::error::no NDK in $ANDROID_HOME/ndk"
+            exit 1
+          fi
+          echo "NDK_HOME=$ndk" >> "$GITHUB_ENV"
+          echo "using $ndk"
+
+      - run: bun install --frozen-lockfile
+
+      - name: Restore the signing key
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not set."
+            echo "Add it with: base64 -i release.jks | gh secret set ANDROID_KEYSTORE_BASE64"
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      # The same script used locally, so a CI build and a developer's build go
+      # through one path and cannot drift apart in how they are signed.
+      - name: Build and sign
+        env:
+          MANGALIZE_KEYSTORE: ${{ runner.temp }}/release.jks
+          MANGALIZE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          MANGALIZE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          # Nothing to read here; the credentials above are the whole of it.
+          MANGALIZE_KEYSTORE_PROPERTIES: /nonexistent
+        run: scripts/android.sh
+
+      - name: Name it after the version
+        id: apk
+        run: |
+          set -euo pipefail
+          version=$(jq -r .version src-tauri/tauri.conf.json)
+          out="target/Mangalize_${version}_arm64.apk"
+          mv target/mangalize-release.apk "$out"
+          echo "path=$out" >> "$GITHUB_OUTPUT"
+
+      # The desktop build's release is created by tauri-action, which runs in a
+      # different job. Attaching here rather than creating means whichever
+      # finishes second adds to the release the first one made.
+      - name: Attach to the release
+        if: ${{ needs.prepare.outputs.tag != '' || startsWith(github.ref, 'refs/tags/v') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag || github.ref_name }}
+          files: ${{ steps.apk.outputs.path }}
+          draft: false
+          prerelease: false
+
+      - name: Upload the APK as a workflow artifact
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') && inputs.version == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mangalize-android
+          retention-days: 7
+          if-no-files-found: error
+          path: ${{ steps.apk.outputs.path }}

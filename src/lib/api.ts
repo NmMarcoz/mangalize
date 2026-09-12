@@ -1,4 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
+
+import { canRevealFiles } from "@/lib/platform";
 
 /**
  * Mirrors of the serde shapes in `mangalize-core`. Keep these in step with the
@@ -246,3 +249,22 @@ export const formatBytes = (bytes: number) => {
   }
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
 };
+
+/**
+ * Hand a built volume to the user, by whatever that means on this platform.
+ *
+ * A desktop reveals it in the file manager. Android has no file manager to
+ * reveal into, and the export folder sits under `Android/data`, which recent
+ * versions hide from the pickers most apps show — so the share sheet is the way
+ * a volume actually leaves the device, and the user chooses where it goes.
+ */
+export async function deliverBuilt(path: string, title?: string): Promise<void> {
+  if (canRevealFiles) {
+    await revealItemInDir(path);
+    return;
+  }
+  await invoke("share_file", { path, title: title ?? null });
+}
+
+/** What the control doing the above should be called. */
+export const DELIVER_LABEL = canRevealFiles ? "Show" : "Share";

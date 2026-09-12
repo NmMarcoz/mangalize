@@ -54,12 +54,28 @@ impl Library {
         let db = Connection::open(root.join(DB_FILE))
             .with_context(|| format!("opening {}", root.join(DB_FILE).display()))?;
 
+        // Before the pragmas, not after: changing the journal mode also wants
+        // the lock, so a second command arriving mid-open should wait rather
+        // than fail.
+        db.busy_timeout(schema::BUSY_TIMEOUT)?;
+
         // Foreign keys are off by default in SQLite, and the cascade from series
         // to chapters is the whole reason the constraints are declared.
         db.pragma_update(None, "foreign_keys", "ON")?;
         // WAL survives a crash mid-write far better than the rollback journal,
         // and the app writes while the user is reading the same rows.
-        db.pragma_update(None, "journal_mode", "WAL")?;
+        //
+        // Changing the mode needs exclusive access to the file and fails
+        // immediately rather than waiting, so two commands opening the library
+        // at the same moment cannot both set it. The mode belongs to the file
+        // and not the connection, though: whoever wins sets it for everyone,
+        // which is why the loser carrying on is right rather than merely
+        // tolerable. Only ask when it is not already what we want, so the
+        // common case takes no lock at all.
+        let mode: String = db.query_row("PRAGMA journal_mode", [], |row| row.get(0))?;
+        if !mode.eq_ignore_ascii_case("wal") {
+            let _ = db.pragma_update(None, "journal_mode", "WAL");
+        }
 
         schema::migrate(&db)?;
         Ok(Self { root, db })

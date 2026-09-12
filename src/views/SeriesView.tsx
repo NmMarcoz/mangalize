@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   ArrowLeft,
   BookOpen,
@@ -29,7 +28,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
 import { useThumbnail } from "@/hooks/useThumbnail";
-import { formatBytes, type Format, type Volume } from "@/lib/api";
+import {
+  deliverBuilt,
+  DELIVER_LABEL,
+  formatBytes,
+  type Format,
+  type Volume,
+} from "@/lib/api";
 import { sendFiles } from "@/lib/send";
 import {
   buildLibraryVolumes,
@@ -538,6 +543,7 @@ export function SeriesView({
           sending={sending}
           report={buildReport}
           onDismiss={() => setBuildReport(null)}
+          onError={onError}
         />
       )}
 
@@ -695,11 +701,13 @@ function BuildStatus({
   sending,
   report,
   onDismiss,
+  onError,
 }: {
   progress: BuildBatchProgress | null;
   sending: boolean;
   report: BuildBatchReport | null;
   onDismiss: () => void;
+  onError: (message: string) => void;
 }) {
   return (
     <div className="absolute bottom-4 left-1/2 z-40 flex w-[min(34rem,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 shadow-lg">
@@ -746,9 +754,11 @@ function BuildStatus({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => void revealItemInDir(report.built[0].path)}
+              onClick={() =>
+                void deliverBuilt(report.built[0].path).catch((e) => onError(String(e)))
+              }
             >
-              Show
+              {DELIVER_LABEL}
             </Button>
           )}
           <Button variant="ghost" size="icon-sm" onClick={onDismiss}>

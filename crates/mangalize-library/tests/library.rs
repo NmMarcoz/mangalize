@@ -390,3 +390,47 @@ fn progress_can_be_cleared_without_touching_the_pages() {
     assert!(chapter.read_at.is_none() && chapter.opened_at.is_none());
     assert!(chapter.downloaded(), "the pages must still be there");
 }
+
+/// The app opens the library per request, so the first launch has several
+/// commands racing to create the same empty index. Before the migration took
+/// the write lock up front, the loser failed with "table series already exists"
+/// and left a half-built schema that every later open tripped over.
+#[test]
+fn several_commands_can_open_a_brand_new_library_at_once() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().to_path_buf();
+
+    // A barrier rather than just spawning: the migration takes about a
+    // millisecond, so without one the threads finish in turn and the race the
+    // test exists for never happens.
+    let start = std::sync::Arc::new(std::sync::Barrier::new(8));
+    let opened: Vec<_> = (0..8)
+        .map(|_| {
+            let root = root.clone();
+            let start = std::sync::Arc::clone(&start);
+            std::thread::spawn(move || {
+                start.wait();
+                Library::open(&root).map(|_| ())
+            })
+        })
+        .collect();
+
+    for (index, handle) in opened.into_iter().enumerate() {
+        handle
+            .join()
+            .unwrap()
+            .unwrap_or_else(|e| panic!("opener {index} failed: {e:#}"));
+    }
+
+    // And the index that came out of it is usable, not just created.
+    let library = Library::open(&root).unwrap();
+    assert!(library.all_series().unwrap().is_empty());
+
+    // One of those openers had to win the journal mode too. The loser ignores
+    // its own failure to set it, so without this the mode could quietly stop
+    // being applied at all and nothing else would notice.
+    assert!(
+        root.join("mangalize.db-wal").exists(),
+        "the index should be in WAL mode"
+    );
+}

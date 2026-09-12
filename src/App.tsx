@@ -341,9 +341,10 @@ export default function App() {
         <div
           className={cn(
             "flex min-w-0 flex-1 flex-col",
-            // Above the bar in source order would put it under the content in a
-            // column, so the bar is moved rather than the content.
-            isMobile && "order-first",
+            // `min-h-0` because a flex item will not shrink below its content
+            // by default: a screen taller than the window pushed the bar off
+            // the bottom of it instead of scrolling inside.
+            isMobile && "order-first min-h-0",
           )}
         >
           {body()}

@@ -29,14 +29,27 @@ BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -mindepth 1 -type d 
 
 export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH"
 
-# The default keystore here is a local one with a throwaway password, good for
-# putting a build on a device you own and nothing else. An Android app's signing
-# key *is* its identity — publish with this one and anyone who reads this file
-# can sign an update that phones will accept as yours. Generate a real keystore
-# and point these at it before distributing anything.
+# Signing credentials come from a file outside the repo, or from the
+# environment when CI supplies them. There is deliberately no default password
+# here: one committed next to the script it unlocks is not a password, and an
+# Android signing key *is* the app's identity — anyone holding it can sign an
+# update that phones will accept as yours.
+KEYSTORE_PROPERTIES="${MANGALIZE_KEYSTORE_PROPERTIES:-$HOME/.mangalize/android-keystore.properties}"
+if [ -f "$KEYSTORE_PROPERTIES" ]; then
+  # Only the three keys we expect, so a stray line cannot set anything else.
+  while IFS='=' read -r key value; do
+    case "$key" in
+      MANGALIZE_KEYSTORE|MANGALIZE_KEY_ALIAS|MANGALIZE_KEYSTORE_PASSWORD)
+        # Already set in the environment wins, so CI can override the file.
+        [ -n "${!key:-}" ] || export "$key=$value"
+        ;;
+    esac
+  done < "$KEYSTORE_PROPERTIES"
+fi
+
 KEYSTORE="${MANGALIZE_KEYSTORE:-$HOME/.mangalize/android-release.jks}"
 KEY_ALIAS="${MANGALIZE_KEY_ALIAS:-mangalize}"
-STORE_PASS="${MANGALIZE_KEYSTORE_PASSWORD:-mangalize}"
+STORE_PASS="${MANGALIZE_KEYSTORE_PASSWORD:-}"
 
 UNSIGNED="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
 SIGNED="target/mangalize-release.apk"
@@ -59,7 +72,12 @@ require ANDROID_HOME
 require NDK_HOME
 require JAVA_HOME
 
-[ -d src-tauri/gen/android ] || bun run tauri android init
+# The Android project is committed, but the parts of it Tauri derives from
+# tauri.conf.json are not — `settings.gradle` applies a `tauri.settings.gradle`
+# that only `init` writes, so a fresh checkout has a project Gradle cannot load.
+# Re-running init fills those back in and leaves every committed file alone,
+# which is what makes committing the project safe in the first place.
+[ -f src-tauri/gen/android/tauri.settings.gradle ] || bun run tauri android init
 
 # Tauri wraps a Gradle failure in a single unreadable line with every
 # environment variable in it. The actual cause is always an `ERROR:` or `e:`
@@ -71,10 +89,17 @@ if ! bun run tauri android build --apk --target aarch64 2>&1 | tee /tmp/mangaliz
   exit 1
 fi
 
-if [ ! -f "$KEYSTORE" ]; then
-  echo "No keystore at $KEYSTORE. Create one with:" >&2
+if [ ! -f "$KEYSTORE" ] || [ -z "$STORE_PASS" ]; then
+  echo "No signing key. Create one and record where it is:" >&2
+  echo >&2
   echo "  keytool -genkeypair -v -keystore $KEYSTORE -alias $KEY_ALIAS \\" >&2
-  echo "    -keyalg RSA -keysize 4096 -validity 10000" >&2
+  echo "    -keyalg RSA -keysize 4096 -validity 10000 -storetype PKCS12" >&2
+  echo >&2
+  echo "  cat > $KEYSTORE_PROPERTIES <<EOF" >&2
+  echo "  MANGALIZE_KEYSTORE=$KEYSTORE" >&2
+  echo "  MANGALIZE_KEY_ALIAS=$KEY_ALIAS" >&2
+  echo "  MANGALIZE_KEYSTORE_PASSWORD=..." >&2
+  echo "  EOF" >&2
   exit 1
 fi
 
@@ -88,7 +113,19 @@ fi
 echo "signed: $SIGNED"
 
 if [ "${1:-build}" = "install" ]; then
-  adb install -r "$SIGNED"
+  # A signing key *is* the app's identity, so a build signed with a different
+  # one cannot update an installed copy. Say so rather than letting adb's
+  # INSTALL_FAILED_UPDATE_INCOMPATIBLE be the explanation, and do not uninstall
+  # automatically — that throws away the library on the device.
+  if ! adb install -r "$SIGNED"; then
+    echo >&2
+    echo "If that was a signature mismatch, the installed copy was signed with" >&2
+    echo "a different key. Remove it and install fresh — this deletes the" >&2
+    echo "library and settings on the device:" >&2
+    echo >&2
+    echo "  adb uninstall $PACKAGE" >&2
+    exit 1
+  fi
   adb shell monkey -p "$PACKAGE" -c android.intent.category.LAUNCHER 1 >/dev/null
   echo "launched on $(adb shell getprop ro.product.model | tr -d '\r')"
 fi

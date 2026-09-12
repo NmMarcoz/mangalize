@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-  <external-path name="my_images" path="." />
-  <cache-path name="my_cache_images" path="." />
+  <!-- Where builds land by default: the app's own external files directory,
+       which is what `download_dir()` resolves to on Android. -->
+  <external-files-path name="exports" path="." />
+  <!-- A build the user pointed somewhere else on shared storage. -->
+  <external-path name="external" path="." />
+  <!-- And one written inside the app's private storage, which is where the
+       output root falls back to if there is no external storage at all. -->
+  <files-path name="internal" path="." />
+  <cache-path name="cache" path="." />
 </paths>

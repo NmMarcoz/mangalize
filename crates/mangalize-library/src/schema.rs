@@ -5,13 +5,47 @@
 //! option; the files on disk are the backstop, but the index should never need
 //! it.
 
+use std::time::Duration;
+
 use anyhow::{bail, Result};
 use rusqlite::Connection;
+
+/// How long a connection waits for another one to finish writing.
+///
+/// The app opens the library once per request rather than holding it open, so
+/// several commands can be inside the index at the same time. Without this any
+/// overlap at all is an immediate "database is locked" instead of a short wait.
+pub const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Bump this and add a step whenever the schema changes.
 const CURRENT: i64 = 3;
 
 pub fn migrate(db: &Connection) -> Result<()> {
+    // IMMEDIATE rather than SQLite's deferred default. Two commands opening a
+    // *new* library at once would otherwise both read version 0, both run V1,
+    // and the loser would fail with "table series already exists" — leaving a
+    // half-built index that every later open trips over in the same way.
+    // Taking the write lock up front makes the second one wait and then find
+    // the work already done.
+    //
+    // Android is what surfaced this: its storage is slow enough to lose the
+    // race on the first launch every time, where a desktop usually wins it.
+    db.execute_batch("BEGIN IMMEDIATE")?;
+    match steps(db) {
+        Ok(()) => {
+            db.execute_batch("COMMIT")?;
+            Ok(())
+        }
+        Err(e) => {
+            // The schema is DDL, which SQLite rolls back like anything else, so
+            // a failed migration leaves no trace rather than half a schema.
+            let _ = db.execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
+}
+
+fn steps(db: &Connection) -> Result<()> {
     db.execute_batch(
         "CREATE TABLE IF NOT EXISTS meta (
              key   TEXT PRIMARY KEY,

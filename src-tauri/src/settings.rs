@@ -87,12 +87,23 @@ struct Stored {
 
 pub fn load(app: &AppHandle) -> Result<Settings> {
     let stored = read(app)?;
+
+    #[cfg(desktop)]
+    let output_root = stored.output_root;
+    // On Android the user cannot point this anywhere, so a stored value is
+    // either the default written at first run or a path from an older build
+    // that is now wrong — and with no picker there would be no way to correct
+    // it. Resolving it every time makes moving the export folder a code change
+    // rather than something a user has to be talked through.
+    #[cfg(not(desktop))]
+    let output_root = Some(default_output_root(app)?);
+
     Ok(Settings {
         library_root: match stored.library_root {
             Some(root) => root,
             None => default_library_root(app)?,
         },
-        output_root: stored.output_root,
+        output_root,
         default_format: stored.default_format.unwrap_or_else(|| "epub".into()),
         // On by default: a flat folder of a hundred volume files from a dozen
         // series is the thing this is meant to avoid.
@@ -197,7 +208,26 @@ pub fn default_library_root(app: &AppHandle) -> Result<PathBuf> {
 }
 
 /// Where builds land by default, offered on first run.
+///
+/// Not under `base_dir` on Android, unlike the library. The library is a working
+/// store the app owns, but a finished volume is the point of the whole exercise
+/// and has to be reachable from outside — the app's private directory is not.
+/// `download_dir()` is the app's *external* files directory there, which needs
+/// no permission and is visible over USB. Sharing a built volume is still the
+/// way to get one into another app; see `export.rs`.
 pub fn default_output_root(app: &AppHandle) -> Result<PathBuf> {
+    #[cfg(not(desktop))]
+    {
+        // Resolved once per process. On Android every one of these is a call
+        // into Kotlin that lands on the UI thread, and `load` runs on the way
+        // into most commands — asking each time janked the whole app badly
+        // enough that the first screen took half a minute to appear.
+        static ROOT: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+        let resolved = ROOT.get_or_init(|| app.path().download_dir().ok());
+        if let Some(downloads) = resolved {
+            return Ok(downloads.join("Mangalize"));
+        }
+    }
     Ok(base_dir(app)?.join("Mangalize").join("Exports"))
 }
 
@@ -217,7 +247,16 @@ fn base_dir(app: &AppHandle) -> Result<PathBuf> {
 }
 
 fn path(app: &AppHandle) -> Result<PathBuf> {
-    Ok(app.path().app_config_dir()?.join("settings.json"))
+    // Also resolved once. The config directory cannot move while the process is
+    // running, and on Android asking for it is a call into Kotlin rather than a
+    // lookup — one that `load` would otherwise make on the way into almost
+    // every command.
+    static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    if let Some(dir) = DIR.get() {
+        return Ok(dir.join("settings.json"));
+    }
+    let dir = app.path().app_config_dir()?;
+    Ok(DIR.get_or_init(|| dir).join("settings.json"))
 }
 
 fn read(app: &AppHandle) -> Result<Stored> {

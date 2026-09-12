@@ -66,9 +66,20 @@ export function WelcomeView({ onDone, onError }: WelcomeViewProps) {
         <BookOpen className="size-8 text-primary" />
         <h1 className="mt-4 text-lg font-semibold">Welcome to Mangalize</h1>
         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-          Where should finished volumes go? Build will write here without asking,
-          filing each volume under its series. You can change this any time in
-          Settings, and Build as… will always let you pick a one-off location.
+          {canPickFolders ? (
+            <>
+              Where should finished volumes go? Build will write here without
+              asking, filing each volume under its series. You can change this
+              any time in Settings, and Build as… will always let you pick a
+              one-off location.
+            </>
+          ) : (
+            <>
+              Finished volumes are written here, filed under their series. Once
+              a volume is built you can hand it to any other app — Drive, mail,
+              a reader — from the Share button on it.
+            </>
+          )}
         </p>
 
         <div className="mt-5 flex flex-col gap-1.5">
@@ -94,16 +105,20 @@ export function WelcomeView({ onDone, onError }: WelcomeViewProps) {
         <div className="mt-6 flex items-center gap-2">
           <Button onClick={() => void confirm(folder)} disabled={!folder || saving}>
             {saving && <Loader2 className="animate-spin" />}
-            Use this folder
+            {canPickFolders ? "Use this folder" : "Get started"}
           </Button>
-          <Button
-            variant="ghost"
-            onClick={() => void confirm(null)}
-            disabled={saving}
-            title="Build will ask for a location each time"
-          >
-            Decide later
-          </Button>
+          {/* "Decide later" means Build asks where each time, which needs a
+              folder picker Android does not have. */}
+          {canPickFolders && (
+            <Button
+              variant="ghost"
+              onClick={() => void confirm(null)}
+              disabled={saving}
+              title="Build will ask for a location each time"
+            >
+              Decide later
+            </Button>
+          )}
         </div>
       </div>
     </div>

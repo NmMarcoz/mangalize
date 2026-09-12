@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { List, Tags } from "lucide-react";
 
 import { ChapterSidebar } from "@/components/ChapterSidebar";
@@ -21,6 +20,7 @@ import {
   type Metadata,
   type Page,
   type Volume,
+  deliverBuilt,
 } from "@/lib/api";
 import { isMobile } from "@/lib/platform";
 import { resolveBuildPath } from "@/lib/settings";
@@ -439,7 +439,10 @@ export function EditorView({
         onExportAs={() => void handleExport(true)}
         onSend={() => void handleSend()}
         sending={sending}
-        onReveal={() => report && void revealItemInDir(report.path)}
+        onReveal={() =>
+          report &&
+          void deliverBuilt(report.path, fileName).catch((e) => onError(String(e)))
+        }
       />
 
       {/* On a phone the two panels are 560px of chrome in front of a 393px

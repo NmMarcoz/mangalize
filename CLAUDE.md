@@ -306,7 +306,24 @@ affordances rather than letting them fail: a button that opens a folder picker
 Android does not have is worse than no button, because it looks like something
 that should work.
 
-### Three things that are not obvious
+### Exporting
+
+Building works and is the point, so the output has to be reachable. It goes to
+`download_dir()`, which on Android is the app's *external* files directory —
+no permission, visible over USB — rather than `app_data_dir()`, where the
+library lives and nothing else can see it. `output_root` is re-resolved on every
+`load` there instead of being read from the settings file, because with no
+folder picker a stale stored path would be uncorrectable.
+
+Getting the file into another app is `export.rs` plus `SharePlugin.kt`: one
+command, one file, and the system share sheet picks the destination.
+`tauri-plugin-opener` cannot do this — on Android it only knows how to open a
+URL — and handing out a `file://` path instead of the FileProvider's
+`content://` one throws `FileUriExposedException`. The paths the provider will
+hand out are listed in `res/xml/file_paths.xml`; a build written outside all of
+them fails at the share, not at the build.
+
+### Four things that are not obvious
 
 **`env(safe-area-inset-*)` does not do what it does on iOS.** Android's WebView
 only ever reports a *display cutout* through it, never the status bar or the
@@ -326,6 +343,16 @@ llvm-readelf -l target/aarch64-linux-android/release/libmangalize_app.so | grep 
 
 The alignment column must read `0x4000`. The emulator image to test on is the
 one whose name contains `16k`.
+
+**The library is opened once per request, so the first launch races itself.**
+Several commands hit an empty index at the same time, and before `migrate` took
+the write lock up front they all read version 0 and all ran the initial schema —
+the losers failing with "table series already exists" and leaving a half-built
+index every later open tripped over. Android is what surfaced it, being slow
+enough to lose the race every time. Setting `journal_mode` is part of the same
+story and is *not* retried: it needs exclusive access and fails rather than
+waiting, so it is only attempted when the file is not already in WAL, and losing
+is fine because the mode belongs to the file.
 
 **The back button closes the app unless something listens.** Tauri only forwards
 it to the webview if a listener is registered, and otherwise finishes the
@@ -364,6 +391,13 @@ app — and point `MANGALIZE_KEYSTORE` at it.
 Needs `ANDROID_HOME`, an NDK, and a JDK; the script finds the newest NDK and
 build-tools installed rather than pinning a version. Android Studio's bundled
 JBR works as `JAVA_HOME`.
+
+CI runs the same script, which is the point of it being a script: the release
+job sets `MANGALIZE_KEYSTORE*` from repository secrets and nothing about how a
+build is signed differs between a runner and a laptop. The APK is arm64 only —
+building the other three ABIs would triple the job for an APK nobody installs —
+and it is attached to the release the desktop job already created, which is why
+`android` needs `build` rather than running beside it.
 
 ## Style
 

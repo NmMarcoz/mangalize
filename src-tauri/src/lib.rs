@@ -17,6 +17,7 @@
 //! list and gives the frontend something clearer than a missing-command error.
 //! - [`reader`] — reading a downloaded chapter; library only, works offline
 
+mod export;
 mod fetch;
 mod harvest;
 mod library;
@@ -35,7 +36,8 @@ pub fn run() {
         .manage(library::BuildControl::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_process::init());
+        .plugin(tauri_plugin_process::init())
+        .plugin(export::init());
 
     // The updater has no Android implementation; mobile builds update through
     // the store they were installed from.
@@ -49,6 +51,7 @@ pub fn run() {
             volume::build,
             volume::suggest_filename,
             volume::resolve_build_path,
+            export::share_file,
             settings::get_settings,
             settings::set_settings,
             settings::suggested_output_root,
