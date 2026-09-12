@@ -1,0 +1,22 @@
+[package]
+name = "mangalize-send"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+# rustls rather than native-tls: native-tls wants OpenSSL, which turns a Windows
+# CI build into a yak shave for no benefit here.
+lettre = { version = "0.11", default-features = false, features = [
+    "smtp-transport",
+    "builder",
+    "rustls-tls",
+    "rustls-native-certs",
+    "hostname",
+] }
+
+[dev-dependencies]
+# Used only to decode what arrived and prove the attachment survived intact.
+base64 = "0.22"

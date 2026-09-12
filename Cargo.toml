@@ -5,6 +5,7 @@ members = [
     "crates/mangalize-meta",
     "crates/mangalize-library",
     "crates/mangalize-fetch",
+    "crates/mangalize-send",
     "crates/mangalize-cli",
     "src-tauri",
 ]
