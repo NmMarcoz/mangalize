@@ -267,6 +267,17 @@ there while looking fine in desktop EPUB readers.
 - Releases publish immediately, so the `check` job (tests, frontend build,
   `clippy -D warnings`) gates the tag rather than following it. Tagging first and
   failing after leaves a pushed tag with no release.
+- **The platform matrix runs `max-parallel: 1` on purpose.** tauri-action creates
+  the release when it cannot find one for the tag, so running the platforms
+  together means both look at once, both find nothing, and both create one —
+  two release objects on one tag, half the installers on each, and a
+  `latest.json` naming only whichever won. v1.8.0 did this, 0.7s apart, and
+  Windows silently got no installer and no update. Serialised, the second job
+  finds the first one's release and merges into its `latest.json`.
+- The APK is attached with `gh release upload`, not an action. softprops takes
+  the tag it updates from `github.ref`, which on a `workflow_dispatch` run is
+  `refs/heads/main` — it finds the release and then fails trying to rename it to
+  a branch.
 - Running the workflow with an empty version builds installers as artifacts and
   releases nothing — use it to test CI changes.
 - `updaterJsonPreferNsis: true` in the workflow is load-bearing. Both a `.msi`

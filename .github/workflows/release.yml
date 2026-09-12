@@ -157,6 +157,16 @@ jobs:
 
     strategy:
       fail-fast: false
+      # One at a time, and this is load-bearing rather than thrift.
+      #
+      # tauri-action creates the release when it cannot find one for the tag.
+      # Run in parallel, both platforms look at the same moment, both find
+      # nothing, and both create one — leaving two release objects on a single
+      # tag with half the installers on each, and a `latest.json` naming only
+      # the platform that happened to win. v1.8.0 did exactly that, 0.7s apart.
+      # Serialised, the first job creates the release and the second finds it
+      # and merges into its `latest.json`, which is what the updater needs.
+      max-parallel: 1
       matrix:
         include:
           # One universal binary rather than separate Intel and Apple Silicon
@@ -362,14 +372,17 @@ jobs:
       # The desktop build's release is created by tauri-action, which runs in a
       # different job. Attaching here rather than creating means whichever
       # finishes second adds to the release the first one made.
+      # `gh` rather than an action that wraps it: softprops/action-gh-release
+      # takes the tag it updates from `github.ref`, which on a workflow_dispatch
+      # run is `refs/heads/main` and not a tag at all, so it found the release
+      # and then failed trying to rename it to a branch.
       - name: Attach to the release
         if: ${{ needs.prepare.outputs.tag != '' || startsWith(github.ref, 'refs/tags/v') }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.prepare.outputs.tag || github.ref_name }}
-          files: ${{ steps.apk.outputs.path }}
-          draft: false
-          prerelease: false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag || github.ref_name }}
+          APK: ${{ steps.apk.outputs.path }}
+        run: gh release upload "$TAG" "$APK" --clobber
 
       - name: Upload the APK as a workflow artifact
         if: ${{ !startsWith(github.ref, 'refs/tags/v') && inputs.version == '' }}
