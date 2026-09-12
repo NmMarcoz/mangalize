@@ -76,6 +76,8 @@ pub fn run() {
             send::send_files,
             reader::reader_chapter,
             reader::reader_page,
+            reader::reader_online_chapter,
+            reader::reader_remote_page,
             reader::save_reading_progress,
             reader::clear_reading_progress,
             reader::reading_history,

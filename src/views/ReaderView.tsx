@@ -3,11 +3,13 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  Cloud,
   Loader2,
   Settings2,
 } from "lucide-react";
 
 import { ReaderSettings } from "@/components/ReaderSettings";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   cachedPage,
@@ -15,47 +17,64 @@ import {
   loadPage,
   loadPrefs,
   readerChapter,
+  readerOnlineChapter,
   savePrefs,
   saveReadingProgress,
   type FitMode,
-  type ReaderChapter,
   type ReaderPrefs,
+  type ReaderTarget,
 } from "@/lib/reader";
 import { cn } from "@/lib/utils";
 
 interface ReaderViewProps {
-  seriesId: number;
-  chapter: string;
-  /** Move to another chapter of the same series without leaving the reader. */
-  onChapter: (chapter: string) => void;
+  target: ReaderTarget;
+  /** Move to another chapter without leaving the reader. */
+  onNavigate: (target: ReaderTarget) => void;
   onExit: () => void;
   onError: (message: string | null) => void;
 }
 
-/** How many pages either side of the current one to decode ahead of time. */
+/** How many pages either side of the current one to fetch ahead of time. */
 const PRELOAD = 2;
 
 /** How long to sit still before writing the reading position. */
 const SAVE_DELAY = 600;
 
 /**
+ * A chapter, flattened to the handful of things the reader draws.
+ *
+ * Both sources normalise to this, so nothing below here branches on where the
+ * pages came from except to decide who to ask for the bytes.
+ */
+interface OpenChapter {
+  seriesTitle: string;
+  number: string;
+  title: string | null;
+  direction: string;
+  /** File paths when local, URLs when streamed. */
+  pages: string[];
+  online: boolean;
+  startPage: number;
+  previous: ReaderTarget | null;
+  next: ReaderTarget | null;
+  /** Where to record progress. Absent for a series not in the library. */
+  progress: { seriesId: number; chapter: string } | null;
+}
+
+/**
  * The reader.
  *
- * Three shapes because manga is drawn in three: single pages, facing pairs, and
- * the unbroken vertical strip a webtoon is. Direction comes from the series, so
- * a right-to-left title turns the way it was drawn to without being told.
+ * Three layouts, because manga is drawn in three shapes: single pages, facing
+ * pairs, and the unbroken vertical strip a webtoon is. Direction comes from the
+ * series, so a right-to-left title turns the way it was drawn to.
  *
- * Position is written back as you go, debounced, so closing the window mid
- * chapter and coming back lands on the page you left.
+ * Reads from the library or straight from the source. Streaming is what makes
+ * sampling a series possible without committing a few hundred megabytes to it,
+ * and a chapter read that way can be downloaded afterwards if it is worth
+ * keeping.
  */
-export function ReaderView({
-  seriesId,
-  chapter,
-  onChapter,
-  onExit,
-  onError,
-}: ReaderViewProps) {
-  const [loaded, setLoaded] = useState<ReaderChapter | null>(null);
+export function ReaderView({ target, onNavigate, onExit, onError }: ReaderViewProps) {
+  const [open, setOpen] = useState<OpenChapter | null>(null);
   const [page, setPage] = useState(0);
   const [prefs, setPrefs] = useState<ReaderPrefs>(loadPrefs);
   const [showChrome, setShowChrome] = useState(true);
@@ -64,21 +83,65 @@ export function ReaderView({
   const scroller = useRef<HTMLDivElement | null>(null);
   const saveTimer = useRef<number | null>(null);
 
-  const rtl = (prefs.direction ?? loaded?.direction) === "right-to-left";
-  const total = loaded?.pages.length ?? 0;
+  const rtl = (prefs.direction ?? open?.direction) === "right-to-left";
+  const total = open?.pages.length ?? 0;
 
   /* ------------------------------------------------------------- loading */
 
   useEffect(() => {
     let cancelled = false;
-    setLoaded(null);
+    setOpen(null);
     onError(null);
 
-    readerChapter(seriesId, chapter)
+    const load = async (): Promise<OpenChapter> => {
+      if (target.kind === "library") {
+        const found = await readerChapter(target.seriesId, target.chapter);
+        return {
+          seriesTitle: found.series_title,
+          number: found.number,
+          title: found.title,
+          direction: found.direction,
+          pages: found.pages,
+          online: false,
+          startPage: found.last_page,
+          previous: found.previous
+            ? { kind: "library", seriesId: target.seriesId, chapter: found.previous }
+            : null,
+          next: found.next
+            ? { kind: "library", seriesId: target.seriesId, chapter: found.next }
+            : null,
+          progress: { seriesId: target.seriesId, chapter: found.number },
+        };
+      }
+
+      const found = await readerOnlineChapter(target.source, target.chapterId);
+      const sibling = (at: { id: string; number: string } | null): ReaderTarget | null =>
+        at
+          ? { ...target, chapterId: at.id, chapterNumber: at.number, kind: "online" }
+          : null;
+
+      return {
+        seriesTitle: target.seriesTitle,
+        number: target.chapterNumber,
+        title: null,
+        direction: target.direction,
+        pages: found.pages,
+        online: true,
+        // Nothing to resume from: a streamed chapter has no library row.
+        startPage: 0,
+        previous: sibling(target.previous),
+        next: sibling(target.next),
+        progress: target.librarySeriesId
+          ? { seriesId: target.librarySeriesId, chapter: target.chapterNumber }
+          : null,
+      };
+    };
+
+    load()
       .then((found) => {
         if (cancelled) return;
-        setLoaded(found);
-        setPage(found.last_page);
+        setOpen(found);
+        setPage(found.startPage);
       })
       .catch((e) => {
         if (!cancelled) onError(String(e));
@@ -87,52 +150,56 @@ export function ReaderView({
     return () => {
       cancelled = true;
     };
-  }, [seriesId, chapter, onError]);
+  }, [target, onError]);
 
   // Decoded pages are large; holding a whole series' worth would be a leak.
   useEffect(() => clearPages, []);
 
-  // Decode a little ahead so a page turn is instant rather than a flash of
-  // nothing. Backwards too: re-reading a panel is as common as moving on.
+  // Fetch a little ahead so a page turn is instant rather than a flash of
+  // nothing. Backwards too: re-reading a panel is as common as moving on. This
+  // matters far more when streaming, where a miss is a round trip.
   useEffect(() => {
-    if (!loaded) return;
+    if (!open) return;
     for (let offset = -PRELOAD; offset <= PRELOAD; offset += 1) {
-      const target = loaded.pages[page + offset];
-      if (target) void loadPage(target).catch(() => {});
+      const source = open.pages[page + offset];
+      if (source) void loadPage(source, open.online).catch(() => {});
     }
-  }, [loaded, page]);
+  }, [open, page]);
 
   /* ------------------------------------------------------------ progress */
 
+  const record = useCallback(
+    (chapter: OpenChapter, at: number) => {
+      if (!chapter.progress) return;
+      // The last page counts as finished: nothing else marks it, and requiring
+      // a separate action to say "done" is bookkeeping nobody does.
+      const finished = at >= chapter.pages.length - 1;
+      void saveReadingProgress(
+        chapter.progress.seriesId,
+        chapter.progress.chapter,
+        at,
+        finished,
+      ).catch(() => {});
+    },
+    [],
+  );
+
   useEffect(() => {
-    if (!loaded) return;
+    if (!open) return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
-
-    // The last page counts as finished: nothing else marks it, and requiring a
-    // separate action to say "done" is the sort of bookkeeping nobody does.
-    const finished = page >= loaded.pages.length - 1;
-    saveTimer.current = window.setTimeout(() => {
-      void saveReadingProgress(seriesId, loaded.number, page, finished).catch(() => {});
-    }, SAVE_DELAY);
-
+    saveTimer.current = window.setTimeout(() => record(open, page), SAVE_DELAY);
     return () => {
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
     };
-  }, [seriesId, loaded, page]);
+  }, [open, page, record]);
 
   // Leaving mid-page would otherwise lose up to SAVE_DELAY of progress.
   useEffect(() => {
     return () => {
-      if (!loaded) return;
-      void saveReadingProgress(
-        seriesId,
-        loaded.number,
-        page,
-        page >= loaded.pages.length - 1,
-      ).catch(() => {});
+      if (open) record(open, page);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loaded, page]);
+  }, [open, page]);
 
   /* ----------------------------------------------------------- navigation */
 
@@ -140,15 +207,15 @@ export function ReaderView({
 
   const advance = useCallback(
     (delta: number) => {
-      if (!loaded) return;
+      if (!open) return;
       const next = page + delta * step;
 
       if (next < 0) {
-        if (loaded.previous) onChapter(loaded.previous);
+        if (open.previous) onNavigate(open.previous);
         return;
       }
-      if (next >= loaded.pages.length) {
-        if (loaded.next) onChapter(loaded.next);
+      if (next >= open.pages.length) {
+        if (open.next) onNavigate(open.next);
         return;
       }
       setPage(next);
@@ -159,13 +226,13 @@ export function ReaderView({
           ?.scrollIntoView({ behavior: "auto", block: "start" });
       }
     },
-    [loaded, page, step, prefs.mode, onChapter],
+    [open, page, step, prefs.mode, onNavigate],
   );
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.isContentEditable)) return;
+      const node = event.target as HTMLElement | null;
+      if (node && (node.tagName === "INPUT" || node.isContentEditable)) return;
 
       switch (event.key) {
         case "Escape":
@@ -227,14 +294,14 @@ export function ReaderView({
         : "bg-black";
 
   const visible = useMemo(() => {
-    if (!loaded) return [];
+    if (!open) return [];
     if (prefs.mode !== "double") return [page];
     // Facing pair. In a right-to-left book the earlier page sits on the right.
-    const pair = [page, page + 1].filter((i) => i < loaded.pages.length);
+    const pair = [page, page + 1].filter((i) => i < open.pages.length);
     return rtl ? pair.reverse() : pair;
-  }, [loaded, page, prefs.mode, rtl]);
+  }, [open, page, prefs.mode, rtl]);
 
-  if (!loaded) {
+  if (!open) {
     return (
       <div className={cn("flex h-full items-center justify-center", surface)}>
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -250,12 +317,18 @@ export function ReaderView({
             <ArrowLeft />
           </Button>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{loaded.series_title}</p>
+            <p className="truncate text-sm font-medium">{open.seriesTitle}</p>
             <p className="truncate text-[11px] text-white/60">
-              Chapter {loaded.number}
-              {loaded.title ? ` · ${loaded.title}` : ""}
+              Chapter {open.number}
+              {open.title ? ` · ${open.title}` : ""}
             </p>
           </div>
+          {open.online && (
+            <Badge variant="outline" className="shrink-0 border-white/30 text-white/70">
+              <Cloud className="size-2.5" />
+              streaming
+            </Badge>
+          )}
           <span className="shrink-0 font-mono text-xs text-white/70">
             {page + 1} / {total}
           </span>
@@ -263,7 +336,7 @@ export function ReaderView({
             variant="ghost"
             size="icon"
             className="text-white"
-            onClick={() => setShowSettings((open) => !open)}
+            onClick={() => setShowSettings((v) => !v)}
           >
             <Settings2 />
           </Button>
@@ -273,7 +346,7 @@ export function ReaderView({
       {prefs.mode === "webtoon" ? (
         <WebtoonPages
           ref={scroller}
-          chapter={loaded}
+          chapter={open}
           fit={prefs.fit}
           onVisiblePage={setPage}
           onToggleChrome={() => setShowChrome((v) => !v)}
@@ -292,8 +365,9 @@ export function ReaderView({
         >
           {visible.map((index) => (
             <PageImage
-              key={loaded.pages[index]}
-              path={loaded.pages[index]}
+              key={open.pages[index]}
+              source={open.pages[index]}
+              online={open.online}
               fit={prefs.fit}
               paired={prefs.mode === "double" && visible.length > 1}
             />
@@ -308,7 +382,6 @@ export function ReaderView({
             size="icon"
             className="text-white"
             onClick={() => advance(rtl ? 1 : -1)}
-            title={loaded.previous ? "Previous page or chapter" : "Previous page"}
           >
             {rtl ? <ChevronRight /> : <ChevronLeft />}
           </Button>
@@ -331,7 +404,6 @@ export function ReaderView({
             size="icon"
             className="text-white"
             onClick={() => advance(rtl ? -1 : 1)}
-            title={loaded.next ? "Next page or chapter" : "Next page"}
           >
             {rtl ? <ChevronLeft /> : <ChevronRight />}
           </Button>
@@ -341,7 +413,7 @@ export function ReaderView({
       {showSettings && (
         <ReaderSettings
           prefs={prefs}
-          seriesDirection={loaded.direction}
+          seriesDirection={open.direction}
           onChange={patchPrefs}
           onClose={() => setShowSettings(false)}
         />
@@ -365,36 +437,44 @@ function fitClass(fit: FitMode): string {
 }
 
 function PageImage({
-  path,
+  source,
+  online,
   fit,
   paired,
 }: {
-  path: string;
+  source: string;
+  online: boolean;
   fit: FitMode;
   paired: boolean;
 }) {
-  const [url, setUrl] = useState<string | undefined>(() => cachedPage(path));
+  const [url, setUrl] = useState<string | undefined>(() => cachedPage(source, online));
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    const hit = cachedPage(path);
+    const hit = cachedPage(source, online);
     setUrl(hit);
     setFailed(false);
     if (hit) return;
 
     let cancelled = false;
-    loadPage(path)
+    loadPage(source, online)
       .then((next) => !cancelled && setUrl(next))
       .catch(() => !cancelled && setFailed(true));
     return () => {
       cancelled = true;
     };
-  }, [path]);
+  }, [source, online]);
 
   if (failed) {
     return (
-      <div className="flex h-full items-center justify-center p-8 text-xs text-white/50">
+      <div className="flex h-full items-center justify-center p-8 text-center text-xs text-white/50">
         This page could not be opened.
+        {online && (
+          <>
+            <br />
+            The source may be rate limiting; try again in a moment.
+          </>
+        )}
       </div>
     );
   }
@@ -424,7 +504,7 @@ function WebtoonPages({
   onToggleChrome,
   ref,
 }: {
-  chapter: ReaderChapter;
+  chapter: OpenChapter;
   fit: FitMode;
   onVisiblePage: (page: number) => void;
   onToggleChrome: () => void;
@@ -465,9 +545,9 @@ function WebtoonPages({
       onClick={onToggleChrome}
       className="scrollbar-thin flex min-h-0 flex-1 flex-col items-center overflow-y-auto"
     >
-      {chapter.pages.map((path, index) => (
-        <div key={path} data-page={index} className="w-full max-w-4xl">
-          <LazyStripPage path={path} fit={fit} />
+      {chapter.pages.map((source, index) => (
+        <div key={source} data-page={index} className="w-full max-w-4xl">
+          <LazyStripPage source={source} online={chapter.online} fit={fit} />
         </div>
       ))}
     </div>
@@ -475,13 +555,22 @@ function WebtoonPages({
 }
 
 /**
- * A strip page, decoded only once it is near the viewport.
+ * A strip page, fetched only once it is near the viewport.
  *
- * A long webtoon chapter is a hundred tall images; decoding them all up front
- * would stall for seconds and hold a great deal of memory.
+ * A long webtoon chapter is a hundred tall images; loading them all up front
+ * would stall for seconds and, when streaming, hammer the source for pages
+ * nobody has scrolled to yet.
  */
-function LazyStripPage({ path, fit }: { path: string; fit: FitMode }) {
-  const [url, setUrl] = useState<string | undefined>(() => cachedPage(path));
+function LazyStripPage({
+  source,
+  online,
+  fit,
+}: {
+  source: string;
+  online: boolean;
+  fit: FitMode;
+}) {
+  const [url, setUrl] = useState<string | undefined>(() => cachedPage(source, online));
   const holder = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -493,13 +582,15 @@ function LazyStripPage({ path, fit }: { path: string; fit: FitMode }) {
       (entries) => {
         if (!entries.some((e) => e.isIntersecting)) return;
         observer.disconnect();
-        void loadPage(path).then(setUrl).catch(() => {});
+        void loadPage(source, online)
+          .then(setUrl)
+          .catch(() => {});
       },
       { rootMargin: "1200px 0px" },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [path, url]);
+  }, [source, online, url]);
 
   return (
     <div ref={holder} className="flex min-h-32 w-full items-center justify-center">

@@ -317,6 +317,43 @@ pub fn chapter_pages(chapter_id: &str) -> Result<Vec<String>> {
         .collect())
 }
 
+/// Whether a URL is served by the MangaDex@Home network.
+///
+/// Only those get reported. Cover art comes from `uploads.mangadex.org`, which
+/// is MangaDex's own infrastructure and not part of the volunteer network.
+pub fn is_at_home(url: &str) -> bool {
+    url.contains(".mangadex.network")
+}
+
+/// Tell MangaDex how a page fetch from their network went.
+///
+/// The image servers are run by volunteers and MangaDex uses these reports to
+/// find ones that are failing or serving corrupt data. Asking a free service to
+/// stream every page of a chapter and declining to tell it whether the bytes
+/// arrived is not a reasonable trade.
+///
+/// Deliberately silent and best-effort: this is a courtesy to them, and a failed
+/// report must never interfere with the reading it describes.
+pub fn report_at_home(url: &str, success: bool, cached: bool, bytes: usize, millis: u64) {
+    if !is_at_home(url) {
+        return;
+    }
+
+    let body = serde_json::json!({
+        "url": url,
+        "success": success,
+        "cached": cached,
+        "bytes": bytes,
+        "duration": millis,
+    });
+
+    let _ = ureq::post(&format!("{API}/at-home/report"))
+        .set("User-Agent", crate::USER_AGENT)
+        .set("Content-Type", "application/json")
+        .timeout(std::time::Duration::from_secs(5))
+        .send_json(body);
+}
+
 /// Explain an empty chapter by asking what the chapter itself says.
 ///
 /// Worth the extra request: "no images" is baffling, whereas "MangaDex does not

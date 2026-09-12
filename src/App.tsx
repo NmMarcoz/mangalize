@@ -14,6 +14,7 @@ import { SeriesView } from "@/views/SeriesView";
 import { ExploreView } from "@/views/ExploreView";
 import { HistoryView } from "@/views/HistoryView";
 import { ReaderView } from "@/views/ReaderView";
+import type { ReaderTarget } from "@/lib/reader";
 import { SendView } from "@/views/SendView";
 import { SettingsView } from "@/views/SettingsView";
 import { WelcomeView } from "@/views/WelcomeView";
@@ -33,7 +34,9 @@ type View =
   | { kind: "series"; id: number }
   | { kind: "explore" }
   | { kind: "history" }
-  | { kind: "reader"; seriesId: number; chapter: string }
+  // `back` is carried along so closing the reader returns where it was opened
+  // from — the series page, history, or the middle of a browse.
+  | { kind: "reader"; target: ReaderTarget; back: View }
   | { kind: "send" }
   | { kind: "settings" }
   | { kind: "editor"; from: { seriesId: number } | null };
@@ -123,14 +126,12 @@ export default function App() {
     // The reader takes the whole window: a rail beside a page is a rail in
     // the way. It is the one screen that hides the app's chrome.
     if (view.kind === "reader") {
+      const back = view.back;
       return (
         <ReaderView
-          seriesId={view.seriesId}
-          chapter={view.chapter}
-          onChapter={(chapter) =>
-            setView({ kind: "reader", seriesId: view.seriesId, chapter })
-          }
-          onExit={() => setView({ kind: "series", id: view.seriesId })}
+          target={view.target}
+          onNavigate={(target) => setView({ kind: "reader", target, back })}
+          onExit={() => setView(back)}
           onError={setError}
         />
       );
@@ -139,7 +140,13 @@ export default function App() {
     if (view.kind === "history") {
       return (
         <HistoryView
-          onRead={(seriesId, chapter) => setView({ kind: "reader", seriesId, chapter })}
+          onRead={(seriesId, chapter) =>
+            setView({
+              kind: "reader",
+              target: { kind: "library", seriesId, chapter },
+              back: { kind: "history" },
+            })
+          }
           onOpenSeries={(id) => setView({ kind: "series", id })}
           onError={setError}
         />
@@ -150,6 +157,9 @@ export default function App() {
       return (
         <ExploreView
           onOpenSeries={(id) => setView({ kind: "series", id })}
+          onRead={(target) =>
+            setView({ kind: "reader", target, back: { kind: "explore" } })
+          }
           onError={setError}
         />
       );
@@ -183,7 +193,11 @@ export default function App() {
         <SeriesView
           seriesId={view.id}
           onRead={(chapter) =>
-            setView({ kind: "reader", seriesId: view.id, chapter })
+            setView({
+              kind: "reader",
+              target: { kind: "library", seriesId: view.id, chapter },
+              back: { kind: "series", id: view.id },
+            })
           }
           onBack={() => setView({ kind: "library" })}
           onEditVolume={(built, source) => {

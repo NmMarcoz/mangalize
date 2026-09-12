@@ -248,6 +248,14 @@ pub fn volume_covers(source: Source, id: &str) -> Result<Vec<VolumeCover>> {
     }
 }
 
+/// Report a page fetch back to the network that served it.
+///
+/// See [`mangadex::report_at_home`]. A no-op for anything not served by
+/// MangaDex@Home.
+pub fn report_page_fetch(url: &str, success: bool, cached: bool, bytes: usize, millis: u64) {
+    mangadex::report_at_home(url, success, cached, bytes, millis);
+}
+
 /// Browse the catalogue, with or without a search term.
 ///
 /// Only MangaDex: Kitsu is a fallback for looking a known title up, not

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import type { MetaSource } from "@/lib/api";
 import { createImageCache } from "@/lib/imagecache";
 import type { ChapterStatus } from "@/lib/library";
 
@@ -31,6 +32,42 @@ export interface HistoryEntry {
   finished: boolean;
 }
 
+/**
+ * What the reader was asked to open.
+ *
+ * A library chapter reads from disk and works offline. An online one streams
+ * from the source, which is what lets you sample a series before committing a
+ * few hundred megabytes to it.
+ */
+export type ReaderTarget =
+  | { kind: "library"; seriesId: number; chapter: string }
+  | {
+      kind: "online";
+      source: MetaSource;
+      /** The source's own chapter id. */
+      chapterId: string;
+      seriesTitle: string;
+      chapterNumber: string;
+      direction: string;
+      previous: { id: string; number: string } | null;
+      next: { id: string; number: string } | null;
+      /**
+       * The library entry for this series, when there is one.
+       *
+       * Streaming a series you already follow should still count as reading it.
+       * A series that is only being sampled has no chapter row to record
+       * against, so it is not tracked — adding it is what opts in.
+       */
+      librarySeriesId: number | null;
+    };
+
+export interface OnlineChapter {
+  pages: string[];
+}
+
+export const readerOnlineChapter = (source: MetaSource, chapterId: string) =>
+  invoke<OnlineChapter>("reader_online_chapter", { source, chapterId });
+
 export const readerChapter = (id: number, chapter: string) =>
   invoke<ReaderChapter>("reader_chapter", { id, chapter });
 
@@ -61,21 +98,38 @@ export const resumePoint = (id: number) =>
  */
 export const READING_MAX = 2400;
 
-const pages = createImageCache((key) => {
-  const [max, path] = [key.slice(0, key.indexOf("|")), key.slice(key.indexOf("|") + 1)];
+const split = (key: string) => [
+  key.slice(0, key.indexOf("|")),
+  key.slice(key.indexOf("|") + 1),
+];
+
+const localPages = createImageCache((key) => {
+  const [max, path] = split(key);
   return invoke<ArrayBuffer>("reader_page", { path, max: Number(max) });
 });
 
-const key = (path: string, max: number) => `${max}|${path}`;
+const remotePages = createImageCache((key) => {
+  const [max, url] = split(key);
+  return invoke<ArrayBuffer>("reader_remote_page", { url, max: Number(max) });
+});
 
-export const cachedPage = (path: string, max = READING_MAX) =>
-  pages.peek(key(path, max));
+const key = (source: string, max: number) => `${max}|${source}`;
 
-export const loadPage = (path: string, max = READING_MAX) =>
-  pages.load(key(path, max));
+/**
+ * One entry point for both sources, so the reader never branches on where a
+ * page came from — only on where to ask for it.
+ */
+export const cachedPage = (source: string, online: boolean, max = READING_MAX) =>
+  (online ? remotePages : localPages).peek(key(source, max));
+
+export const loadPage = (source: string, online: boolean, max = READING_MAX) =>
+  (online ? remotePages : localPages).load(key(source, max));
 
 /** Drop decoded pages. Called when leaving the reader, which frees real memory. */
-export const clearPages = () => pages.clear();
+export const clearPages = () => {
+  localPages.clear();
+  remotePages.clear();
+};
 
 /* --------------------------------------------------------------- reader modes */
 

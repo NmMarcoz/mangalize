@@ -1,12 +1,14 @@
-//! Commands for reading a downloaded chapter.
+//! Commands for reading a chapter, downloaded or not.
 //!
-//! The reader draws from the library only: these are pages already on disk, so
-//! nothing here touches the network and reading works offline.
+//! Two sources, one reader. A chapter in the library is read from disk and works
+//! with no network at all. A chapter that is only browsed is streamed from the
+//! source a page at a time, which is what makes sampling a series possible
+//! without committing a few hundred megabytes to it first.
 //!
-//! Page bytes go through the same disk cache the grid thumbnails use, at a
-//! higher quality and a larger bound. That means the first pass over a chapter
-//! pays for decoding and every pass afterwards does not, which is what keeps
-//! turning pages instant on a several-hundred-page volume.
+//! Both go through a disk cache at reading quality and a bounded size, so the
+//! first pass over a chapter pays for decoding and fetching, and every pass
+//! afterwards pays for neither. For streamed pages that cache is keyed on the
+//! image rather than the URL, because the server handing it out changes.
 
 use std::path::PathBuf;
 
@@ -17,6 +19,12 @@ use tauri::{AppHandle, Manager};
 use crate::settings;
 use crate::thumbs;
 use crate::util::blocking;
+
+/// Page URLs for a chapter read straight from the source.
+#[derive(Serialize)]
+pub struct OnlineChapter {
+    pub pages: Vec<String>,
+}
 
 /// Everything the reader needs to open a chapter.
 #[derive(Serialize)]
@@ -102,6 +110,93 @@ pub async fn reader_page(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Resolve a chapter's page URLs without downloading anything.
+///
+/// The image server is chosen per request and its address expires, so this is
+/// called when the chapter is opened rather than cached.
+#[tauri::command]
+pub async fn reader_online_chapter(
+    source: mangalize_meta::Source,
+    chapter_id: String,
+) -> Result<OnlineChapter, String> {
+    blocking(move || {
+        Ok(OnlineChapter {
+            pages: mangalize_meta::chapter_pages(source, &chapter_id)?,
+        })
+    })
+    .await
+}
+
+/// One page fetched from the source, decoded, bounded and cached.
+#[tauri::command]
+pub async fn reader_remote_page(
+    app: AppHandle,
+    url: String,
+    max: u32,
+) -> Result<tauri::ipc::Response, String> {
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join("online-pages");
+
+    blocking(move || {
+        let cached = cache_dir.join(format!("{:016x}-{max}.jpg", stable_key(&url)));
+        if let Ok(bytes) = std::fs::read(&cached) {
+            return Ok(tauri::ipc::Response::new(bytes));
+        }
+
+        let started = std::time::Instant::now();
+        let fetched = mangalize_fetch::download::fetch_image(&url, None);
+        let millis = started.elapsed().as_millis() as u64;
+
+        // Tell the volunteer network how its server did, either way. See
+        // `mangalize_meta::report_page_fetch`.
+        let bytes = match &fetched {
+            Ok((bytes, _)) => bytes.len(),
+            Err(_) => 0,
+        };
+        mangalize_meta::report_page_fetch(&url, fetched.is_ok(), false, bytes, millis);
+
+        let (raw, _) = fetched?;
+        let page = image::load_from_memory(&raw)?.thumbnail(max, max * 3);
+
+        let mut out = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(
+            std::io::Cursor::new(&mut out),
+            thumbs::READING_QUALITY,
+        )
+        .encode_image(&page.to_rgb8())?;
+
+        // Best effort: a cache write failing must not fail the read.
+        if std::fs::create_dir_all(&cache_dir).is_ok() {
+            let _ = std::fs::write(&cached, &out);
+        }
+        Ok(tauri::ipc::Response::new(out))
+    })
+    .await
+}
+
+/// A cache key that survives the server changing.
+///
+/// MangaDex@Home hands out a different host on every request, so hashing the
+/// whole URL would miss every time and re-download a page the moment you turned
+/// back to it. The path — `/data/<hash>/<file>` — identifies the image itself.
+fn stable_key(url: &str) -> u64 {
+    let path = url
+        .split_once("://")
+        .map(|(_, rest)| rest)
+        .and_then(|rest| rest.find('/').map(|i| &rest[i..]))
+        .unwrap_or(url);
+
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in path.as_bytes() {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
 }
 
 /// Record where the reader is.

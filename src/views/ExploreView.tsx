@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   Check,
+  Cloud,
   Download,
   ExternalLink,
   Loader2,
@@ -32,11 +33,14 @@ import {
   librarySeries,
   type Series,
 } from "@/lib/library";
+import type { ReaderTarget } from "@/lib/reader";
 import { cn } from "@/lib/utils";
 
 interface ExploreViewProps {
   /** Jump to a series' page in the library. */
   onOpenSeries: (id: number) => void;
+  /** Read a chapter straight from the source, without downloading it. */
+  onRead: (target: ReaderTarget) => void;
   onError: (message: string | null) => void;
 }
 
@@ -48,7 +52,7 @@ interface ExploreViewProps {
  * gives sorting, tags and content rating to move around with; the search box is
  * one more filter rather than the way in.
  */
-export function ExploreView({ onOpenSeries, onError }: ExploreViewProps) {
+export function ExploreView({ onOpenSeries, onRead, onError }: ExploreViewProps) {
   const [query, setQuery] = useState<BrowseQuery>(defaultQuery);
   const [text, setText] = useState("");
   const [tags, setTags] = useState<Tag[]>([]);
@@ -172,6 +176,43 @@ export function ExploreView({ onOpenSeries, onError }: ExploreViewProps) {
       setAdding(false);
     }
   }, [ensureAdded, onOpenSeries, onError]);
+
+  /**
+   * Open a chapter in the reader without downloading it.
+   *
+   * The whole series' chapters are flattened first so the reader can move on to
+   * the next one, including across a volume boundary.
+   */
+  const readChapter = useCallback(
+    (chapter: ChapterRef) => {
+      if (!selected || !chapter.id) return;
+
+      const flat = detail.layout.flatMap((volume) => volume.chapters);
+      const at = flat.findIndex((c) => c.number === chapter.number);
+      const sibling = (index: number) => {
+        const found = flat[index];
+        return found?.id && !found.unavailable
+          ? { id: found.id, number: found.number }
+          : null;
+      };
+
+      onRead({
+        kind: "online",
+        source: selected.source,
+        chapterId: chapter.id,
+        seriesTitle:
+          selected.title_english ?? selected.title_romaji ?? selected.title_native ?? "",
+        chapterNumber: chapter.number,
+        // MangaDex does not publish a reading direction, and nearly everything
+        // it carries is drawn right to left.
+        direction: "right-to-left",
+        previous: at > 0 ? sibling(at - 1) : null,
+        next: at >= 0 ? sibling(at + 1) : null,
+        librarySeriesId: existing?.id ?? null,
+      });
+    },
+    [selected, detail.layout, existing, onRead],
+  );
 
   const getChapter = useCallback(
     async (chapter: ChapterRef) => {
@@ -329,6 +370,7 @@ export function ExploreView({ onOpenSeries, onError }: ExploreViewProps) {
                             chapter={chapter}
                             busy={fetching === chapter.number}
                             onGet={() => void getChapter(chapter)}
+                            onRead={() => readChapter(chapter)}
                           />
                         ))}
                       </div>
@@ -417,10 +459,12 @@ function ChapterRow({
   chapter,
   busy,
   onGet,
+  onRead,
 }: {
   chapter: ChapterRef;
   busy: boolean;
   onGet: () => void;
+  onRead: () => void;
 }) {
   const fetchable = chapter.id !== null && !chapter.unavailable;
 
@@ -444,16 +488,24 @@ function ChapterRow({
       </span>
 
       {fetchable ? (
-        <Hint label="Download this chapter into your library">
-          <Button variant="ghost" size="sm" onClick={onGet} disabled={busy}>
-            {busy ? (
-              <Loader2 className="size-3 animate-spin" />
-            ) : (
-              <Download className="size-3" />
-            )}
-            Get
-          </Button>
-        </Hint>
+        <>
+          <Hint label="Read now, streaming from the source">
+            <Button variant="ghost" size="sm" onClick={onRead} disabled={busy}>
+              <Cloud className="size-3" />
+              Read
+            </Button>
+          </Hint>
+          <Hint label="Download this chapter into your library">
+            <Button variant="ghost" size="sm" onClick={onGet} disabled={busy}>
+              {busy ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Download className="size-3" />
+              )}
+              Get
+            </Button>
+          </Hint>
+        </>
       ) : (
         <Badge variant="outline" className="text-[9px]">
           URL only
