@@ -60,6 +60,13 @@ pub fn scan_volume(root: impl AsRef<Path>) -> Result<Volume> {
                 let verdict = norm.verdict(page.width, page.height);
                 page.kind = verdict.kind();
                 page.excluded = verdict.exclusion(page.width, page.height);
+
+                // Spreads are split by default. A Kindle shown a page twice the
+                // width of every other one does not scale it down to fit; it
+                // picks a region and zooms, so the reader sees half a drawing
+                // with no way to tell there is more. Two ordinary pages always
+                // read correctly. `S` in the editor rejoins one.
+                page.split = page.kind == PageKind::Spread;
             }
         }
     }

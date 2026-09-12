@@ -17,7 +17,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::settings;
 use crate::util::blocking;
-use crate::volume::{build_path, Format};
+use crate::volume::{apply_spread_policy, build_path, Format};
 
 /// Open the library for one request.
 ///
@@ -167,7 +167,13 @@ pub async fn library_build_volume(
     id: i64,
     volume: String,
 ) -> Result<Volume, String> {
-    blocking(move || open(&app)?.build_volume(SeriesId(id), &volume)).await
+    blocking(move || {
+        let settings = settings::load(&app)?;
+        let mut built = Library::open(&settings.library_root)?.build_volume(SeriesId(id), &volume)?;
+        apply_spread_policy(&mut built, settings.split_spreads);
+        Ok(built)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -261,6 +267,12 @@ pub async fn build_library_volumes(
         let library = open_at(&settings.library_root)?;
         let series = SeriesId(id);
         let total = volumes.len();
+        let options = BuildOptions {
+            format,
+            root: &root,
+            folder_per_series: settings.folder_per_series,
+            split_spreads: settings.split_spreads,
+        };
 
         let mut built = Vec::new();
         let mut failed = Vec::new();
@@ -274,9 +286,7 @@ pub async fn build_library_volumes(
                 &library,
                 series,
                 number,
-                format,
-                &root,
-                settings.folder_per_series,
+                &options,
                 &|done, pages| {
                     let _ = app.emit(
                         "build-batch-progress",
@@ -303,26 +313,34 @@ pub async fn build_library_volumes(
     .await
 }
 
+/// How a batch writes each volume. Travels together because every item in a
+/// batch shares it.
+struct BuildOptions<'a> {
+    format: Format,
+    root: &'a std::path::Path,
+    folder_per_series: bool,
+    split_spreads: bool,
+}
+
 /// Assemble one stored volume and write it out.
 fn build_one(
     library: &Library,
     series: SeriesId,
     number: &str,
-    format: Format,
-    root: &std::path::Path,
-    folder_per_series: bool,
+    options: &BuildOptions,
     report: &dyn Fn(usize, usize),
 ) -> anyhow::Result<BuiltVolume> {
-    let volume = library.build_volume(series, number)?;
+    let mut volume = library.build_volume(series, number)?;
+    apply_spread_policy(&mut volume, options.split_spreads);
     let pages = volume.total_included();
     if pages == 0 {
         anyhow::bail!("volume {number} has no pages");
     }
 
-    let out = build_path(root, &volume, format, folder_per_series);
+    let out = build_path(options.root, &volume, options.format, options.folder_per_series);
     let mut progress = |done: usize, _total: usize| report(done, pages);
 
-    match format {
+    match options.format {
         Format::Epub => writers::epub::write_with_progress(&volume, &out, &mut progress)?,
         Format::Cbz => writers::cbz::write_with_progress(&volume, &out, &mut progress)?,
     }

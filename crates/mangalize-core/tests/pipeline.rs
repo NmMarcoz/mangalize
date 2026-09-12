@@ -96,7 +96,7 @@ fn scan_reads_the_volume_the_way_a_reader_would() {
 }
 
 #[test]
-fn the_wide_page_is_flagged_as_a_spread_and_kept_whole() {
+fn the_wide_page_is_flagged_as_a_spread_and_split_by_default() {
     let (_tmp, root) = fixture();
     let v = scan_volume(&root).unwrap();
 
@@ -106,7 +106,9 @@ fn the_wide_page_is_flagged_as_a_spread_and_kept_whole() {
         .collect();
     assert_eq!(spreads.len(), 1);
     assert_eq!(spreads[0].file_name(), "03.jpg.jpeg");
-    assert!(!spreads[0].split, "spreads must default to unsplit");
+    // A Kindle zooms into part of a wide page rather than fitting it, so the
+    // default has to be two ordinary pages.
+    assert!(spreads[0].split, "spreads must default to split");
 }
 
 #[test]
@@ -128,9 +130,10 @@ fn epub_is_a_well_formed_fixed_layout_package() {
     assert!(names.contains(&"OEBPS/content.opf".to_string()));
     assert!(names.contains(&"OEBPS/nav.xhtml".to_string()));
 
-    // One image and one page document per page, and nothing orphaned.
-    assert_eq!(names.iter().filter(|n| n.starts_with("OEBPS/images/")).count(), 16);
-    assert_eq!(names.iter().filter(|n| n.starts_with("OEBPS/text/")).count(), 16);
+    // One image and one page document per page, and nothing orphaned. Seventeen
+    // rather than sixteen files: the spread is split, so it occupies two.
+    assert_eq!(names.iter().filter(|n| n.starts_with("OEBPS/images/")).count(), 17);
+    assert_eq!(names.iter().filter(|n| n.starts_with("OEBPS/text/")).count(), 17);
 
     let opf = read_entry(&mut zip, "OEBPS/content.opf");
     assert!(opf.contains(r#"<meta property="rendition:layout">pre-paginated</meta>"#));
@@ -138,45 +141,75 @@ fn epub_is_a_well_formed_fixed_layout_package() {
     assert!(opf.contains(r#"<meta name="book-type" content="comic"/>"#));
     assert!(opf.contains(r#"content="800x1168""#), "norm size drives original-resolution");
     assert_eq!(opf.matches("cover-image").count(), 1);
-    assert_eq!(opf.matches("<itemref").count(), 16);
+    assert_eq!(opf.matches("<itemref").count(), 17);
 }
 
 #[test]
-fn a_spread_shares_the_canvas_with_every_other_page_so_kindle_cannot_crop_it() {
+fn a_spread_becomes_two_pages_right_half_first_by_default() {
     let (_tmp, root) = fixture();
     let v = scan_volume(&root).unwrap();
-    let out = root.join("spread.epub");
+    let out = root.join("split.epub");
     writers::epub::write(&v, &out).unwrap();
 
-    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(std::fs::read(&out).unwrap())).unwrap();
-    let opf = read_entry(&mut zip, "OEBPS/content.opf");
+    let mut zip =
+        zip::ZipArchive::new(std::io::Cursor::new(std::fs::read(&out).unwrap())).unwrap();
 
-    // Kindle lays the whole book out on `original-resolution`. A page that
-    // declares a viewport wider than that is what got cut on a real device.
-    let canvas = r#"content="width=800, height=1168""#;
+    // The spread was page three of the fixture, so it now occupies pages three
+    // and four, each an ordinary half-width page.
+    for stem in ["p0003", "p0004"] {
+        let page = read_entry(&mut zip, &format!("OEBPS/text/{stem}.xhtml"));
+        assert!(
+            page.contains(r#"content="width=800, height=1168""#),
+            "{stem} should be an ordinary page on the canvas"
+        );
+        assert!(
+            !page.contains("width=\"1600\""),
+            "{stem} still carries the full spread; it was not split"
+        );
+    }
+
+    // Nothing anywhere declares a page wider than the canvas, which is the
+    // property that stopped Kindle zooming into a fragment of a wide page.
+    let names: Vec<String> = zip.file_names().map(|s| s.to_string()).collect();
+    for name in names.iter().filter(|n| n.starts_with("OEBPS/text/")) {
+        let page = read_entry(&mut zip, name);
+        assert!(
+            page.contains(r#"content="width=800, height=1168""#),
+            "{name} does not sit on the book canvas"
+        );
+    }
+}
+
+#[test]
+fn keeping_a_spread_whole_still_fits_it_on_the_canvas() {
+    // What the "split double-page spreads" setting turns off. A reader that can
+    // show a wide page gets one, and it must still be fitted rather than cut.
+    let (_tmp, root) = fixture();
+    let mut v = scan_volume(&root).unwrap();
+    for chapter in &mut v.chapters {
+        for page in &mut chapter.pages {
+            page.split = false;
+        }
+    }
+
+    let out = root.join("whole.epub");
+    writers::epub::write(&v, &out).unwrap();
+    let mut zip =
+        zip::ZipArchive::new(std::io::Cursor::new(std::fs::read(&out).unwrap())).unwrap();
+
     let spread_page = read_entry(&mut zip, "OEBPS/text/p0003.xhtml");
-    let normal_page = read_entry(&mut zip, "OEBPS/text/p0001.xhtml");
-    assert!(spread_page.contains(canvas), "the spread must use the book canvas");
-    assert!(normal_page.contains(canvas));
     assert!(
-        !spread_page.contains("width=1600"),
-        "a viewport wider than the canvas is exactly what Kindle crops"
+        spread_page.contains(r#"content="width=800, height=1168""#),
+        "the spread must share the book canvas"
     );
-
-    // The image itself keeps every pixel, so zooming in on the device still
-    // shows the full spread. Fitting is a display concern, not a stored one.
     assert!(
         spread_page.contains(r#"width="1600" height="1168""#),
         "the spread image must stay full resolution"
     );
 
-    // One page, not two: the spread is not split and not laid across a pair.
-    assert!(
-        !opf.contains("rendition:page-spread-center"),
-        "asking for a two-page layout is part of what cut the spread"
-    );
+    let opf = read_entry(&mut zip, "OEBPS/content.opf");
+    assert!(!opf.contains("rendition:page-spread-center"));
 
-    // And the stylesheet must fit rather than clip.
     let css = read_entry(&mut zip, "OEBPS/style.css");
     assert!(css.contains("max-width: 100%") && css.contains("max-height: 100%"));
     assert!(css.contains("object-fit: contain"));
@@ -224,7 +257,7 @@ fn cbz_holds_every_page_plus_comicinfo() {
         .filter(|n| n.ends_with(".jpg"))
         .map(|s| s.to_string())
         .collect();
-    assert_eq!(images.len(), 16);
+    assert_eq!(images.len(), 17);
 
     // Zero-padded flat names so every reader agrees on the order.
     let mut sorted = images.clone();
@@ -233,7 +266,9 @@ fn cbz_holds_every_page_plus_comicinfo() {
 
     let info = read_entry(&mut zip, "ComicInfo.xml");
     assert!(info.contains("<Manga>YesAndRightToLeft</Manga>"));
-    assert!(info.contains("<PageCount>16</PageCount>"));
+    // Seventeen, not sixteen: the split spread counts as the two pages it
+    // actually becomes in the archive.
+    assert!(info.contains("<PageCount>17</PageCount>"));
     assert!(info.contains("<Series>Itch The Witch</Series>"));
 }
 
@@ -251,7 +286,7 @@ fn an_explicit_cover_is_added_ahead_of_page_one() {
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(std::fs::read(&out).unwrap())).unwrap();
 
     assert!(zip.file_names().any(|n| n == "OEBPS/images/cover.jpg"));
-    assert_eq!(zip.file_names().filter(|n| n.starts_with("OEBPS/images/")).count(), 17);
+    assert_eq!(zip.file_names().filter(|n| n.starts_with("OEBPS/images/")).count(), 18);
 
     let opf = read_entry(&mut zip, "OEBPS/content.opf");
     assert!(opf.contains(r#"href="images/cover.jpg" media-type="image/jpeg" properties="cover-image""#));
@@ -265,8 +300,8 @@ fn without_an_explicit_cover_page_one_is_reused_rather_than_duplicated() {
     writers::epub::write(&v, &out).unwrap();
 
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(std::fs::read(&out).unwrap())).unwrap();
-    // 16 pages, 16 images: the cover is page one, stored once.
-    assert_eq!(zip.file_names().filter(|n| n.starts_with("OEBPS/images/")).count(), 16);
+    // 17 pages, 17 images: the cover is page one, stored once.
+    assert_eq!(zip.file_names().filter(|n| n.starts_with("OEBPS/images/")).count(), 17);
     let opf = read_entry(&mut zip, "OEBPS/content.opf");
     assert!(opf.contains(r#"href="images/p0001.jpg" media-type="image/jpeg" properties="cover-image""#));
 }

@@ -217,6 +217,26 @@ that is only ever *offered* to the user, never acted on.
   at the URL, so they carry the same `Referer` the download will.
 - Keyboard handlers must bail out on `INPUT` / `TEXTAREA` / `contentEditable`.
 
+## Spreads
+
+**Spreads are split into two pages by default** (`scan.rs` sets `split = true`
+for `PageKind::Spread`). This is not a preference, it is a workaround for how
+Kindle behaves: shown a page twice the width of every other one it does not
+scale it down to fit, it picks a region and zooms, so the reader sees half a
+drawing with no indication there is more. Two ordinary pages always read
+correctly. Verified on a real device after the fit-to-canvas approach failed
+there while looking fine in desktop EPUB readers.
+
+- Right half first for right-to-left titles — see `render_page`.
+- `S` in the editor rejoins one; the `split_spreads` setting turns it off
+  wholesale; the CLI has `--keep-spreads`.
+- Split halves are re-encoded, so `SPLIT_QUALITY` (92) matters. The encoder
+  default of 75 visibly mushes screentones and inked edges, and now that
+  splitting is the default path every spread goes through it.
+- The uniform-canvas rule in `epub.rs` still stands and is still tested: no page
+  may declare a viewport wider than `original-resolution`. It is what keeps a
+  deliberately-unsplit spread fitted rather than cut.
+
 ## Settings and build output
 
 - `src-tauri/src/settings.rs` owns all configuration, stored as one JSON file in

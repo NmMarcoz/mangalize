@@ -9,6 +9,8 @@ export interface Settings {
   output_root: string | null;
   default_format: string;
   folder_per_series: boolean;
+  /** Cut double-page spreads into two pages. On by default, for Kindle. */
+  split_spreads: boolean;
   /** Whether the first-run screen has been answered. */
   welcomed: boolean;
 }

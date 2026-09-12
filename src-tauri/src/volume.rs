@@ -165,6 +165,21 @@ pub(crate) fn build_path(
     }
 }
 
+/// Apply the user's spread preference to a freshly assembled volume.
+///
+/// The scanner splits spreads by default; this is the one place that decision is
+/// reversed, so the editor and an unattended batch agree on what a volume looks
+/// like before anything is written.
+pub(crate) fn apply_spread_policy(volume: &mut Volume, split: bool) {
+    for chapter in &mut volume.chapters {
+        for page in &mut chapter.pages {
+            if page.kind == mangalize_core::PageKind::Spread {
+                page.split = split;
+            }
+        }
+    }
+}
+
 /// `Itch The Witch v01`, without an extension.
 pub(crate) fn file_stem(volume: &Volume) -> String {
     let m = &volume.metadata;

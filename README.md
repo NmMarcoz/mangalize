@@ -297,7 +297,7 @@ Useful flags:
 | `--format epub\|cbz` | Output format. Defaults to `epub`. |
 | `--title`, `--author` | Override what was guessed from the folder name. |
 | `--ltr` | Left-to-right reading. Default is right-to-left. |
-| `--split-spreads` | Cut every double-page spread into two pages. |
+| `--keep-spreads` | Keep double-page spreads whole. They are split by default. |
 
 `library peek` is worth knowing about on its own: it lists what a page offers,
 with dimensions and whether each image looks like a page, without downloading
@@ -334,9 +334,15 @@ few kilobytes and is still a real page.
 numerically, so page 10 follows page 9 rather than page 1.
 
 **Spread detection.** A page roughly twice the width of the volume's norm is a
-double-page spread. By default it is kept whole and marked
-`rendition:page-spread-center` so readers show it as one image. `--split-spreads`
-cuts it in two, emitting the right half first for right-to-left titles.
+double-page spread, and by default it is cut into two pages, right half first
+for right-to-left titles.
+
+That default exists because of how Kindle treats a wide page: rather than
+scaling it down to fit, it zooms into part of it, so you see half a drawing with
+nothing to tell you the rest exists. Desktop readers handle a whole spread
+perfectly well, which is what makes this easy to miss. `--keep-spreads` on the
+CLI, or the setting in the app, turns splitting off; `S` in the editor rejoins
+a single one.
 
 ## Layout
 

@@ -121,6 +121,22 @@ export function SettingsView({ onBack, onSaved, onError }: SettingsViewProps) {
               </span>
             </label>
 
+            <label className="flex cursor-pointer items-start gap-3">
+              <Switch
+                checked={settings.split_spreads}
+                onCheckedChange={(on) => patch({ split_spreads: on })}
+                className="mt-0.5"
+              />
+              <span className="text-xs">
+                <span className="font-medium">Split double-page spreads</span>
+                <span className="mt-0.5 block text-muted-foreground">
+                  {settings.split_spreads
+                    ? "Each spread becomes two pages, right half first for manga. Kindle zooms into part of a wide page instead of fitting it, so this is almost always what you want."
+                    : "Spreads stay whole. Fine on a tablet or a desktop reader; on a Kindle you will see half the drawing."}
+                </span>
+              </span>
+            </label>
+
             <Separator />
 
             <div className="flex flex-col gap-1.5">

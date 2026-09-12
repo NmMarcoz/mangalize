@@ -23,6 +23,11 @@ pub struct Settings {
     pub default_format: String,
     /// Put each volume in a folder named after its series.
     pub folder_per_series: bool,
+    /// Cut double-page spreads into two pages.
+    ///
+    /// On by default because that is what a Kindle needs; readers that handle a
+    /// wide page properly can turn it off.
+    pub split_spreads: bool,
     /// Whether the first-run screen has been answered.
     ///
     /// Separate from `output_root` being set, because "decide later" is a valid
@@ -37,6 +42,7 @@ struct Stored {
     output_root: Option<PathBuf>,
     default_format: Option<String>,
     folder_per_series: Option<bool>,
+    split_spreads: Option<bool>,
     welcomed: Option<bool>,
 }
 
@@ -52,6 +58,7 @@ pub fn load(app: &AppHandle) -> Result<Settings> {
         // On by default: a flat folder of a hundred volume files from a dozen
         // series is the thing this is meant to avoid.
         folder_per_series: stored.folder_per_series.unwrap_or(true),
+        split_spreads: stored.split_spreads.unwrap_or(true),
         welcomed: stored.welcomed.unwrap_or(false),
     })
 }
@@ -65,6 +72,7 @@ pub fn save(app: &AppHandle, next: &Settings) -> Result<()> {
             output_root: next.output_root.clone(),
             default_format: Some(next.default_format.clone()),
             folder_per_series: Some(next.folder_per_series),
+            split_spreads: Some(next.split_spreads),
             welcomed: Some(next.welcomed),
         },
     )

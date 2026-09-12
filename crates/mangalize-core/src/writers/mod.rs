@@ -12,6 +12,9 @@ use anyhow::{Context, Result};
 use crate::page::{Page, PageKind};
 use crate::project::Direction;
 
+/// JPEG quality for the halves of a split spread.
+const SPLIT_QUALITY: u8 = 92;
+
 /// Callback invoked as `(pages_done, pages_total)` while a volume is written.
 pub type Progress<'a> = dyn FnMut(usize, usize) + 'a;
 
@@ -59,10 +62,15 @@ pub fn render_page(page: &Page, direction: Direction) -> Result<Vec<Rendered>> {
         .map(|part| {
             let (width, height) = (part.width(), part.height());
             let mut bytes = Vec::new();
-            part.write_to(
+            // Explicit quality, not the encoder default of 75. Splitting is the
+            // normal path for a spread, so every one of them is re-encoded once;
+            // at 75 the screentones and inked edges manga is made of visibly
+            // mush. 92 is close to indistinguishable at a sane file size.
+            image::codecs::jpeg::JpegEncoder::new_with_quality(
                 &mut std::io::Cursor::new(&mut bytes),
-                image::ImageFormat::Jpeg,
+                SPLIT_QUALITY,
             )
+            .encode_image(&part)
             .context("encoding split half")?;
             Ok(Rendered {
                 bytes,

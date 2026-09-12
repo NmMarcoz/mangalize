@@ -59,9 +59,12 @@ enum Command {
         /// Read left-to-right instead of the right-to-left default.
         #[arg(long)]
         ltr: bool,
-        /// Cut every detected double-page spread into two pages.
+        /// Keep double-page spreads whole instead of cutting them in two.
+        ///
+        /// Splitting is the default: a Kindle zooms into part of a wide page
+        /// rather than fitting it, so half the drawing goes unseen.
         #[arg(long)]
-        split_spreads: bool,
+        keep_spreads: bool,
     },
 }
 
@@ -86,8 +89,8 @@ fn main() -> Result<()> {
             title,
             author,
             ltr,
-            split_spreads,
-        } => build(folder, out, format, title, author, ltr, split_spreads),
+            keep_spreads,
+        } => build(folder, out, format, title, author, ltr, keep_spreads),
     }
 }
 
@@ -216,7 +219,7 @@ fn build(
     title: Option<String>,
     author: Option<String>,
     ltr: bool,
-    split_spreads: bool,
+    keep_spreads: bool,
 ) -> Result<()> {
     let mut volume = scan_volume(&folder)?;
 
@@ -229,11 +232,11 @@ fn build(
     if ltr {
         volume.metadata.direction = Direction::LeftToRight;
     }
-    if split_spreads {
+    if keep_spreads {
         for chapter in &mut volume.chapters {
             for page in &mut chapter.pages {
                 if page.kind == PageKind::Spread {
-                    page.split = true;
+                    page.split = false;
                 }
             }
         }
