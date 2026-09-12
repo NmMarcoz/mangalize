@@ -21,6 +21,8 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Hint } from "@/components/ui/tooltip";
+import { canPickFolders, canSendToDevice, isMobile } from "@/lib/platform";
+import { cn } from "@/lib/utils";
 import {
   formatBytes,
   volumePageCount,
@@ -79,7 +81,16 @@ export function Toolbar({
 
   return (
     <header className="flex shrink-0 flex-col border-b border-border bg-card/60">
-      <div className="flex items-center gap-3 px-4 py-2.5">
+      <div
+        className={cn(
+          "flex gap-3 px-4 py-2.5",
+          // The title and the build controls together are wider than a phone,
+          // and flex resolves that by squeezing the title to nothing. Stacking
+          // costs a row and keeps both readable.
+          isMobile ? "flex-col items-stretch" : "items-center",
+        )}
+      >
+        <div className={cn("flex items-center gap-3", isMobile && "min-w-0")}>
         <Hint label="Back to the library">
           <Button variant="ghost" size="icon" onClick={onBack}>
             <ArrowLeft />
@@ -91,20 +102,30 @@ export function Toolbar({
             <h1 className="truncate text-sm font-semibold">
               {volume.metadata.series || "Untitled volume"}
             </h1>
-            <Badge variant="outline">{volume.chapters.length} chapters</Badge>
-            <Badge variant="outline">{pages} pages</Badge>
-            {spreads > 0 && <Badge>{spreads} spreads</Badge>}
+            {!isMobile && (
+              <>
+                <Badge variant="outline">{volume.chapters.length} chapters</Badge>
+                <Badge variant="outline">{pages} pages</Badge>
+                {spreads > 0 && <Badge>{spreads} spreads</Badge>}
+              </>
+            )}
           </div>
           <p
             className="truncate text-[11px] text-muted-foreground"
             data-selectable
             title={volume.root}
           >
-            {volume.root}
+            {/* The folder is a desktop-sized path and nothing a phone can act
+                on, so there the counts take the line instead. */}
+            {isMobile
+              ? `${volume.chapters.length} chapters · ${pages} pages${spreads > 0 ? ` · ${spreads} spreads` : ""}`
+              : volume.root}
           </p>
         </div>
+        </div>
 
-        <div className="flex items-center gap-2">
+        <div className={cn("flex items-center gap-2", isMobile && "justify-end")}>
+          {canPickFolders && (
           <Hint label="Reload this folder from disk">
             <Button variant="ghost" size="icon" onClick={onRescan} disabled={scanning}>
               {scanning ? (
@@ -114,11 +135,14 @@ export function Toolbar({
               )}
             </Button>
           </Hint>
-          <Hint label="Open another folder">
-            <Button variant="ghost" size="icon" onClick={onOpenFolder}>
-              <FolderOpen />
-            </Button>
-          </Hint>
+          )}
+          {canPickFolders && (
+            <Hint label="Open another folder">
+              <Button variant="ghost" size="icon" onClick={onOpenFolder}>
+                <FolderOpen />
+              </Button>
+            </Hint>
+          )}
 
           <Separator orientation="vertical" className="mx-1 h-6" />
 
@@ -136,25 +160,29 @@ export function Toolbar({
             {building ? <Loader2 className="animate-spin" /> : <Upload />}
             Build
           </Button>
-          <Hint label="Choose a one-off location">
-            <Button
-              variant="outline"
-              onClick={onExportAs}
-              disabled={building !== null || pages === 0}
-            >
-              Build as…
-            </Button>
-          </Hint>
-          <Hint label="Build if needed, then email it to your Kindle">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={onSend}
-              disabled={building !== null || sending || pages === 0}
-            >
-              {sending ? <Loader2 className="animate-spin" /> : <Send />}
-            </Button>
-          </Hint>
+          {canPickFolders && (
+            <Hint label="Choose a one-off location">
+              <Button
+                variant="outline"
+                onClick={onExportAs}
+                disabled={building !== null || pages === 0}
+              >
+                Build as…
+              </Button>
+            </Hint>
+          )}
+          {canSendToDevice && (
+            <Hint label="Build if needed, then email it to your Kindle">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={onSend}
+                disabled={building !== null || sending || pages === 0}
+              >
+                {sending ? <Loader2 className="animate-spin" /> : <Send />}
+              </Button>
+            </Hint>
+          )}
         </div>
       </div>
 
@@ -200,7 +228,7 @@ export function Toolbar({
             </button>
           ) : (
             <span className="text-[11px] text-muted-foreground">
-              X exclude · S split · C cover · Esc clear
+              {isMobile ? "" : "X exclude · S split · C cover · Esc clear"}
             </span>
           )}
         </div>
