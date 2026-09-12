@@ -2374,7 +2374,7 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "mangalize-app"
-version = "1.8.0"
+version = "1.8.1"
 dependencies = [
  "anyhow",
  "image",
@@ -2396,7 +2396,7 @@ dependencies = [
 
 [[package]]
 name = "mangalize-cli"
-version = "1.8.0"
+version = "1.8.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2408,7 +2408,7 @@ dependencies = [
 
 [[package]]
 name = "mangalize-core"
-version = "1.8.0"
+version = "1.8.1"
 dependencies = [
  "anyhow",
  "image",
@@ -2422,7 +2422,7 @@ dependencies = [
 
 [[package]]
 name = "mangalize-fetch"
-version = "1.8.0"
+version = "1.8.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2435,7 +2435,7 @@ dependencies = [
 
 [[package]]
 name = "mangalize-library"
-version = "1.8.0"
+version = "1.8.1"
 dependencies = [
  "anyhow",
  "image",
@@ -2447,7 +2447,7 @@ dependencies = [
 
 [[package]]
 name = "mangalize-meta"
-version = "1.8.0"
+version = "1.8.1"
 dependencies = [
  "anyhow",
  "serde",
@@ -2457,7 +2457,7 @@ dependencies = [
 
 [[package]]
 name = "mangalize-send"
-version = "1.8.0"
+version = "1.8.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
