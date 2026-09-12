@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Trash2,
   X,
+  PackageCheck,
 } from "lucide-react";
 
 import { BatchDownloadDialog } from "@/components/BatchDownloadDialog";
@@ -24,6 +25,13 @@ import {
 } from "@/components/ContextMenu";
 import { ChapterFetchDialog } from "@/components/ChapterFetchDialog";
 import { RemoveSeriesDialog } from "@/components/RemoveSeriesDialog";
+import { SourceDownloadDialog } from "@/components/SourceDownloadDialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
@@ -99,7 +107,15 @@ export function SeriesView({
   const [fetching, setFetching] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
-  const [batching, setBatching] = useState(false);
+  // A "get missing" run, once the user has chosen how to fetch. `wanted` is
+  // what will be attempted: the whole series, or just one volume's gap.
+  const [batching, setBatching] = useState<string[] | null>(null);
+  const [fromSource, setFromSource] = useState<string[] | null>(null);
+  // Where to pop the choice of route, and what it would cover.
+  const [routing, setRouting] = useState<
+    { at: ContextMenuPosition; wanted: string[] } | null
+  >(null);
+  const [rebuild, setRebuild] = useState<VolumeStatus | null>(null);
 
   // Volume numbers picked for a batch build, plus the anchor shift-click extends
   // from. Mirrors how the page grid in the editor already behaves.
@@ -109,7 +125,12 @@ export function SeriesView({
   const [buildProgress, setBuildProgress] = useState<BuildBatchProgress | null>(null);
   const [buildReport, setBuildReport] = useState<BuildBatchReport | null>(null);
   const [sending, setSending] = useState(false);
-  const [fetchingDirect, setFetchingDirect] = useState<string | null>(null);
+  // A set, not one chapter. Downloads are started one tap at a time but run
+  // together, so a single value made the previous chapter's spinner stop the
+  // moment the next was tapped, and the first one to finish stopped all of them.
+  const [fetchingDirect, setFetchingDirect] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -199,7 +220,15 @@ export function SeriesView({
    */
   const fetchDirect = useCallback(
     async (chapter: string) => {
-      setFetchingDirect(chapter);
+      let already = false;
+      setFetchingDirect((current) => {
+        already = current.has(chapter);
+        if (already) return current;
+        return new Set(current).add(chapter);
+      });
+      // Tapping the same chapter twice should not start a second download of it.
+      if (already) return;
+
       onError(null);
       try {
         await downloadChapterFromSource(seriesId, chapter);
@@ -207,7 +236,11 @@ export function SeriesView({
       } catch (e) {
         onError(String(e));
       } finally {
-        setFetchingDirect(null);
+        setFetchingDirect((current) => {
+          const next = new Set(current);
+          next.delete(chapter);
+          return next;
+        });
       }
     },
     [seriesId, refresh, onError],
@@ -392,7 +425,10 @@ export function SeriesView({
 
         <Button
           variant={missing.length > 0 ? "default" : "outline"}
-          onClick={() => setBatching(true)}
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setRouting({ at: { x: r.left, y: r.bottom + 4 }, wanted: missing });
+          }}
           disabled={missing.length === 0}
           title={
             missing.length === 0
@@ -466,7 +502,19 @@ export function SeriesView({
             volume={detail}
             building={building === detail.number}
             onClose={() => setSelected(null)}
-            onBuild={() => void edit(detail.number)}
+            onBuild={() => (detail.built ? setRebuild(detail) : void edit(detail.number))}
+            onShare={() =>
+              detail.built &&
+              void deliverBuilt(detail.built.path, volumeLabel(detail)).catch((e) =>
+                onError(String(e)),
+              )
+            }
+            onGetMissing={(at) =>
+              setRouting({
+                at,
+                wanted: missingChapters(detail).map((c) => c.number),
+              })
+            }
             onGet={setFetching}
             onRead={onRead}
             onFetchDirect={(chapter) => void fetchDirect(chapter)}
@@ -554,12 +602,86 @@ export function SeriesView({
       />
 
       <BatchDownloadDialog
-        open={batching}
-        onOpenChange={setBatching}
+        open={batching !== null}
+        onOpenChange={(next) => !next && setBatching(null)}
         seriesId={seriesId}
-        missing={missing}
+        missing={batching ?? []}
         onFinished={() => void refresh()}
       />
+
+      {fromSource && (
+        <SourceDownloadDialog
+          open
+          onOpenChange={(next) => !next && setFromSource(null)}
+          seriesId={seriesId}
+          sourceName={sourceLabel(series?.source)}
+          chapters={fromSource}
+          onFinished={() => void refresh()}
+        />
+      )}
+
+      {/* Building again costs a minute or more of re-encoding for a file that
+          already exists, so the choice is offered rather than assumed. */}
+      <Dialog open={rebuild !== null} onOpenChange={(next) => !next && setRebuild(null)}>
+        <DialogContent className="max-w-md">
+          <div className="border-b border-border px-4 py-3">
+            <DialogTitle>{rebuild && volumeLabel(rebuild)} is already built</DialogTitle>
+            <DialogDescription>
+              {rebuild?.built && (
+                <span className="break-all">{rebuild.built.path}</span>
+              )}
+            </DialogDescription>
+          </div>
+          <div className="flex items-center justify-end gap-2 px-4 py-3">
+            <Button variant="ghost" onClick={() => setRebuild(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const target = rebuild;
+                setRebuild(null);
+                if (target) void edit(target.number);
+              }}
+            >
+              <PenLine />
+              Build again
+            </Button>
+            <Button
+              onClick={() => {
+                const built = rebuild?.built;
+                const label = rebuild ? volumeLabel(rebuild) : undefined;
+                setRebuild(null);
+                if (built) {
+                  void deliverBuilt(built.path, label).catch((e) => onError(String(e)));
+                }
+              }}
+            >
+              {DELIVER_LABEL}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Two ways to reach the same chapters, and which is available depends on
+          the series rather than on a preference. */}
+      {routing && (
+        <ContextMenu at={routing.at} onClose={() => setRouting(null)}>
+          <ContextMenuItem
+            disabled={!series?.source || routing.wanted.length === 0}
+            hint={series?.source ? undefined : "no metadata source"}
+            onSelect={() => setFromSource(routing.wanted)}
+          >
+            From {sourceLabel(series?.source)}
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={routing.wanted.length === 0}
+            onSelect={() => setBatching(routing.wanted)}
+          >
+            From a chapter URL…
+          </ContextMenuItem>
+        </ContextMenu>
+      )}
 
       {fetching !== null && (
         <ChapterFetchDialog
@@ -627,6 +749,13 @@ function VolumeCard({
             ) : (
               <Badge variant="outline">
                 {have}/{total || "?"}
+              </Badge>
+            )}
+            {/* Written out already, and the file is still where it was put. */}
+            {volume.built && (
+              <Badge variant="outline" title={volume.built.path}>
+                <PackageCheck className="size-2.5" />
+                built
               </Badge>
             )}
           </div>
@@ -782,6 +911,8 @@ function VolumePanel({
   fetchingDirect,
   onImport,
   onRemove,
+  onShare,
+  onGetMissing,
 }: {
   volume: VolumeStatus;
   building: boolean;
@@ -790,10 +921,14 @@ function VolumePanel({
   onGet: (chapter: string) => void;
   onRead: (chapter: string) => void;
   onFetchDirect: (chapter: string) => void;
-  /** Chapter number currently being pulled from the source, if any. */
-  fetchingDirect: string | null;
+  /** Chapter numbers currently being pulled from the source. */
+  fetchingDirect: ReadonlySet<string>;
   onImport: (chapter: string) => void;
   onRemove: (chapter: string) => void;
+  /** Hand the built file to another app, or reveal it. */
+  onShare: () => void;
+  /** Fetch only the chapters this volume is still missing. */
+  onGetMissing: (at: ContextMenuPosition) => void;
 }) {
   const have = downloadedCount(volume);
   const missing = missingChapters(volume);
@@ -832,7 +967,7 @@ function VolumePanel({
             <ChapterRow
               key={chapter.number}
               chapter={chapter}
-              busy={fetchingDirect === chapter.number}
+              busy={fetchingDirect.has(chapter.number)}
               onGet={() => onGet(chapter.number)}
               onRead={() => onRead(chapter.number)}
               onFetchDirect={() => onFetchDirect(chapter.number)}
@@ -843,10 +978,41 @@ function VolumePanel({
         )}
       </div>
 
-      <div className="border-t border-border p-3">
+      <div className="flex flex-col gap-2 border-t border-border p-3">
+        {/* Offered without having to build again: the work is already done, and
+            on a phone this is the only way a volume leaves the app at all. */}
+        {volume.built && (
+          <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-1.5">
+            <PackageCheck className="size-3.5 shrink-0 text-primary" />
+            <p
+              className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground"
+              title={volume.built.path}
+            >
+              Built {formatBytes(volume.built.bytes)}
+            </p>
+            <Button variant="outline" size="sm" onClick={onShare}>
+              {DELIVER_LABEL}
+            </Button>
+          </div>
+        )}
+
+        {missing.length > 0 && (
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              onGetMissing({ x: r.left, y: r.bottom + 4 });
+            }}
+          >
+            <Layers />
+            Get {missing.length} missing in this volume
+          </Button>
+        )}
+
         <Button className="w-full" onClick={onBuild} disabled={have === 0 || building}>
           {building ? <Loader2 className="animate-spin" /> : <PenLine />}
-          Build this volume
+          {volume.built ? "Build again" : "Build this volume"}
         </Button>
       </div>
     </aside>
@@ -895,6 +1061,7 @@ function ChapterRow({
         {have && !chapter.read_at && chapter.last_page > 0 &&
           ` · page ${chapter.last_page + 1}`}
         {chapter.title ? ` · ${chapter.title}` : ""}
+        {have && chapterSource(chapter) && ` · ${chapterSource(chapter)}`}
         {!have && chapter.unavailable && (
           // Not an error: the source indexes the chapter but the publisher
           // hosts it. Saying so stops this looking like a broken download.
@@ -979,4 +1146,37 @@ function ChapterRow({
       )}
     </div>
   );
+}
+
+/**
+ * Where a downloaded chapter's pages came from.
+ *
+ * Worth showing because a library fills up from more than one place, and the
+ * answer decides what "get this again" will do — a chapter the source hosts can
+ * be re-fetched with one tap, a scraped one needs its URL again.
+ *
+ * The host rather than the full URL: the question is which site, and a reader
+ * URL is long and mostly opaque ids.
+ */
+function chapterSource(chapter: ChapterStatus): string | null {
+  if (chapter.source_url) {
+    try {
+      return new URL(chapter.source_url).host.replace(/^www\./, "");
+    } catch {
+      return null;
+    }
+  }
+  return chapter.source_id ? "MangaDex" : null;
+}
+
+/** How to name where a series' chapters come from. */
+function sourceLabel(source: string | null | undefined): string {
+  switch (source) {
+    case "mangadex":
+      return "MangaDex";
+    case "kitsu":
+      return "Kitsu";
+    default:
+      return "the source";
+  }
 }

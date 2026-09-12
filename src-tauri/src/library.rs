@@ -79,6 +79,10 @@ pub async fn library_add_series(
             year: series.year,
             status: series.status.clone(),
             site_url: series.site_url.clone(),
+            // Carried over so the library can be filtered by the same things
+            // Explore is browsed by, without going back to the network.
+            tags: series.tags.iter().map(|t| t.name.clone()).collect(),
+            content_rating: series.content_rating.clone(),
         })?;
 
         // The translation chosen when adding decides which chapters the library
@@ -240,6 +244,8 @@ struct BuildBatchProgress {
     pages: usize,
 }
 
+/// What the UI is told about a volume that was just written. Distinct from the
+/// library's `BuiltVolume`, which is what gets remembered about it afterwards.
 #[derive(Serialize)]
 pub struct BuiltVolume {
     volume: String,
@@ -346,6 +352,31 @@ pub async fn build_library_volumes(
     .await
 }
 
+/// Remember a volume the editor wrote.
+///
+/// The batch builder records its own, but a volume opened in the editor is
+/// written by a command that knows nothing about the library — by design. The
+/// caller that opened the editor knows what the volume was, and says so here.
+#[tauri::command]
+pub async fn library_record_built(
+    app: AppHandle,
+    id: i64,
+    volume: String,
+    path: String,
+    bytes: u64,
+) -> Result<(), String> {
+    blocking(move || {
+        open(&app)?.record_built(SeriesId(id), &volume, std::path::Path::new(&path), bytes)
+    })
+    .await
+}
+
+/// Forget a recorded build. The file is left alone.
+#[tauri::command]
+pub async fn library_clear_built(app: AppHandle, id: i64, volume: String) -> Result<(), String> {
+    blocking(move || open(&app)?.clear_built(SeriesId(id), &volume)).await
+}
+
 /// How a batch writes each volume. Travels together because every item in a
 /// batch shares it.
 struct BuildOptions<'a> {
@@ -383,9 +414,15 @@ fn build_one(
         }
     }
 
+    let bytes = std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0);
+    // Remembered so the volume page can offer to share this file rather than
+    // spend another minute producing an identical one. Failing to record it is
+    // not worth failing the build over — the file is written either way.
+    let _ = library.record_built(series, number, &out, bytes);
+
     Ok(BuiltVolume {
         volume: number.to_string(),
-        bytes: std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0),
+        bytes,
         path: out.to_string_lossy().into_owned(),
         pages,
     })

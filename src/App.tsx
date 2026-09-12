@@ -25,6 +25,7 @@ import { useUpdater } from "@/hooks/useUpdater";
 import { scanFolder, type Volume } from "@/lib/api";
 import { getSettings, type Settings } from "@/lib/settings";
 import { isMobile } from "@/lib/platform";
+import { recordBuilt } from "@/lib/library";
 import { clearThumbnails } from "@/lib/thumbs";
 
 /**
@@ -43,7 +44,7 @@ type View =
   | { kind: "reader"; target: ReaderTarget; back: View }
   | { kind: "send" }
   | { kind: "settings" }
-  | { kind: "editor"; from: { seriesId: number } | null };
+  | { kind: "editor"; from: { seriesId: number; number: string } | null };
 
 /**
  * Where the back gesture goes from a given screen.
@@ -276,7 +277,7 @@ export default function App() {
           onEditVolume={(built, source) => {
             clearThumbnails();
             setVolume(built);
-            setView({ kind: "editor", from: { seriesId: source.seriesId } });
+            setView({ kind: "editor", from: source });
           }}
           defaultFormat={settings.default_format}
           onError={setError}
@@ -305,6 +306,19 @@ export default function App() {
         onOpenFolder={() => void pickFolder()}
         onBack={() =>
           setView(from ? { kind: "series", id: from.seriesId } : { kind: "library" })
+        }
+        // A volume from the library is remembered once written, so its page can
+        // offer to share the file rather than build an identical one again.
+        onBuilt={
+          from
+            ? (built) =>
+                void recordBuilt(
+                  from.seriesId,
+                  from.number,
+                  built.path,
+                  built.bytes,
+                ).catch(() => {})
+            : undefined
         }
         defaultFormat={settings.default_format}
         onError={setError}

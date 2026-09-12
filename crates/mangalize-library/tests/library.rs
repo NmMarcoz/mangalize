@@ -434,3 +434,126 @@ fn several_commands_can_open_a_brand_new_library_at_once() {
         "the index should be in WAL mode"
     );
 }
+
+/* ------------------------------------------------- built volumes and the shelf */
+
+#[test]
+fn a_built_volume_is_remembered_so_it_can_be_offered_rather_than_rebuilt() {
+    let dir = TempDir::new().unwrap();
+    let mut library = Library::open(dir.path()).unwrap();
+    let id = library.add_series(ichi()).unwrap().id;
+    library.sync_layout(id, &layout()).unwrap();
+
+    let built = dir.path().join("Ichi v01.epub");
+    std::fs::write(&built, b"not really an epub").unwrap();
+    library.record_built(id, "1", &built, 18).unwrap();
+
+    let volume = library
+        .volumes(id)
+        .unwrap()
+        .into_iter()
+        .find(|v| v.number == "1")
+        .unwrap();
+    let record = volume.built.expect("the build should be remembered");
+    assert_eq!(record.path, built);
+    assert_eq!(record.bytes, 18);
+}
+
+#[test]
+fn a_built_volume_whose_file_was_deleted_counts_as_not_built() {
+    let dir = TempDir::new().unwrap();
+    let mut library = Library::open(dir.path()).unwrap();
+    let id = library.add_series(ichi()).unwrap().id;
+    library.sync_layout(id, &layout()).unwrap();
+
+    let built = dir.path().join("Ichi v01.epub");
+    std::fs::write(&built, b"gone in a moment").unwrap();
+    library.record_built(id, "1", &built, 16).unwrap();
+    // The output folder belongs to the user, who may tidy it.
+    std::fs::remove_file(&built).unwrap();
+
+    let volume = library
+        .volumes(id)
+        .unwrap()
+        .into_iter()
+        .find(|v| v.number == "1")
+        .unwrap();
+    assert!(
+        volume.built.is_none(),
+        "offering to share a file that has gone is worse than offering to build it"
+    );
+}
+
+#[test]
+fn a_series_recorded_by_reading_it_stays_off_the_shelf() {
+    let dir = TempDir::new().unwrap();
+    let mut library = Library::open(dir.path()).unwrap();
+
+    let streamed = library
+        .record_unshelved_series(NewSeries {
+            source: Some("mangadex".into()),
+            source_id: Some("streamed-one".into()),
+            title: "Read Once".into(),
+            ..NewSeries::default()
+        })
+        .unwrap();
+
+    assert!(!streamed.shelved);
+    assert!(
+        library.all_series().unwrap().is_empty(),
+        "the shelf is what the user put on it"
+    );
+    // But it is still reachable, which is what history needs.
+    assert_eq!(library.series(streamed.id).unwrap().title, "Read Once");
+}
+
+#[test]
+fn reading_a_series_already_on_the_shelf_does_not_take_it_off() {
+    let dir = TempDir::new().unwrap();
+    let mut library = Library::open(dir.path()).unwrap();
+    let added = library.add_series(ichi()).unwrap();
+
+    let again = library.record_unshelved_series(ichi()).unwrap();
+
+    assert_eq!(again.id, added.id);
+    assert!(again.shelved, "adding then reading must not demote it");
+    assert_eq!(library.all_series().unwrap().len(), 1);
+}
+
+#[test]
+fn shelving_a_streamed_series_puts_it_in_the_library() {
+    let dir = TempDir::new().unwrap();
+    let mut library = Library::open(dir.path()).unwrap();
+    let streamed = library.record_unshelved_series(ichi()).unwrap();
+
+    library.shelve(streamed.id).unwrap();
+
+    assert_eq!(library.all_series().unwrap().len(), 1);
+}
+
+#[test]
+fn tags_and_content_rating_survive_a_round_trip() {
+    let dir = TempDir::new().unwrap();
+    let mut library = Library::open(dir.path()).unwrap();
+    let id = library
+        .add_series(NewSeries {
+            tags: vec!["Action".into(), "Magic".into()],
+            content_rating: Some("safe".into()),
+            ..ichi()
+        })
+        .unwrap()
+        .id;
+
+    let series = library.series(id).unwrap();
+    assert_eq!(series.tags, ["Action", "Magic"]);
+    assert_eq!(series.content_rating.as_deref(), Some("safe"));
+}
+
+#[test]
+fn a_series_with_no_tags_reads_back_as_no_tags_rather_than_one_empty_one() {
+    let dir = TempDir::new().unwrap();
+    let mut library = Library::open(dir.path()).unwrap();
+    let id = library.add_series(ichi()).unwrap().id;
+
+    assert!(library.series(id).unwrap().tags.is_empty());
+}

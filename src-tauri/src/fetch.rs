@@ -276,6 +276,114 @@ pub struct BatchReport {
     cancelled: bool,
 }
 
+/// Fetch missing chapters straight from the metadata source.
+///
+/// The other batch path exists because most sites are only reachable by pasting
+/// a URL and inferring the rest. When the source hosts the images itself —
+/// MangaDex does, for everything it is allowed to — there is nothing to infer:
+/// the library already holds a chapter id for each one.
+///
+/// Bounded the same way `download_batch` is: the caller passes the chapters it
+/// wants, this never looks for more, and a chapter that fails is recorded while
+/// the run carries on. One dead chapter must not cost the other forty.
+#[tauri::command]
+pub async fn download_from_source(
+    app: AppHandle,
+    control: State<'_, BatchControl>,
+    id: i64,
+    chapters: Vec<String>,
+) -> Result<BatchReport, String> {
+    let cancelled = control.cancelled.clone();
+    cancelled.store(false, Ordering::Relaxed);
+
+    blocking(move || {
+        let library = Library::open(settings::library_root(&app)?)?;
+        let series_id = SeriesId(id);
+        let series = library.series(series_id)?;
+        let total = chapters.len();
+
+        let source = match series.source.as_deref() {
+            Some("mangadex") => mangalize_meta::Source::MangaDex,
+            Some("kitsu") => mangalize_meta::Source::Kitsu,
+            _ => anyhow::bail!("{} has no metadata source to download from", series.title),
+        };
+
+        let mut downloaded = Vec::new();
+        let mut failed = Vec::new();
+
+        for (index, number) in chapters.iter().enumerate() {
+            if cancelled.load(Ordering::Relaxed) {
+                return Ok(BatchReport { downloaded, failed, cancelled: true });
+            }
+            // The images all come from one volunteer network; the pause is the
+            // same courtesy the URL batch extends to a small site.
+            if index > 0 {
+                std::thread::sleep(BETWEEN_CHAPTERS);
+            }
+
+            let report = |stage: &'static str, done: usize, page_total: usize| {
+                let _ = app.emit(
+                    "batch-progress",
+                    BatchProgress {
+                        chapter: number.clone(),
+                        index: index + 1,
+                        total,
+                        stage,
+                        done,
+                        page_total,
+                    },
+                );
+            };
+            report("reading", 0, 0);
+
+            match one_from_source(&app, &library, series_id, &series, source, number, &report) {
+                Ok(()) => downloaded.push(number.clone()),
+                Err(e) => failed.push(BatchFailure {
+                    number: number.clone(),
+                    error: format!("{e:#}"),
+                }),
+            }
+        }
+
+        Ok(BatchReport { downloaded, failed, cancelled: false })
+    })
+    .await
+}
+
+fn one_from_source(
+    app: &AppHandle,
+    library: &Library,
+    series_id: SeriesId,
+    series: &mangalize_library::Series,
+    source: mangalize_meta::Source,
+    number: &str,
+    report: &dyn Fn(&'static str, usize, usize),
+) -> anyhow::Result<()> {
+    let stored = library.chapter(series_id, number)?;
+    let Some(chapter_id) = stored.source_id else {
+        anyhow::bail!("no source id for chapter {number} — refresh the series layout first");
+    };
+
+    // Handed out per request and expiring, so resolved immediately before use.
+    let pages = mangalize_meta::chapter_pages(source, &chapter_id)?;
+    report("downloading", 0, pages.len());
+
+    let dest = library.chapter_dir(series_id, number)?;
+    if dest.exists() {
+        std::fs::remove_dir_all(&dest)?;
+    }
+
+    let written =
+        mangalize_fetch::download_pages(&pages, &dest, None, &mut emit(app, "downloading"))?;
+    library.record_chapter(
+        series_id,
+        number,
+        written.len() as u32,
+        series.site_url.as_deref(),
+    )?;
+    Ok(())
+}
+
 /// Work out how to reach each wanted chapter from one URL the user pasted.
 #[tauri::command]
 pub async fn plan_batch(

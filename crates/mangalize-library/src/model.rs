@@ -40,6 +40,12 @@ pub struct Series {
     /// Chapters present on disk, and chapters known to exist.
     pub have_chapters: u32,
     pub known_chapters: u32,
+    /// What the library can be filtered and grouped by.
+    pub tags: Vec<String>,
+    pub content_rating: Option<String>,
+    /// False for a series recorded only because it was read from the source.
+    /// It has history and can be resumed, but it is not on the shelf.
+    pub shelved: bool,
 }
 
 /// What to write when adding a series. Mirrors what a metadata search returns,
@@ -57,6 +63,8 @@ pub struct NewSeries {
     pub year: Option<u32>,
     pub status: Option<String>,
     pub site_url: Option<String>,
+    pub tags: Vec<String>,
+    pub content_rating: Option<String>,
 }
 
 /// A volume of a series as published, plus what we hold of it.
@@ -67,6 +75,20 @@ pub struct VolumeStatus {
     pub cover_url: Option<String>,
     pub cover_path: Option<PathBuf>,
     pub chapters: Vec<ChapterStatus>,
+    /// A volume this library has already written out, if the file is still
+    /// there. Checked rather than trusted: the user owns the output folder and
+    /// can delete from it, and offering to share a file that has gone is worse
+    /// than offering to build it again.
+    pub built: Option<BuiltVolume>,
+}
+
+/// A volume that has been written out, and is still where it was written.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BuiltVolume {
+    pub path: PathBuf,
+    /// Unix seconds.
+    pub built_at: i64,
+    pub bytes: u64,
 }
 
 impl VolumeStatus {

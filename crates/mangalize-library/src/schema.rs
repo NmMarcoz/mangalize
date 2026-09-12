@@ -18,7 +18,7 @@ use rusqlite::Connection;
 pub const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Bump this and add a step whenever the schema changes.
-const CURRENT: i64 = 3;
+const CURRENT: i64 = 4;
 
 pub fn migrate(db: &Connection) -> Result<()> {
     // IMMEDIATE rather than SQLite's deferred default. Two commands opening a
@@ -76,6 +76,9 @@ fn steps(db: &Connection) -> Result<()> {
     }
     if version < 3 {
         db.execute_batch(V3)?;
+    }
+    if version < 4 {
+        db.execute_batch(V4)?;
     }
 
     db.execute(
@@ -172,6 +175,35 @@ ALTER TABLE chapters ADD COLUMN read_at INTEGER;
 ALTER TABLE chapters ADD COLUMN opened_at INTEGER;
 
 CREATE INDEX chapters_by_opened ON chapters (opened_at DESC);
+"#;
+
+/// What a built volume is, what a series can be filtered by, and what is
+/// actually on the shelf.
+///
+/// `built_path` is remembered so the app can offer to hand a volume to another
+/// app rather than spend a minute rebuilding a file that already exists. It is
+/// a claim about the world, not a fact: the user can delete the file, so
+/// anything reading it has to check the file is still there.
+///
+/// `tags` and `content_rating` are not derivable from anything else stored, and
+/// the metadata source hands them over with the rest of the series. `tags` is a
+/// newline-separated list rather than a join table: the only questions asked of
+/// it are "does this series have that tag" and "what tags exist across the
+/// library", both of which a few hundred short strings answer instantly.
+///
+/// `shelved` is what separates the library from history. Reading something from
+/// Explore records the series so that history and resuming work the same
+/// whatever the source, but the shelf stays what the user chose to put on it.
+const V4: &str = r#"
+ALTER TABLE volumes ADD COLUMN built_path TEXT;
+ALTER TABLE volumes ADD COLUMN built_at INTEGER;
+ALTER TABLE volumes ADD COLUMN built_bytes INTEGER;
+
+ALTER TABLE series ADD COLUMN tags TEXT NOT NULL DEFAULT '';
+ALTER TABLE series ADD COLUMN content_rating TEXT;
+ALTER TABLE series ADD COLUMN shelved INTEGER NOT NULL DEFAULT 1;
+
+CREATE INDEX series_by_shelved ON series (shelved);
 "#;
 
 #[cfg(test)]

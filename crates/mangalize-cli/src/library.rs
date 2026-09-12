@@ -138,6 +138,8 @@ fn add(library: &mut Library, query: &str, pick: usize) -> Result<()> {
         year: hit.year,
         status: hit.status.clone(),
         site_url: hit.site_url.clone(),
+        tags: hit.tags.iter().map(|t| t.name.clone()).collect(),
+        content_rating: hit.content_rating.clone(),
     })?;
 
     println!("added [{}] {}", series.id.0, series.title);

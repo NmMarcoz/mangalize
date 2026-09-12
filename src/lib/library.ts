@@ -30,6 +30,11 @@ export interface Series {
   synced_at: number | null;
   have_chapters: number;
   known_chapters: number;
+  /** What the library can be filtered and grouped by. */
+  tags: string[];
+  content_rating: string | null;
+  /** False for a series recorded only because it was read from its source. */
+  shelved: boolean;
 }
 
 export interface ChapterStatus {
@@ -57,6 +62,15 @@ export interface VolumeStatus {
   cover_url: string | null;
   cover_path: string | null;
   chapters: ChapterStatus[];
+  /** A file this volume was already written to, if it is still there. */
+  built: BuiltVolume | null;
+}
+
+export interface BuiltVolume {
+  path: string;
+  /** Unix seconds. */
+  built_at: number;
+  bytes: number;
 }
 
 export interface SyncReport {
@@ -219,6 +233,16 @@ export const downloadBatch = (id: number, items: BatchItem[]) =>
 
 export const cancelBatch = () => invoke<void>("cancel_batch");
 
+/**
+ * Fetch missing chapters straight from the metadata source.
+ *
+ * The URL batch exists because most sites can only be reached by pasting one
+ * and inferring the rest. When the source hosts the images itself there is
+ * nothing to infer, so this takes the chapter numbers directly.
+ */
+export const downloadFromSource = (id: number, chapters: string[]) =>
+  invoke<BatchReport>("download_from_source", { id, chapters });
+
 /* ------------------------------------------------------------------ helpers */
 
 /** The bucket the backend files chapters no published volume claims under. */
@@ -271,3 +295,15 @@ export const summariseRuns = (numbers: string[]): string => {
   }
   return runs.join(", ");
 };
+
+/** Remember where a volume the editor wrote ended up. */
+export const recordBuilt = (
+  id: number,
+  volume: string,
+  path: string,
+  bytes: number,
+): Promise<void> => invoke("library_record_built", { id, volume, path, bytes });
+
+/** Forget a recorded build. The file itself is left alone. */
+export const clearBuilt = (id: number, volume: string): Promise<void> =>
+  invoke("library_clear_built", { id, volume });

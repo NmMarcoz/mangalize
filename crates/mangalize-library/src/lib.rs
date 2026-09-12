@@ -30,8 +30,8 @@ use anyhow::{anyhow, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 
 pub use model::{
-    ChapterStatus, HistoryEntry, NewSeries, PublishedChapter, PublishedVolume, Series, SeriesId,
-    SyncReport, VolumeStatus,
+    BuiltVolume, ChapterStatus, HistoryEntry, NewSeries, PublishedChapter, PublishedVolume, Series,
+    SeriesId, SyncReport, VolumeStatus,
 };
 
 /// The name of the index file inside the library folder.
@@ -92,7 +92,28 @@ impl Library {
     /// Adding twice is something a user does by accident constantly — searching
     /// again for a series they already have — so it is idempotent rather than
     /// an error.
+    /// Add a series to the shelf, or return the one already there.
     pub fn add_series(&mut self, new: NewSeries) -> Result<Series> {
+        self.insert_series(new, true)
+    }
+
+    /// Record a series without putting it on the shelf.
+    ///
+    /// For something read straight from the source: history and resuming need a
+    /// row to hang off, but the user did not ask for it to be in their library.
+    /// A series already on the shelf stays there — this never demotes one.
+    pub fn record_unshelved_series(&mut self, new: NewSeries) -> Result<Series> {
+        self.insert_series(new, false)
+    }
+
+    /// Put a series that was only recorded onto the shelf.
+    pub fn shelve(&self, id: SeriesId) -> Result<()> {
+        self.db
+            .execute("UPDATE series SET shelved = 1 WHERE id = ?1", params![id.0])?;
+        Ok(())
+    }
+
+    fn insert_series(&mut self, new: NewSeries, shelved: bool) -> Result<Series> {
         if let (Some(source), Some(source_id)) = (&new.source, &new.source_id) {
             if let Some(existing) = self.find_by_source(source, source_id)? {
                 return Ok(existing);
@@ -104,8 +125,9 @@ impl Library {
             "INSERT INTO series
                (slug, source, source_id, title, title_romaji, title_native,
                 author, artist, description, year, status, language, direction,
-                site_url, added_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'en', 'right-to-left', ?12, ?13)",
+                site_url, added_at, tags, content_rating, shelved)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'en', 'right-to-left',
+                     ?12, ?13, ?14, ?15, ?16)",
             params![
                 "",
                 new.source,
@@ -120,6 +142,9 @@ impl Library {
                 new.status,
                 new.site_url,
                 now(),
+                new.tags.join("\n"),
+                new.content_rating,
+                shelved as i64,
             ],
         )?;
 
@@ -142,8 +167,10 @@ impl Library {
             .ok_or_else(|| anyhow!("no series with id {}", id.0))
     }
 
+    /// Everything on the shelf. Series recorded only by reading are excluded;
+    /// they reach the UI through `history` instead.
     pub fn all_series(&self) -> Result<Vec<Series>> {
-        self.query_series("ORDER BY s.title COLLATE NOCASE", params![])
+        self.query_series("WHERE s.shelved = 1 ORDER BY s.title COLLATE NOCASE", params![])
     }
 
     fn find_by_source(&self, source: &str, source_id: &str) -> Result<Option<Series>> {
@@ -340,11 +367,31 @@ impl Library {
         let folder = self.series(id)?.folder;
 
         let mut covers = self.db.prepare(
-            "SELECT number, cover_url, cover_path FROM volumes WHERE series_id = ?1",
+            "SELECT number, cover_url, cover_path, built_path, built_at, built_bytes
+               FROM volumes WHERE series_id = ?1",
         )?;
-        let covers: Vec<(String, Option<String>, Option<String>)> = covers
+        type VolumeRow = (String, Option<String>, Option<String>, Option<BuiltVolume>);
+        let covers: Vec<VolumeRow> = covers
             .query_map(params![id.0], |row| {
-                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                // A recorded build whose file has gone counts as not built, so a
+                // half-cleaned output folder heals itself rather than offering to
+                // share something that is not there.
+                let built = match (
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<i64>>(4)?,
+                    row.get::<_, Option<i64>>(5)?,
+                ) {
+                    (Some(path), Some(built_at), Some(bytes)) => {
+                        let path = PathBuf::from(path);
+                        path.is_file().then_some(BuiltVolume {
+                            path,
+                            built_at,
+                            bytes: bytes.max(0) as u64,
+                        })
+                    }
+                    _ => None,
+                };
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, built))
             })?
             .collect::<rusqlite::Result<_>>()?;
 
@@ -386,27 +433,30 @@ impl Library {
                     cover_url: None,
                     cover_path: None,
                     chapters: vec![chapter],
+                    built: None,
                 }),
             }
         }
 
         // A volume with published cover art but nothing known in it is still
         // worth showing: it is the clearest possible "you are missing all of v4".
-        for (number, cover_url, _) in &covers {
+        for (number, cover_url, _, _) in &covers {
             if !volumes.iter().any(|v| &v.number == number) {
                 volumes.push(VolumeStatus {
                     number: number.clone(),
                     cover_url: cover_url.clone(),
                     cover_path: None,
                     chapters: Vec::new(),
+                    built: None,
                 });
             }
         }
 
         for volume in &mut volumes {
-            if let Some((_, url, path)) = covers.iter().find(|(n, _, _)| n == &volume.number) {
+            if let Some((_, url, path, built)) = covers.iter().find(|(n, ..)| n == &volume.number) {
                 volume.cover_url = url.clone();
                 volume.cover_path = path.as_ref().map(|p| folder.join(p));
+                volume.built = built.clone();
             }
         }
 
@@ -416,6 +466,59 @@ impl Library {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         Ok(volumes)
+    }
+
+    /// Remember where a volume was written.
+    ///
+    /// Recorded against the volume rather than worked out from the output folder
+    /// on demand, because the folder is the user's and the naming rules can
+    /// change: what was written is a fact, where it would be written now is a
+    /// guess. `volumes` checks the file still exists before reporting it.
+    pub fn record_built(&self, id: SeriesId, number: &str, path: &Path, bytes: u64) -> Result<()> {
+        // A volume built out of loose chapters may have no published row yet.
+        self.db.execute(
+            "INSERT INTO volumes (series_id, number) VALUES (?1, ?2)
+             ON CONFLICT(series_id, number) DO NOTHING",
+            params![id.0, number],
+        )?;
+        self.db.execute(
+            "UPDATE volumes SET built_path = ?1, built_at = ?2, built_bytes = ?3
+              WHERE series_id = ?4 AND number = ?5",
+            params![path.to_string_lossy(), now(), bytes as i64, id.0, number],
+        )?;
+        Ok(())
+    }
+
+    /// Forget a recorded build, without touching the file.
+    pub fn clear_built(&self, id: SeriesId, number: &str) -> Result<()> {
+        self.db.execute(
+            "UPDATE volumes SET built_path = NULL, built_at = NULL, built_bytes = NULL
+              WHERE series_id = ?1 AND number = ?2",
+            params![id.0, number],
+        )?;
+        Ok(())
+    }
+
+    /// Note that a chapter exists and was opened, for a series being read from
+    /// its source rather than from disk.
+    ///
+    /// The chapter row carries no `folder`, which is the same shape as a chapter
+    /// the library knows about but does not hold — so history, resuming and the
+    /// missing-chapter filter all work on it without learning a new case.
+    pub fn record_streamed_chapter(
+        &self,
+        id: SeriesId,
+        number: &str,
+        source_id: Option<&str>,
+    ) -> Result<()> {
+        self.db.execute(
+            "INSERT INTO chapters (series_id, number, sort_key, source_id)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(series_id, number) DO UPDATE SET
+               source_id = COALESCE(excluded.source_id, chapters.source_id)",
+            params![id.0, number, paths::sort_key(number), source_id],
+        )?;
+        Ok(())
     }
 
     /* ------------------------------------------------------------ chapters */
@@ -682,7 +785,7 @@ impl Library {
             "SELECT s.id, s.slug, s.source, s.source_id, s.title, s.title_romaji,
                     s.title_native, s.author, s.artist, s.description, s.year,
                     s.status, s.language, s.direction, s.site_url, s.cover_path,
-                    s.added_at, s.synced_at,
+                    s.added_at, s.synced_at, s.tags, s.content_rating, s.shelved,
                     (SELECT COUNT(*) FROM chapters c
                       WHERE c.series_id = s.id AND c.folder IS NOT NULL),
                     (SELECT COUNT(*) FROM chapters c WHERE c.series_id = s.id)
@@ -714,8 +817,14 @@ impl Library {
                 folder,
                 added_at: row.get(16)?,
                 synced_at: row.get(17)?,
-                have_chapters: row.get::<_, i64>(18)? as u32,
-                known_chapters: row.get::<_, i64>(19)? as u32,
+                tags: {
+                    let raw: String = row.get(18)?;
+                    raw.lines().filter(|t| !t.is_empty()).map(str::to_owned).collect()
+                },
+                content_rating: row.get(19)?,
+                shelved: row.get::<_, i64>(20)? != 0,
+                have_chapters: row.get::<_, i64>(21)? as u32,
+                known_chapters: row.get::<_, i64>(22)? as u32,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)

@@ -34,6 +34,14 @@ interface EditorViewProps {
   onOpenFolder: () => void;
   /** Return to wherever this volume came from: a series, or the library. */
   onBack: () => void;
+  /**
+   * Told about every volume this editor writes.
+   *
+   * Deliberately a report rather than a destination: the editor does not know
+   * what the volume is to the rest of the app, and the caller that opened it
+   * does.
+   */
+  onBuilt?: (report: BuildReport) => void;
   /** From settings; pre-selects the format for a freshly opened volume. */
   defaultFormat: string;
   onError: (message: string | null) => void;
@@ -53,6 +61,7 @@ export function EditorView({
   onRescan,
   onOpenFolder,
   onBack,
+  onBuilt,
   defaultFormat,
   onError,
 }: EditorViewProps) {
@@ -376,6 +385,10 @@ export function EditorView({
         setBuilding({ done: 0, total: volumePageCount(volume) });
         const result = await buildVolume(volume, out, format);
         setReport(result);
+        // The editor does not know whether this volume came from a scanned
+        // folder or from the library, and must not learn to. Whoever opened it
+        // does know, and gets told what was written so it can act on that.
+        onBuilt?.(result);
         return result;
       } catch (e) {
         onError(String(e));
@@ -384,7 +397,7 @@ export function EditorView({
         setBuilding(null);
       }
     },
-    [volume, format, fileName, suggested, onError],
+    [volume, format, fileName, suggested, onError, onBuilt],
   );
 
   /**
