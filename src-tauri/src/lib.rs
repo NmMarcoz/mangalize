@@ -10,11 +10,13 @@
 //! - [`fetch`] — pulling a chapter's images off a URL (`mangalize-fetch`)
 //! - [`harvest`] — rendering a page to see what images it really loads
 //! - [`send`] — mailing a finished volume to a device (`mangalize-send`)
+//! - [`reader`] — reading a downloaded chapter; library only, works offline
 
 mod fetch;
 mod harvest;
 mod library;
 mod meta;
+mod reader;
 mod send;
 mod settings;
 mod thumbs;
@@ -72,6 +74,12 @@ pub fn run() {
             send::save_send_config,
             send::send_test_email,
             send::send_files,
+            reader::reader_chapter,
+            reader::reader_page,
+            reader::save_reading_progress,
+            reader::clear_reading_progress,
+            reader::reading_history,
+            reader::resume_point,
         ])
         .run(tauri::generate_context!())
         .expect("error while running mangalize");

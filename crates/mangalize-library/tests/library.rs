@@ -273,3 +273,120 @@ fn reopening_the_library_finds_everything_again() {
     assert_eq!(series.title, "Ichi the Witch");
     assert_eq!((series.have_chapters, series.known_chapters), (1, 6));
 }
+
+/* ------------------------------------------------------------------ reading */
+
+/// A series with three downloaded chapters, ready to be read.
+fn readable() -> (TempDir, Library, mangalize_library::SeriesId) {
+    let (dir, mut library) = open();
+    let series = library.add_series(ichi()).unwrap();
+    library.sync_layout(series.id, &layout()).unwrap();
+    for chapter in ["1", "2", "3"] {
+        write_chapter(&library.chapter_dir(series.id, chapter).unwrap(), 5);
+        library.record_chapter(series.id, chapter, 5, None).unwrap();
+    }
+    (dir, library, series.id)
+}
+
+#[test]
+fn progress_is_remembered_so_a_chapter_resumes_where_it_stopped() {
+    let (_dir, library, id) = readable();
+
+    library.save_progress(id, "2", 3, false).unwrap();
+
+    let chapter = library.chapter(id, "2").unwrap();
+    assert_eq!(chapter.last_page, 3);
+    assert!(chapter.opened_at.is_some(), "opening is what history records");
+    assert!(chapter.read_at.is_none(), "stopping midway is not finishing");
+}
+
+#[test]
+fn finishing_is_recorded_separately_from_opening() {
+    let (_dir, library, id) = readable();
+
+    library.save_progress(id, "1", 4, true).unwrap();
+    let finished = library.chapter(id, "1").unwrap();
+    assert!(finished.read_at.is_some());
+
+    // Re-reading must not rewrite when it was first completed.
+    let first_time = finished.read_at;
+    library.save_progress(id, "1", 1, true).unwrap();
+    assert_eq!(library.chapter(id, "1").unwrap().read_at, first_time);
+}
+
+#[test]
+fn history_is_most_recently_opened_first() {
+    let (_dir, library, id) = readable();
+
+    for chapter in ["1", "2", "3"] {
+        library.save_progress(id, chapter, 1, false).unwrap();
+        // The timestamp has one-second resolution, so order has to be forced.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+    }
+
+    let history = library.history(10).unwrap();
+    let order: Vec<&str> = history.iter().map(|h| h.chapter.as_str()).collect();
+    assert_eq!(order, ["3", "2", "1"]);
+    assert_eq!(history[0].series_title, "Ichi the Witch");
+    assert_eq!(history[0].page_count, 5);
+}
+
+#[test]
+fn history_skips_chapters_whose_pages_have_been_deleted() {
+    let (_dir, library, id) = readable();
+    library.save_progress(id, "1", 2, false).unwrap();
+    library.save_progress(id, "2", 2, false).unwrap();
+
+    library.delete_chapter(id, "1").unwrap();
+
+    // An entry pointing at pages that no longer exist is a dead end.
+    let history = library.history(10).unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].chapter, "2");
+}
+
+#[test]
+fn continue_reading_offers_the_chapter_that_was_left_unfinished() {
+    let (_dir, library, id) = readable();
+
+    library.save_progress(id, "1", 4, true).unwrap();
+    library.save_progress(id, "2", 2, false).unwrap();
+
+    let resume = library.resume_point(id).unwrap().expect("something to resume");
+    assert_eq!(resume.number, "2");
+    assert_eq!(resume.last_page, 2);
+}
+
+#[test]
+fn with_nothing_unfinished_it_offers_the_next_unread_chapter() {
+    let (_dir, library, id) = readable();
+
+    // Finished chapter one cleanly; there is nothing half-read to go back to.
+    library.save_progress(id, "1", 4, true).unwrap();
+
+    let resume = library.resume_point(id).unwrap().expect("something to resume");
+    assert_eq!(resume.number, "2", "should move on rather than repeat");
+    assert_eq!(resume.last_page, 0);
+}
+
+#[test]
+fn a_fully_read_series_has_nothing_to_resume() {
+    let (_dir, library, id) = readable();
+    for chapter in ["1", "2", "3"] {
+        library.save_progress(id, chapter, 4, true).unwrap();
+    }
+    assert!(library.resume_point(id).unwrap().is_none());
+}
+
+#[test]
+fn progress_can_be_cleared_without_touching_the_pages() {
+    let (_dir, library, id) = readable();
+    library.save_progress(id, "1", 4, true).unwrap();
+
+    library.clear_progress(id, "1").unwrap();
+
+    let chapter = library.chapter(id, "1").unwrap();
+    assert_eq!(chapter.last_page, 0);
+    assert!(chapter.read_at.is_none() && chapter.opened_at.is_none());
+    assert!(chapter.downloaded(), "the pages must still be there");
+}

@@ -9,7 +9,7 @@ use anyhow::{bail, Result};
 use rusqlite::Connection;
 
 /// Bump this and add a step whenever the schema changes.
-const CURRENT: i64 = 2;
+const CURRENT: i64 = 3;
 
 pub fn migrate(db: &Connection) -> Result<()> {
     db.execute_batch(
@@ -39,6 +39,9 @@ pub fn migrate(db: &Connection) -> Result<()> {
     }
     if version < 2 {
         db.execute_batch(V2)?;
+    }
+    if version < 3 {
+        db.execute_batch(V3)?;
     }
 
     db.execute(
@@ -120,6 +123,23 @@ ALTER TABLE chapters ADD COLUMN source_id TEXT;
 ALTER TABLE chapters ADD COLUMN unavailable INTEGER NOT NULL DEFAULT 0;
 "#;
 
+/// Where the reader left off.
+///
+/// Three columns rather than a separate progress table: a chapter has exactly
+/// one reading position, and joining a table to find it would buy nothing.
+///
+/// `opened_at` is what history is built from, and is deliberately separate from
+/// `read_at`. Opening a chapter and abandoning it on page three is the case
+/// "continue reading" exists for, and a single timestamp could not tell that
+/// apart from having finished it.
+const V3: &str = r#"
+ALTER TABLE chapters ADD COLUMN last_page INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE chapters ADD COLUMN read_at INTEGER;
+ALTER TABLE chapters ADD COLUMN opened_at INTEGER;
+
+CREATE INDEX chapters_by_opened ON chapters (opened_at DESC);
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,6 +149,46 @@ mod tests {
         let db = Connection::open_in_memory().unwrap();
         migrate(&db).unwrap();
         migrate(&db).unwrap();
+    }
+
+    #[test]
+    fn migrations_run_in_order_from_any_starting_version() {
+        for start in 0..=CURRENT {
+            let db = Connection::open_in_memory().unwrap();
+            db.execute_batch(
+                "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+            )
+            .unwrap();
+            if start >= 1 {
+                db.execute_batch(V1).unwrap();
+            }
+            if start >= 2 {
+                db.execute_batch(V2).unwrap();
+            }
+            if start >= 3 {
+                db.execute_batch(V3).unwrap();
+            }
+            db.execute(
+                "INSERT INTO meta (key, value) VALUES ('schema_version', ?1)",
+                [start.to_string()],
+            )
+            .unwrap();
+
+            migrate(&db).expect("migrating from v{start} should work");
+
+            // Every column the current code reads must exist afterwards.
+            db.query_row(
+                "SELECT number, source_id, unavailable, last_page, read_at, opened_at
+                   FROM chapters LIMIT 1",
+                [],
+                |_| Ok(()),
+            )
+            .or_else(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => Ok(()),
+                other => Err(other),
+            })
+            .unwrap_or_else(|e| panic!("v{start} -> current left a column missing: {e}"));
+        }
     }
 
     #[test]

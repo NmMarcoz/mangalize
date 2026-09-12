@@ -39,6 +39,12 @@ export interface ChapterStatus {
   source_id: string | null;
   /** The source indexes the chapter but does not host its images. */
   unavailable: boolean;
+  /** Zero-based page the reader was last on. */
+  last_page: number;
+  /** When the chapter was finished. `null` means it was not. */
+  read_at: number | null;
+  /** When it was last opened, finished or not. What history is built from. */
+  opened_at: number | null;
   /** `null` means we know the chapter exists but do not have it. */
   folder: string | null;
   page_count: number;

@@ -91,6 +91,12 @@ pub struct ChapterStatus {
     pub source_id: Option<String>,
     /// The source indexes it but cannot serve the images, so a URL is needed.
     pub unavailable: bool,
+    /// Zero-based page the reader was last on.
+    pub last_page: u32,
+    /// When the chapter was finished. `None` means it was not.
+    pub read_at: Option<i64>,
+    /// When it was last opened, finished or not. This is what history shows.
+    pub opened_at: Option<i64>,
     /// Absolute path to the chapter's images. `None` means we do not have it.
     pub folder: Option<PathBuf>,
     pub page_count: u32,
@@ -121,6 +127,19 @@ pub struct PublishedChapter {
     pub source_id: Option<String>,
     /// The source lists the chapter but cannot serve its images.
     pub unavailable: bool,
+}
+
+/// One entry in the reading history.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistoryEntry {
+    pub series_id: SeriesId,
+    pub series_title: String,
+    pub cover_path: Option<PathBuf>,
+    pub chapter: String,
+    pub last_page: u32,
+    pub page_count: u32,
+    pub opened_at: i64,
+    pub finished: bool,
 }
 
 /// What changed when a published layout was merged in.

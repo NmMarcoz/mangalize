@@ -10,20 +10,24 @@ use std::time::UNIX_EPOCH;
 
 use anyhow::{Context, Result};
 
-/// JPEG quality for cached thumbnails. High enough that page art stays legible
-/// in the grid, low enough that the cache stays small.
-const QUALITY: u8 = 80;
+/// JPEG quality for grid thumbnails. High enough that page art stays legible at
+/// card size, low enough that the cache stays small.
+pub const GRID_QUALITY: u8 = 80;
 
-/// Return a thumbnail bounded to `max` pixels wide, from cache when possible.
-pub fn get(cache_dir: &Path, src: PathBuf, max: u32) -> Result<Vec<u8>> {
-    let key = cache_key(&src, max)?;
+/// Quality for a page being actually read. The artefacts that go unnoticed in a
+/// 150px card are plainly visible filling a screen.
+pub const READING_QUALITY: u8 = 90;
+
+/// Return a page bounded to `max` pixels, from cache when possible.
+pub fn get(cache_dir: &Path, src: PathBuf, max: u32, quality: u8) -> Result<Vec<u8>> {
+    let key = cache_key(&src, max, quality)?;
     let cached = cache_dir.join(format!("{key}.jpg"));
 
     if let Ok(bytes) = std::fs::read(&cached) {
         return Ok(bytes);
     }
 
-    let bytes = render(&src, max)?;
+    let bytes = render(&src, max, quality)?;
 
     // Best effort: a cache write failing must not fail the request.
     if std::fs::create_dir_all(cache_dir).is_ok() {
@@ -37,7 +41,7 @@ pub fn get(cache_dir: &Path, src: PathBuf, max: u32) -> Result<Vec<u8>> {
 }
 
 /// Decode and downscale one page.
-fn render(src: &Path, max: u32) -> Result<Vec<u8>> {
+fn render(src: &Path, max: u32, quality: u8) -> Result<Vec<u8>> {
     let img = image::open(src).with_context(|| format!("decoding {}", src.display()))?;
 
     // `thumbnail` fits inside the box while preserving aspect ratio. The generous
@@ -47,7 +51,7 @@ fn render(src: &Path, max: u32) -> Result<Vec<u8>> {
 
     let mut out = Vec::new();
     let mut encoder =
-        image::codecs::jpeg::JpegEncoder::new_with_quality(std::io::Cursor::new(&mut out), QUALITY);
+        image::codecs::jpeg::JpegEncoder::new_with_quality(std::io::Cursor::new(&mut out), quality);
     encoder
         .encode_image(&thumb.to_rgb8())
         .context("encoding thumbnail")?;
@@ -57,8 +61,9 @@ fn render(src: &Path, max: u32) -> Result<Vec<u8>> {
 /// Identity of a source file plus the requested size.
 ///
 /// Includes modification time and length so replacing a page invalidates its
-/// cached thumbnail without needing to hash the file contents.
-fn cache_key(src: &Path, max: u32) -> Result<String> {
+/// cached thumbnail without needing to hash the file contents, and the quality
+/// so a reading-sized render never collides with a grid one.
+fn cache_key(src: &Path, max: u32, quality: u8) -> Result<String> {
     let meta = std::fs::metadata(src)
         .with_context(|| format!("reading {}", src.display()))?;
     let mtime = meta
@@ -68,7 +73,7 @@ fn cache_key(src: &Path, max: u32) -> Result<String> {
         .map(|d| d.as_nanos())
         .unwrap_or(0);
 
-    let seed = format!("{}|{}|{}|{}", src.display(), mtime, meta.len(), max);
+    let seed = format!("{}|{}|{}|{}|{}", src.display(), mtime, meta.len(), max, quality);
     Ok(format!("{:032x}", fnv1a(seed.as_bytes())))
 }
 

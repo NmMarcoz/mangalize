@@ -74,7 +74,7 @@ pub async fn thumbnail(
         .join("thumbs");
 
     tauri::async_runtime::spawn_blocking(move || {
-        thumbs::get(&cache_dir, PathBuf::from(path), max)
+        thumbs::get(&cache_dir, PathBuf::from(path), max, thumbs::GRID_QUALITY)
             .map(tauri::ipc::Response::new)
             .map_err(|e| format!("{e:#}"))
     })

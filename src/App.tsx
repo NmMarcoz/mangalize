@@ -12,6 +12,8 @@ import { EditorView } from "@/views/EditorView";
 import { LibraryView } from "@/views/LibraryView";
 import { SeriesView } from "@/views/SeriesView";
 import { ExploreView } from "@/views/ExploreView";
+import { HistoryView } from "@/views/HistoryView";
+import { ReaderView } from "@/views/ReaderView";
 import { SendView } from "@/views/SendView";
 import { SettingsView } from "@/views/SettingsView";
 import { WelcomeView } from "@/views/WelcomeView";
@@ -30,6 +32,8 @@ type View =
   | { kind: "library" }
   | { kind: "series"; id: number }
   | { kind: "explore" }
+  | { kind: "history" }
+  | { kind: "reader"; seriesId: number; chapter: string }
   | { kind: "send" }
   | { kind: "settings" }
   | { kind: "editor"; from: { seriesId: number } | null };
@@ -116,6 +120,32 @@ export default function App() {
       return <WelcomeView onDone={setSettings} onError={setError} />;
     }
 
+    // The reader takes the whole window: a rail beside a page is a rail in
+    // the way. It is the one screen that hides the app's chrome.
+    if (view.kind === "reader") {
+      return (
+        <ReaderView
+          seriesId={view.seriesId}
+          chapter={view.chapter}
+          onChapter={(chapter) =>
+            setView({ kind: "reader", seriesId: view.seriesId, chapter })
+          }
+          onExit={() => setView({ kind: "series", id: view.seriesId })}
+          onError={setError}
+        />
+      );
+    }
+
+    if (view.kind === "history") {
+      return (
+        <HistoryView
+          onRead={(seriesId, chapter) => setView({ kind: "reader", seriesId, chapter })}
+          onOpenSeries={(id) => setView({ kind: "series", id })}
+          onError={setError}
+        />
+      );
+    }
+
     if (view.kind === "explore") {
       return (
         <ExploreView
@@ -152,6 +182,9 @@ export default function App() {
       return (
         <SeriesView
           seriesId={view.id}
+          onRead={(chapter) =>
+            setView({ kind: "reader", seriesId: view.id, chapter })
+          }
           onBack={() => setView({ kind: "library" })}
           onEditVolume={(built, source) => {
             clearThumbnails();
@@ -195,10 +228,13 @@ export default function App() {
   // A series and the editor both sit under the library as far as navigation is
   // concerned, so neither gets its own rail entry.
   const section: Section =
-    view.kind === "settings" || view.kind === "send" || view.kind === "explore"
+    view.kind === "settings" ||
+    view.kind === "send" ||
+    view.kind === "explore" ||
+    view.kind === "history"
       ? view.kind
       : "library";
-  const chrome = settings !== null && settings.welcomed;
+  const chrome = settings !== null && settings.welcomed && view.kind !== "reader";
 
   return (
     <TooltipProvider delayDuration={400}>

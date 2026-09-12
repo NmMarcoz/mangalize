@@ -30,8 +30,8 @@ use anyhow::{anyhow, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 
 pub use model::{
-    ChapterStatus, NewSeries, PublishedChapter, PublishedVolume, Series, SeriesId, SyncReport,
-    VolumeStatus,
+    ChapterStatus, HistoryEntry, NewSeries, PublishedChapter, PublishedVolume, Series, SeriesId,
+    SyncReport, VolumeStatus,
 };
 
 /// The name of the index file inside the library folder.
@@ -334,7 +334,7 @@ impl Library {
 
         let mut stmt = self.db.prepare(
             "SELECT volume, number, title, folder, page_count, source_url, downloaded_at,
-                    source_id, unavailable
+                    source_id, unavailable, last_page, read_at, opened_at
                FROM chapters WHERE series_id = ?1
               ORDER BY sort_key IS NULL, sort_key, number",
         )?;
@@ -352,6 +352,9 @@ impl Library {
                         downloaded_at: row.get(6)?,
                         source_id: row.get(7)?,
                         unavailable: row.get(8)?,
+                        last_page: row.get::<_, i64>(9)? as u32,
+                        read_at: row.get(10)?,
+                        opened_at: row.get(11)?,
                     },
                 ))
             })?
@@ -450,7 +453,7 @@ impl Library {
         self.db
             .query_row(
                 "SELECT number, title, folder, page_count, source_url, downloaded_at,
-                        source_id, unavailable
+                        source_id, unavailable, last_page, read_at, opened_at
                    FROM chapters WHERE series_id = ?1 AND number = ?2",
                 params![id.0, number],
                 |row| {
@@ -464,6 +467,9 @@ impl Library {
                         downloaded_at: row.get(5)?,
                         source_id: row.get(6)?,
                         unavailable: row.get(7)?,
+                        last_page: row.get::<_, i64>(8)? as u32,
+                        read_at: row.get(9)?,
+                        opened_at: row.get(10)?,
                     })
                 },
             )
@@ -493,6 +499,164 @@ impl Library {
             params![id.0, number],
         )?;
         Ok(())
+    }
+
+    /* ------------------------------------------------------------- reading */
+
+    /// Every downloaded chapter number, in reading order.
+    ///
+    /// What the reader steps through: chapters it does not hold are not gaps to
+    /// stop at, they are simply not there.
+    pub fn downloaded_chapter_numbers(&self, id: SeriesId) -> Result<Vec<String>> {
+        let mut stmt = self.db.prepare(
+            "SELECT number FROM chapters
+              WHERE series_id = ?1 AND folder IS NOT NULL
+              ORDER BY sort_key IS NULL, sort_key, number",
+        )?;
+        let numbers = stmt
+            .query_map(params![id.0], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(numbers)
+    }
+
+    /// The page files of a downloaded chapter, in reading order.
+    ///
+    /// Sorted naturally rather than lexicographically. Pages this app wrote are
+    /// zero-padded and would sort correctly either way, but a chapter imported
+    /// from a folder the user already had need not be.
+    pub fn chapter_page_files(&self, id: SeriesId, number: &str) -> Result<Vec<PathBuf>> {
+        let chapter = self.chapter(id, number)?;
+        let folder = chapter
+            .folder
+            .ok_or_else(|| anyhow!("chapter {number} has not been downloaded"))?;
+
+        let mut files: Vec<PathBuf> = std::fs::read_dir(&folder)
+            .with_context(|| format!("reading {}", folder.display()))?
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.file_type().map(|t| t.is_file()).unwrap_or(false))
+            .map(|entry| entry.path())
+            .filter(|path| mangalize_core::page::extension_verdict(path).is_none())
+            .collect();
+
+        files.sort_by(|a, b| {
+            let name = |p: &PathBuf| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default()
+                    .to_string()
+            };
+            mangalize_core::natsort::natural_cmp(&name(a), &name(b))
+        });
+        Ok(files)
+    }
+
+    /// Record where the reader is in a chapter.
+    ///
+    /// `finished` is passed rather than inferred from the page number: a reader
+    /// that stops on the last page has not necessarily finished it, and one
+    /// that skips to the end has. Only the caller watching the reader knows.
+    ///
+    /// `read_at` is set once and then left alone, so re-reading does not erase
+    /// when a chapter was first completed.
+    pub fn save_progress(
+        &self,
+        id: SeriesId,
+        number: &str,
+        page: u32,
+        finished: bool,
+    ) -> Result<()> {
+        let now = now();
+        self.db.execute(
+            "UPDATE chapters
+                SET last_page = ?3,
+                    opened_at = ?4,
+                    read_at = CASE WHEN ?5 THEN COALESCE(read_at, ?4) ELSE read_at END
+              WHERE series_id = ?1 AND number = ?2",
+            params![id.0, number, page as i64, now, finished],
+        )?;
+        Ok(())
+    }
+
+    /// Forget that a chapter was read, without touching its files.
+    pub fn clear_progress(&self, id: SeriesId, number: &str) -> Result<()> {
+        self.db.execute(
+            "UPDATE chapters SET last_page = 0, read_at = NULL, opened_at = NULL
+              WHERE series_id = ?1 AND number = ?2",
+            params![id.0, number],
+        )?;
+        Ok(())
+    }
+
+    /// Recently opened chapters, newest first.
+    ///
+    /// Only chapters still on disk: an entry pointing at pages that have been
+    /// deleted is a dead end rather than history.
+    pub fn history(&self, limit: u32) -> Result<Vec<HistoryEntry>> {
+        let series_root = self.root.join("series");
+        let mut stmt = self.db.prepare(
+            "SELECT s.id, s.slug, s.title, s.cover_path,
+                    c.number, c.last_page, c.page_count, c.opened_at, c.read_at
+               FROM chapters c
+               JOIN series s ON s.id = c.series_id
+              WHERE c.opened_at IS NOT NULL AND c.folder IS NOT NULL
+              ORDER BY c.opened_at DESC
+              LIMIT ?1",
+        )?;
+
+        let rows = stmt.query_map(params![limit], |row| {
+            let slug: String = row.get(1)?;
+            let folder = series_root.join(&slug);
+            let cover: Option<String> = row.get(3)?;
+            Ok(HistoryEntry {
+                series_id: SeriesId(row.get(0)?),
+                series_title: row.get(2)?,
+                cover_path: cover.map(|c| folder.join(c)),
+                chapter: row.get(4)?,
+                last_page: row.get::<_, i64>(5)? as u32,
+                page_count: row.get::<_, i64>(6)? as u32,
+                opened_at: row.get(7)?,
+                finished: row.get::<_, Option<i64>>(8)?.is_some(),
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The chapter to offer as "continue reading" for a series.
+    ///
+    /// The most recently opened unfinished chapter, or failing that the first
+    /// downloaded chapter that has never been opened. Someone who finished
+    /// everything they started wants the next one, not the last one again.
+    pub fn resume_point(&self, id: SeriesId) -> Result<Option<ChapterStatus>> {
+        let unfinished: Option<String> = self
+            .db
+            .query_row(
+                "SELECT number FROM chapters
+                  WHERE series_id = ?1 AND folder IS NOT NULL
+                    AND opened_at IS NOT NULL AND read_at IS NULL
+                  ORDER BY opened_at DESC LIMIT 1",
+                params![id.0],
+                |row| row.get(0),
+            )
+            .optional()?;
+
+        let number = match unfinished {
+            Some(number) => Some(number),
+            None => self
+                .db
+                .query_row(
+                    "SELECT number FROM chapters
+                      WHERE series_id = ?1 AND folder IS NOT NULL AND read_at IS NULL
+                      ORDER BY sort_key IS NULL, sort_key, number LIMIT 1",
+                    params![id.0],
+                    |row| row.get(0),
+                )
+                .optional()?,
+        };
+
+        match number {
+            Some(number) => Ok(Some(self.chapter(id, &number)?)),
+            None => Ok(None),
+        }
     }
 
     /* ------------------------------------------------------------- helpers */

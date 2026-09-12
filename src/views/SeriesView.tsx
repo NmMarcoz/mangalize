@@ -65,6 +65,8 @@ interface SeriesViewProps {
   onEditVolume: (volume: Volume, source: { seriesId: number; number: string }) => void;
   /** From settings; what a batch build writes. */
   defaultFormat: string;
+  /** Open a downloaded chapter in the reader. */
+  onRead: (chapter: string) => void;
   onError: (message: string | null) => void;
 }
 
@@ -81,6 +83,7 @@ export function SeriesView({
   onBack,
   onEditVolume,
   defaultFormat,
+  onRead,
   onError,
 }: SeriesViewProps) {
   const [series, setSeries] = useState<Series | null>(null);
@@ -457,6 +460,7 @@ export function SeriesView({
             onClose={() => setSelected(null)}
             onBuild={() => void edit(detail.number)}
             onGet={setFetching}
+            onRead={onRead}
             onFetchDirect={(chapter) => void fetchDirect(chapter)}
             fetchingDirect={fetchingDirect}
             onImport={(chapter) => void importFolder(chapter)}
@@ -760,6 +764,7 @@ function VolumePanel({
   onClose,
   onBuild,
   onGet,
+  onRead,
   onFetchDirect,
   fetchingDirect,
   onImport,
@@ -770,6 +775,7 @@ function VolumePanel({
   onClose: () => void;
   onBuild: () => void;
   onGet: (chapter: string) => void;
+  onRead: (chapter: string) => void;
   onFetchDirect: (chapter: string) => void;
   /** Chapter number currently being pulled from the source, if any. */
   fetchingDirect: string | null;
@@ -806,6 +812,7 @@ function VolumePanel({
               chapter={chapter}
               busy={fetchingDirect === chapter.number}
               onGet={() => onGet(chapter.number)}
+              onRead={() => onRead(chapter.number)}
               onFetchDirect={() => onFetchDirect(chapter.number)}
               onImport={() => onImport(chapter.number)}
               onRemove={() => onRemove(chapter.number)}
@@ -828,6 +835,7 @@ function ChapterRow({
   chapter,
   busy,
   onGet,
+  onRead,
   onFetchDirect,
   onImport,
   onRemove,
@@ -835,6 +843,7 @@ function ChapterRow({
   chapter: ChapterStatus;
   busy: boolean;
   onGet: () => void;
+  onRead: () => void;
   onFetchDirect: () => void;
   onImport: () => void;
   onRemove: () => void;
@@ -860,6 +869,9 @@ function ChapterRow({
 
       <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
         {have ? `${chapter.page_count} pages` : "missing"}
+        {have && chapter.read_at && " · read"}
+        {have && !chapter.read_at && chapter.last_page > 0 &&
+          ` · page ${chapter.last_page + 1}`}
         {chapter.title ? ` · ${chapter.title}` : ""}
         {!have && chapter.unavailable && (
           // Not an error: the source indexes the chapter but the publisher
@@ -878,6 +890,22 @@ function ChapterRow({
           <Hint label="Replace with a different rip">
             <Button variant="ghost" size="sm" onClick={onGet}>
               Replace
+            </Button>
+          </Hint>
+          <Hint
+            label={
+              chapter.last_page > 0 && !chapter.read_at
+                ? `Resume on page ${chapter.last_page + 1}`
+                : "Read this chapter"
+            }
+          >
+            <Button variant="outline" size="sm" onClick={onRead}>
+              <BookOpen className="size-3" />
+              {chapter.read_at
+                ? "Re-read"
+                : chapter.last_page > 0
+                  ? "Resume"
+                  : "Read"}
             </Button>
           </Hint>
         </>
