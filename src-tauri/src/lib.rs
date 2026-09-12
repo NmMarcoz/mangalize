@@ -40,6 +40,8 @@ pub fn run() {
             settings::set_settings,
             settings::suggested_output_root,
             meta::search_series,
+            meta::browse_series,
+            meta::mangadex_tags,
             meta::series_covers,
             meta::series_chapters,
             meta::save_cover,

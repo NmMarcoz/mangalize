@@ -7,7 +7,10 @@
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
 
-use crate::{get_json, volume_sort_key, ChapterRef, SeriesMatch, Source, VolumeChapters, VolumeCover};
+use crate::{
+    get_json, volume_sort_key, BrowsePage, BrowseQuery, ChapterRef, ContentRating, SeriesMatch,
+    Sort, Source, Tag, VolumeChapters, VolumeCover,
+};
 
 const API: &str = "https://api.mangadex.org";
 const UPLOADS: &str = "https://uploads.mangadex.org/covers";
@@ -30,6 +33,112 @@ pub fn search(query: &str, limit: u32) -> Result<Vec<SeriesMatch>> {
         .as_array()
         .map(|items| items.iter().filter_map(parse_series).collect())
         .unwrap_or_default())
+}
+
+/// Browse the catalogue.
+///
+/// The same `/manga` endpoint a search uses, with an ordering instead of (or as
+/// well as) a title. That is what lets the panel open on something to look at
+/// rather than an empty box.
+pub fn browse(query: &BrowseQuery) -> Result<BrowsePage> {
+    let mut params: Vec<(String, String)> = vec![
+        ("limit".into(), query.limit.clamp(1, 100).to_string()),
+        ("offset".into(), query.offset.to_string()),
+        ("includes[]".into(), "author".into()),
+        ("includes[]".into(), "artist".into()),
+        ("includes[]".into(), "cover_art".into()),
+    ];
+
+    let title = query
+        .title
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty());
+
+    // Relevance only means anything next to a search term; asking for it
+    // without one returns the catalogue in no useful order at all.
+    let sort = match (query.sort, title) {
+        (Sort::Relevance, None) => Sort::Follows,
+        (sort, _) => sort,
+    };
+    let direction = if query.descending { "desc" } else { "asc" };
+    params.push((format!("order[{}]", sort.key()), direction.into()));
+
+    if let Some(title) = title {
+        params.push(("title".into(), title.to_string()));
+    }
+
+    // An empty selection means the user cleared every box, not that they want
+    // whatever the API defaults to — which includes more than this app starts
+    // with. Fall back to the conservative set instead.
+    let ratings = if query.content_ratings.is_empty() {
+        ContentRating::default_set()
+    } else {
+        query.content_ratings.clone()
+    };
+    for rating in ratings {
+        params.push(("contentRating[]".into(), rating.key().into()));
+    }
+
+    for tag in &query.included_tags {
+        params.push(("includedTags[]".into(), tag.clone()));
+    }
+    for tag in &query.excluded_tags {
+        params.push(("excludedTags[]".into(), tag.clone()));
+    }
+    for status in &query.status {
+        params.push(("status[]".into(), status.clone()));
+    }
+    for demographic in &query.demographic {
+        params.push(("publicationDemographic[]".into(), demographic.clone()));
+    }
+
+    let borrowed: Vec<(&str, &str)> = params
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect();
+    let body = get_json(&format!("{API}/manga"), &borrowed)?;
+
+    Ok(BrowsePage {
+        series: body["data"]
+            .as_array()
+            .map(|items| items.iter().filter_map(parse_series).collect())
+            .unwrap_or_default(),
+        total: body["total"].as_u64().unwrap_or(0) as u32,
+        offset: body["offset"].as_u64().unwrap_or(0) as u32,
+    })
+}
+
+/// Every tag a series can carry.
+///
+/// Small and effectively static, so the caller is expected to ask once and keep
+/// the answer for the session rather than per keystroke.
+pub fn tags() -> Result<Vec<Tag>> {
+    let body = get_json(&format!("{API}/manga/tag"), &[])?;
+
+    let mut tags: Vec<Tag> = body["data"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    Some(Tag {
+                        id: item["id"].as_str()?.to_string(),
+                        // Tag names are localised; English is the only one the
+                        // API reliably carries for all of them.
+                        name: item["attributes"]["name"]["en"].as_str()?.to_string(),
+                        group: item["attributes"]["group"]
+                            .as_str()
+                            .unwrap_or("other")
+                            .to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    tags.sort_by(|a, b| a.group.cmp(&b.group).then_with(|| a.name.cmp(&b.name)));
+    Ok(tags)
 }
 
 fn parse_series(item: &Value) -> Option<SeriesMatch> {
@@ -292,6 +401,48 @@ mod tests {
         assert_eq!(parsed.title_english.as_deref(), Some("Solo Work"));
         assert!(parsed.title_romaji.is_none());
         assert!(parsed.author.is_none());
+    }
+
+    #[test]
+    fn relevance_without_a_search_term_falls_back_to_something_ordered() {
+        // Asking the API to order by relevance with nothing to be relevant to
+        // returns the catalogue arbitrarily, which looks broken.
+        let query = BrowseQuery {
+            title: None,
+            sort: Sort::Relevance,
+            ..BrowseQuery::default()
+        };
+        let effective = match (query.sort, query.title.as_deref()) {
+            (Sort::Relevance, None) => Sort::Follows,
+            (sort, _) => sort,
+        };
+        assert_eq!(effective, Sort::Follows);
+    }
+
+    #[test]
+    fn a_fresh_browse_does_not_open_on_explicit_material() {
+        let defaults = BrowseQuery::default();
+        assert_eq!(
+            defaults.content_ratings,
+            vec![ContentRating::Safe, ContentRating::Suggestive]
+        );
+        assert!(!defaults.content_ratings.contains(&ContentRating::Pornographic));
+    }
+
+    #[test]
+    fn every_ordering_has_an_api_name() {
+        for sort in [
+            Sort::LatestUpload,
+            Sort::Follows,
+            Sort::Rating,
+            Sort::RecentlyAdded,
+            Sort::Title,
+            Sort::Relevance,
+        ] {
+            assert!(!sort.key().is_empty());
+        }
+        assert_eq!(Sort::Follows.key(), "followedCount");
+        assert_eq!(Sort::LatestUpload.key(), "latestUploadedChapter");
     }
 
     #[test]

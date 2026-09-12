@@ -78,6 +78,123 @@ pub struct VolumeCover {
     pub thumbnail_url: String,
 }
 
+/// How to order a browse.
+///
+/// Every one can run either way, which is what turns "most followed" into
+/// "least followed" without a second list of options.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Sort {
+    /// Something new to read: whatever was uploaded to most recently.
+    LatestUpload,
+    /// What most people are reading.
+    Follows,
+    Rating,
+    /// Newest entries in the catalogue, which is not the same as newest chapters.
+    RecentlyAdded,
+    Title,
+    /// Only meaningful alongside a title query.
+    Relevance,
+}
+
+impl Sort {
+    /// The API's parameter name for this ordering.
+    fn key(self) -> &'static str {
+        match self {
+            Sort::LatestUpload => "latestUploadedChapter",
+            Sort::Follows => "followedCount",
+            Sort::Rating => "rating",
+            Sort::RecentlyAdded => "createdAt",
+            Sort::Title => "title",
+            Sort::Relevance => "relevance",
+        }
+    }
+}
+
+/// How explicit a series is allowed to be.
+///
+/// MangaDex's own default omits `Pornographic`; this app is narrower still and
+/// starts at the first two, because a browse with no query is the first thing
+/// the panel shows and should not open on anything unasked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ContentRating {
+    Safe,
+    Suggestive,
+    Erotica,
+    Pornographic,
+}
+
+impl ContentRating {
+    fn key(self) -> &'static str {
+        match self {
+            ContentRating::Safe => "safe",
+            ContentRating::Suggestive => "suggestive",
+            ContentRating::Erotica => "erotica",
+            ContentRating::Pornographic => "pornographic",
+        }
+    }
+
+    /// What a fresh install browses with.
+    pub fn default_set() -> Vec<Self> {
+        vec![ContentRating::Safe, ContentRating::Suggestive]
+    }
+}
+
+/// A tag a series can be filed under.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Tag {
+    pub id: String,
+    pub name: String,
+    /// `genre`, `theme`, `format` or `content`.
+    pub group: String,
+}
+
+/// What to browse for. Every field is optional; the default is a plain catalogue
+/// listing, which is the point — exploring should not require a search term.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowseQuery {
+    /// Free text. Switches the default ordering to relevance when set.
+    pub title: Option<String>,
+    pub sort: Sort,
+    pub descending: bool,
+    pub included_tags: Vec<String>,
+    pub excluded_tags: Vec<String>,
+    pub content_ratings: Vec<ContentRating>,
+    /// `ongoing`, `completed`, `hiatus`, `cancelled`.
+    pub status: Vec<String>,
+    /// `shounen`, `shoujo`, `josei`, `seinen`.
+    pub demographic: Vec<String>,
+    pub limit: u32,
+    pub offset: u32,
+}
+
+impl Default for BrowseQuery {
+    fn default() -> Self {
+        Self {
+            title: None,
+            sort: Sort::Follows,
+            descending: true,
+            included_tags: Vec::new(),
+            excluded_tags: Vec::new(),
+            content_ratings: ContentRating::default_set(),
+            status: Vec::new(),
+            demographic: Vec::new(),
+            limit: 32,
+            offset: 0,
+        }
+    }
+}
+
+/// One page of browse results.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrowsePage {
+    pub series: Vec<SeriesMatch>,
+    /// How many match the query in total, for paging.
+    pub total: u32,
+    pub offset: u32,
+}
+
 /// One chapter as the source knows it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChapterRef {
@@ -129,6 +246,19 @@ pub fn volume_covers(source: Source, id: &str) -> Result<Vec<VolumeCover>> {
         Source::MangaDex => mangadex::volume_covers(id),
         Source::Kitsu => kitsu::poster(id).map(|c| c.into_iter().collect()),
     }
+}
+
+/// Browse the catalogue, with or without a search term.
+///
+/// Only MangaDex: Kitsu is a fallback for looking a known title up, not
+/// something to explore.
+pub fn browse(query: &BrowseQuery) -> Result<BrowsePage> {
+    mangadex::browse(query)
+}
+
+/// Every tag a series can carry, for building a filter picker.
+pub fn tags() -> Result<Vec<Tag>> {
+    mangadex::tags()
 }
 
 /// Image URLs for one chapter, straight from the source.

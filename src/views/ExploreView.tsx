@@ -1,26 +1,31 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   Check,
-  Compass,
   Download,
   ExternalLink,
   Loader2,
   Plus,
   Search,
+  SlidersHorizontal,
 } from "lucide-react";
 
+import { BrowseFilters, FilterSummary } from "@/components/BrowseFilters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Hint } from "@/components/ui/tooltip";
 import { useSeriesDetail } from "@/hooks/useSeriesDetail";
+import { sourceLabel, type ChapterRef, type SeriesMatch } from "@/lib/api";
 import {
-  searchSeries,
-  sourceLabel,
-  type ChapterRef,
-  type SeriesMatch,
-} from "@/lib/api";
+  browseSeries,
+  defaultQuery,
+  isFiltered,
+  mangadexTags,
+  PAGE_SIZE,
+  type BrowseQuery,
+  type Tag,
+} from "@/lib/browse";
 import {
   downloadChapterFromSource,
   libraryAddSeries,
@@ -36,16 +41,22 @@ interface ExploreViewProps {
 }
 
 /**
- * Search the metadata sources and pull chapters without leaving the app.
+ * Browse the catalogue, not just search it.
  *
- * The library is for things you have; this is for finding things you do not.
- * Adding is idempotent, so downloading a chapter from here quietly adds the
- * series first rather than making that a separate step.
+ * Opening on an empty search box asks the user to already know what they want,
+ * which is the opposite of exploring. This opens on the most-followed series and
+ * gives sorting, tags and content rating to move around with; the search box is
+ * one more filter rather than the way in.
  */
 export function ExploreView({ onOpenSeries, onError }: ExploreViewProps) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SeriesMatch[] | null>(null);
-  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState<BrowseQuery>(defaultQuery);
+  const [text, setText] = useState("");
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+
+  const [results, setResults] = useState<SeriesMatch[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<SeriesMatch | null>(null);
 
   const [owned, setOwned] = useState<Series[]>([]);
@@ -53,6 +64,9 @@ export function ExploreView({ onOpenSeries, onError }: ExploreViewProps) {
   const [fetching, setFetching] = useState<string | null>(null);
 
   const detail = useSeriesDetail(selected, onError);
+
+  /** Guards against a slow earlier page landing after a newer one. */
+  const request = useRef(0);
 
   const refreshOwned = useCallback(() => {
     librarySeries()
@@ -62,7 +76,72 @@ export function ExploreView({ onOpenSeries, onError }: ExploreViewProps) {
 
   useEffect(refreshOwned, [refreshOwned]);
 
-  /** The library entry for the selected result, when there is one. */
+  // The tag list is effectively static, so it is fetched once rather than with
+  // every browse.
+  useEffect(() => {
+    mangadexTags()
+      .then(setTags)
+      .catch(() => {});
+  }, []);
+
+  /** Run a browse. `append` keeps what is on screen and adds the next page. */
+  const run = useCallback(
+    async (next: BrowseQuery, append: boolean) => {
+      const ticket = ++request.current;
+      setLoading(true);
+      onError(null);
+      try {
+        const page = await browseSeries(next);
+        // A filter changed while this was in flight; its results are stale.
+        if (ticket !== request.current) return;
+        setResults((current) => (append ? [...current, ...page.series] : page.series));
+        setTotal(page.total);
+      } catch (e) {
+        if (ticket === request.current) onError(String(e));
+      } finally {
+        if (ticket === request.current) setLoading(false);
+      }
+    },
+    [onError],
+  );
+
+  // Any change to the query starts a fresh first page.
+  useEffect(() => {
+    void run({ ...query, offset: 0 }, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    query.title,
+    query.sort,
+    query.descending,
+    query.included_tags,
+    query.excluded_tags,
+    query.content_ratings,
+    query.status,
+    query.demographic,
+  ]);
+
+  const patch = useCallback((fields: Partial<BrowseQuery>) => {
+    setSelected(null);
+    setQuery((current) => ({ ...current, ...fields, offset: 0 }));
+  }, []);
+
+  const submitSearch = useCallback(() => {
+    const trimmed = text.trim();
+    patch({
+      title: trimmed || null,
+      // Relevance is only meaningful with a term; dropping it on clear restores
+      // an ordering that actually means something.
+      sort: trimmed ? "relevance" : "follows",
+      descending: true,
+    });
+  }, [text, patch]);
+
+  const loadMore = useCallback(() => {
+    const offset = results.length;
+    setQuery((current) => ({ ...current, offset }));
+    void run({ ...query, offset }, true);
+  }, [results.length, query, run]);
+
   const existing = useMemo(
     () =>
       selected
@@ -73,26 +152,6 @@ export function ExploreView({ onOpenSeries, onError }: ExploreViewProps) {
     [owned, selected],
   );
 
-  const runSearch = useCallback(async () => {
-    if (!query.trim()) return;
-    setSearching(true);
-    setSelected(null);
-    onError(null);
-    try {
-      const hits = await searchSeries(query);
-      setResults(hits);
-      if (hits.length === 0) {
-        onError("No matches. Try the original Japanese title.");
-      }
-    } catch (e) {
-      onError(String(e));
-      setResults([]);
-    } finally {
-      setSearching(false);
-    }
-  }, [query, onError]);
-
-  /** Add to the library, returning the entry so a download can follow. */
   const ensureAdded = useCallback(async (): Promise<Series | null> => {
     if (!selected) return null;
     if (existing) return existing;
@@ -139,54 +198,91 @@ export function ExploreView({ onOpenSeries, onError }: ExploreViewProps) {
       <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card/60 px-4 py-2.5">
         <h1 className="mr-2 text-sm font-semibold">Explore</h1>
         <Input
-          autoFocus
-          value={query}
-          placeholder="Search MangaDex…"
-          className="max-w-md"
-          onChange={(e) => setQuery(e.target.value)}
+          value={text}
+          placeholder="Search by title, or just browse…"
+          className="max-w-sm"
+          onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") void runSearch();
+            if (e.key === "Enter") submitSearch();
           }}
         />
-        <Button onClick={() => void runSearch()} disabled={searching || !query.trim()}>
-          {searching ? <Loader2 className="animate-spin" /> : <Search />}
-          Search
+        <Button variant="outline" size="icon" onClick={submitSearch}>
+          <Search />
         </Button>
+
+        <Button
+          variant={showFilters || isFiltered(query) ? "default" : "ghost"}
+          size="sm"
+          onClick={() => setShowFilters((open) => !open)}
+        >
+          <SlidersHorizontal />
+          Filters
+        </Button>
+
+        {!showFilters && <FilterSummary query={query} tags={tags} />}
+
+        <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
+          {total > 0 && `${total.toLocaleString()} series`}
+        </span>
       </header>
+
+      {showFilters && (
+        <BrowseFilters
+          query={query}
+          tags={tags}
+          onChange={patch}
+          onReset={() => {
+            setText("");
+            setSelected(null);
+            setQuery(defaultQuery());
+          }}
+        />
+      )}
 
       <div className="flex min-h-0 flex-1">
         <main className="scrollbar-thin min-w-0 flex-1 overflow-y-auto p-5">
-          {results === null ? (
-            <div className="mx-auto mt-20 max-w-md text-center">
-              <Compass className="mx-auto size-8 text-muted-foreground" />
-              <h2 className="mt-3 text-sm font-medium">Find something to read</h2>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Search MangaDex by title. Anything it hosts can be pulled
-                straight in; anything it only indexes will say so, and you can
-                still fetch it by pasting a URL from the series page.
-              </p>
+          {results.length === 0 && loading ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" /> Loading…
             </div>
+          ) : results.length === 0 ? (
+            <p className="mt-16 text-center text-xs text-muted-foreground">
+              Nothing matches those filters.
+            </p>
           ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
-              {results.map((match) => (
-                <ResultCard
-                  key={`${match.source}-${match.id}`}
-                  match={match}
-                  selected={selected?.id === match.id}
-                  owned={owned.some(
-                    (s) => s.source === match.source && s.source_id === match.id,
-                  )}
-                  onSelect={() => setSelected(match)}
-                />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
+                {results.map((match) => (
+                  <ResultCard
+                    key={`${match.source}-${match.id}`}
+                    match={match}
+                    selected={selected?.id === match.id}
+                    owned={owned.some(
+                      (s) => s.source === match.source && s.source_id === match.id,
+                    )}
+                    onSelect={() => setSelected(match)}
+                  />
+                ))}
+              </div>
+
+              {results.length < total && (
+                <div className="mt-5 flex justify-center">
+                  <Button variant="outline" onClick={loadMore} disabled={loading}>
+                    {loading && <Loader2 className="animate-spin" />}
+                    Load {Math.min(PAGE_SIZE, total - results.length)} more
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </main>
 
         {selected && (
           <aside className="flex w-96 shrink-0 flex-col border-l border-border bg-card/40">
             <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-4">
-              <h2 className="text-sm font-semibold">{selected.title_english ?? selected.title_romaji ?? selected.title_native}</h2>
+              <h2 className="text-sm font-semibold">
+                {selected.title_english ?? selected.title_romaji ?? selected.title_native}
+              </h2>
               <p className="mt-0.5 text-[11px] text-muted-foreground">
                 {[selected.author, selected.year, selected.status]
                   .filter(Boolean)
@@ -206,7 +302,8 @@ export function ExploreView({ onOpenSeries, onError }: ExploreViewProps) {
                   rel="noreferrer"
                   className="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
                 >
-                  <ExternalLink className="size-3" /> View on {sourceLabel(selected.source)}
+                  <ExternalLink className="size-3" /> View on{" "}
+                  {sourceLabel(selected.source)}
                 </a>
               )}
 

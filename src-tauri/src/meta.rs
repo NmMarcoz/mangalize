@@ -1,6 +1,6 @@
 //! Commands for online metadata lookup. Always user-initiated.
 
-use mangalize_meta::{SeriesMatch, Source, VolumeChapters, VolumeCover};
+use mangalize_meta::{BrowsePage, BrowseQuery, SeriesMatch, Source, Tag, VolumeChapters, VolumeCover};
 use tauri::{AppHandle, Manager};
 
 use crate::util::blocking;
@@ -9,6 +9,21 @@ use crate::util::blocking;
 #[tauri::command]
 pub async fn search_series(query: String) -> Result<Vec<SeriesMatch>, String> {
     blocking(move || mangalize_meta::search(&query, 8)).await
+}
+
+/// Browse the catalogue by ordering and filters, with or without a search term.
+#[tauri::command]
+pub async fn browse_series(query: BrowseQuery) -> Result<BrowsePage, String> {
+    blocking(move || mangalize_meta::browse(&query)).await
+}
+
+/// Every tag a series can carry, for the filter picker.
+///
+/// Effectively static, so the frontend asks once per session rather than per
+/// keystroke.
+#[tauri::command]
+pub async fn mangadex_tags() -> Result<Vec<Tag>, String> {
+    blocking(mangalize_meta::tags).await
 }
 
 /// Every published volume cover for a series.
