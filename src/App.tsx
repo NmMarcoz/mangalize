@@ -11,6 +11,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { EditorView } from "@/views/EditorView";
 import { LibraryView } from "@/views/LibraryView";
 import { SeriesView } from "@/views/SeriesView";
+import { ExploreView } from "@/views/ExploreView";
 import { SendView } from "@/views/SendView";
 import { SettingsView } from "@/views/SettingsView";
 import { WelcomeView } from "@/views/WelcomeView";
@@ -28,6 +29,7 @@ import { clearThumbnails } from "@/lib/thumbs";
 type View =
   | { kind: "library" }
   | { kind: "series"; id: number }
+  | { kind: "explore" }
   | { kind: "send" }
   | { kind: "settings" }
   | { kind: "editor"; from: { seriesId: number } | null };
@@ -114,6 +116,15 @@ export default function App() {
       return <WelcomeView onDone={setSettings} onError={setError} />;
     }
 
+    if (view.kind === "explore") {
+      return (
+        <ExploreView
+          onOpenSeries={(id) => setView({ kind: "series", id })}
+          onError={setError}
+        />
+      );
+    }
+
     if (view.kind === "send") {
       return <SendView onSaved={() => {}} onError={setError} />;
     }
@@ -184,7 +195,9 @@ export default function App() {
   // A series and the editor both sit under the library as far as navigation is
   // concerned, so neither gets its own rail entry.
   const section: Section =
-    view.kind === "settings" || view.kind === "send" ? view.kind : "library";
+    view.kind === "settings" || view.kind === "send" || view.kind === "explore"
+      ? view.kind
+      : "library";
   const chrome = settings !== null && settings.welcomed;
 
   return (

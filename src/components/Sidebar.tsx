@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import {
   BookOpen,
   CloudDownload,
+  Compass,
   Loader2,
   PanelLeftClose,
   PanelLeftOpen,
@@ -13,7 +14,7 @@ import type { UpdateStage } from "@/hooks/useUpdater";
 import { cn } from "@/lib/utils";
 
 /** Top-level destinations. A series or the editor both live under the library. */
-export type Section = "library" | "send" | "settings";
+export type Section = "library" | "explore" | "send" | "settings";
 
 interface SidebarProps {
   active: Section;
@@ -63,6 +64,13 @@ export function Sidebar({
           expanded={expanded}
           active={active === "library"}
           onClick={() => onNavigate("library")}
+        />
+        <Item
+          icon={<Compass className="size-4" />}
+          label="Explore"
+          expanded={expanded}
+          active={active === "explore"}
+          onClick={() => onNavigate("explore")}
         />
         <Item
           icon={<Send className="size-4" />}
