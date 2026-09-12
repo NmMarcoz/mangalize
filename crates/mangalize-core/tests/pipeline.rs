@@ -138,15 +138,48 @@ fn epub_is_a_well_formed_fixed_layout_package() {
     assert!(opf.contains(r#"<meta name="book-type" content="comic"/>"#));
     assert!(opf.contains(r#"content="800x1168""#), "norm size drives original-resolution");
     assert_eq!(opf.matches("cover-image").count(), 1);
-    assert_eq!(opf.matches("rendition:page-spread-center").count(), 1);
     assert_eq!(opf.matches("<itemref").count(), 16);
+}
 
-    // Each page's viewport matches its own image, which is what keeps a
-    // fixed-layout reader from letterboxing the spread.
+#[test]
+fn a_spread_shares_the_canvas_with_every_other_page_so_kindle_cannot_crop_it() {
+    let (_tmp, root) = fixture();
+    let v = scan_volume(&root).unwrap();
+    let out = root.join("spread.epub");
+    writers::epub::write(&v, &out).unwrap();
+
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(std::fs::read(&out).unwrap())).unwrap();
+    let opf = read_entry(&mut zip, "OEBPS/content.opf");
+
+    // Kindle lays the whole book out on `original-resolution`. A page that
+    // declares a viewport wider than that is what got cut on a real device.
+    let canvas = r#"content="width=800, height=1168""#;
     let spread_page = read_entry(&mut zip, "OEBPS/text/p0003.xhtml");
-    assert!(spread_page.contains(r#"content="width=1600, height=1168""#));
     let normal_page = read_entry(&mut zip, "OEBPS/text/p0001.xhtml");
-    assert!(normal_page.contains(r#"content="width=800, height=1168""#));
+    assert!(spread_page.contains(canvas), "the spread must use the book canvas");
+    assert!(normal_page.contains(canvas));
+    assert!(
+        !spread_page.contains("width=1600"),
+        "a viewport wider than the canvas is exactly what Kindle crops"
+    );
+
+    // The image itself keeps every pixel, so zooming in on the device still
+    // shows the full spread. Fitting is a display concern, not a stored one.
+    assert!(
+        spread_page.contains(r#"width="1600" height="1168""#),
+        "the spread image must stay full resolution"
+    );
+
+    // One page, not two: the spread is not split and not laid across a pair.
+    assert!(
+        !opf.contains("rendition:page-spread-center"),
+        "asking for a two-page layout is part of what cut the spread"
+    );
+
+    // And the stylesheet must fit rather than clip.
+    let css = read_entry(&mut zip, "OEBPS/style.css");
+    assert!(css.contains("max-width: 100%") && css.contains("max-height: 100%"));
+    assert!(css.contains("object-fit: contain"));
 }
 
 #[test]

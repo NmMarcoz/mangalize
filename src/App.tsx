@@ -10,8 +10,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { EditorView } from "@/views/EditorView";
 import { LibraryView } from "@/views/LibraryView";
 import { SeriesView } from "@/views/SeriesView";
+import { SettingsView } from "@/views/SettingsView";
+import { WelcomeView } from "@/views/WelcomeView";
 import { useUpdater } from "@/hooks/useUpdater";
 import { scanFolder, type Volume } from "@/lib/api";
+import { getSettings, type Settings } from "@/lib/settings";
 import { clearThumbnails } from "@/lib/thumbs";
 
 /**
@@ -23,6 +26,7 @@ import { clearThumbnails } from "@/lib/thumbs";
 type View =
   | { kind: "library" }
   | { kind: "series"; id: number }
+  | { kind: "settings" }
   | { kind: "editor"; from: { seriesId: number } | null };
 
 export default function App() {
@@ -31,8 +35,16 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [settings, setSettings] = useState<Settings | null>(null);
 
   const updater = useUpdater();
+
+  // Settings gate the first screen, so nothing renders until they are known.
+  useEffect(() => {
+    getSettings()
+      .then(setSettings)
+      .catch((e) => setError(String(e)));
+  }, []);
 
   /* ---------------------------------------------------------------- scanning */
 
@@ -92,6 +104,23 @@ export default function App() {
   /* ------------------------------------------------------------------ render */
 
   const body = () => {
+    if (!settings) return null;
+
+    // Asked once, before anything needs somewhere to go.
+    if (!settings.welcomed) {
+      return <WelcomeView onDone={setSettings} onError={setError} />;
+    }
+
+    if (view.kind === "settings") {
+      return (
+        <SettingsView
+          onBack={() => setView({ kind: "library" })}
+          onSaved={setSettings}
+          onError={setError}
+        />
+      );
+    }
+
     if (view.kind === "library") {
       return (
         <LibraryView
@@ -100,6 +129,7 @@ export default function App() {
           onError={setError}
           updateStage={updater.state.stage}
           onCheckUpdates={updater.checkNow}
+          onOpenSettings={() => setView({ kind: "settings" })}
         />
       );
     }
@@ -114,6 +144,7 @@ export default function App() {
             setVolume(built);
             setView({ kind: "editor", from: { seriesId: source.seriesId } });
           }}
+          defaultFormat={settings.default_format}
           onError={setError}
         />
       );
@@ -141,6 +172,7 @@ export default function App() {
         onBack={() =>
           setView(from ? { kind: "series", id: from.seriesId } : { kind: "library" })
         }
+        defaultFormat={settings.default_format}
         onError={setError}
       />
     );

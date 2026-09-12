@@ -26,6 +26,7 @@ The desktop app and the CLI both work. PDF output is not written yet.
 | Library: series, volumes, missing chapters | done |
 | Downloading a chapter from a pasted URL | done |
 | Batch download of every missing chapter | done |
+| Configurable build folder, batch export | done |
 | PDF writer | not started |
 | CI builds for macOS and Windows | done |
 | In-app auto-update from GitHub Releases | done |
@@ -196,6 +197,27 @@ The app checks for a new release once on launch and shows a strip along the
 bottom if there is one. Nothing is downloaded until you click Update, and the
 check is silent when it fails — a machine with no network should not be nagged.
 There is also a manual check in the library header.
+
+### Where builds go
+
+On first run Mangalize asks where finished volumes should go. After that,
+**Build** writes there without asking:
+
+```
+<build folder>/Ichi the Witch/Ichi the Witch v01.epub
+```
+
+Volume numbers are padded, so `v02` sorts before `v10` in any file browser.
+**Build as…** always lets you pick a one-off location instead, and the whole
+arrangement — library folder, build folder, one-folder-per-series, default
+format — lives in Settings.
+
+### Batch export
+
+In a series, click a volume to select it, `Shift`-click to extend the range and
+`Ctrl`/`Cmd`-click to add or remove one. Right-click the selection for **Build**
+or **Build as…**. Volumes with nothing downloaded are skipped and counted rather
+than failing the batch, and a long run can be stopped part-way.
 
 ### Cutting a release
 

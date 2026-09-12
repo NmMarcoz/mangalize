@@ -1,14 +1,16 @@
 //! Commands for the folder-in, file-out path: scan a folder, preview it, export
 //! it. Thin translation over `mangalize-core`; no pipeline logic lives here.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use mangalize_core::project::Volume;
 use mangalize_core::{scan_volume, writers};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 
+use crate::settings;
 use crate::thumbs;
+use crate::util::blocking;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -122,20 +124,172 @@ pub async fn build(
 /// A filename to pre-fill the save dialog with, e.g. `Itch The Witch v01.epub`.
 #[tauri::command]
 pub fn suggest_filename(volume: Volume, format: Format) -> String {
-    let m = &volume.metadata;
-    let series = if m.series.is_empty() {
-        "volume".to_string()
+    format!("{}.{}", file_stem(&volume), format.extension())
+}
+
+/// Where "Build" writes without asking, or `None` when no output folder is set.
+///
+/// The shape is `<output>/<Series>/<Series v01.epub>`. Naming lives here rather
+/// than in the UI so a one-off "Build as…" and an unattended batch produce
+/// byte-identical names.
+#[tauri::command]
+pub async fn resolve_build_path(
+    app: AppHandle,
+    volume: Volume,
+    format: Format,
+) -> Result<Option<String>, String> {
+    blocking(move || {
+        let settings = settings::load(&app)?;
+        Ok(settings
+            .output_root
+            .map(|root| build_path(&root, &volume, format, settings.folder_per_series))
+            .map(|path| path.to_string_lossy().into_owned()))
+    })
+    .await
+}
+
+/// `<root>/<Series>/<Series v01.epub>`, or a flat `<root>/<Series v01.epub>`.
+pub(crate) fn build_path(
+    root: &Path,
+    volume: &Volume,
+    format: Format,
+    folder_per_series: bool,
+) -> PathBuf {
+    let name = format!("{}.{}", file_stem(volume), format.extension());
+    if folder_per_series {
+        let series = safe_component(&volume.metadata.series);
+        let folder = if series.is_empty() { "Unsorted".to_string() } else { series };
+        root.join(folder).join(name)
     } else {
-        m.series.clone()
-    };
-    let stem = match m.volume {
+        root.join(name)
+    }
+}
+
+/// `Itch The Witch v01`, without an extension.
+pub(crate) fn file_stem(volume: &Volume) -> String {
+    let m = &volume.metadata;
+    let series = safe_component(&m.series);
+    let series = if series.is_empty() { "volume".to_string() } else { series };
+    match m.volume {
         Some(v) => format!("{series} v{v:02}"),
         None => series,
-    };
-    // Strip characters that are illegal in filenames on at least one target OS.
-    let safe: String = stem
+    }
+}
+
+/// Strip characters that are illegal in a filename on at least one target OS.
+///
+/// Trailing dots and spaces go too: Windows silently drops them, which would
+/// make the path we report and the file that exists disagree.
+pub(crate) fn safe_component(s: &str) -> String {
+    let cleaned: String = s
         .chars()
-        .map(|c| if "/\\:*?\"<>|".contains(c) { '-' } else { c })
+        .map(|c| if "/\\:*?\"<>|".contains(c) || c.is_control() { '-' } else { c })
         .collect();
-    format!("{}.{}", safe.trim(), format.extension())
+    cleaned.trim().trim_end_matches(['.', ' ']).trim().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mangalize_core::project::Metadata;
+
+    fn volume(series: &str, number: Option<u32>) -> Volume {
+        Volume {
+            metadata: Metadata {
+                series: series.into(),
+                volume: number,
+                ..Metadata::default()
+            },
+            cover: None,
+            chapters: Vec::new(),
+            root: PathBuf::new(),
+        }
+    }
+
+    #[test]
+    fn a_volume_is_filed_under_its_series() {
+        let path = build_path(
+            Path::new("/out"),
+            &volume("Ichi the Witch", Some(1)),
+            Format::Epub,
+            true,
+        );
+        assert_eq!(
+            path,
+            Path::new("/out/Ichi the Witch/Ichi the Witch v01.epub")
+        );
+    }
+
+    #[test]
+    fn volume_numbers_are_padded_so_v2_sorts_before_v10() {
+        let stem = |n| file_stem(&volume("X", Some(n)));
+        let mut names = [stem(10), stem(2), stem(1)];
+        names.sort();
+        assert_eq!(names, ["X v01", "X v02", "X v10"]);
+    }
+
+    #[test]
+    fn a_flat_layout_skips_the_series_folder() {
+        let path = build_path(
+            Path::new("/out"),
+            &volume("Ichi the Witch", Some(3)),
+            Format::Cbz,
+            false,
+        );
+        assert_eq!(path, Path::new("/out/Ichi the Witch v03.cbz"));
+    }
+
+    #[test]
+    fn a_series_name_cannot_escape_the_output_folder() {
+        // Separators become dashes, so a title like this is one oddly-named
+        // folder rather than a walk up out of the output directory.
+        let path = build_path(
+            Path::new("/out"),
+            &volume("../../etc", Some(1)),
+            Format::Epub,
+            true,
+        );
+
+        let under: Vec<_> = path.strip_prefix("/out").unwrap().components().collect();
+        assert_eq!(under.len(), 2, "expected <series>/<file>, got {path:?}");
+        assert!(
+            !under
+                .iter()
+                .any(|c| matches!(c, std::path::Component::ParentDir)),
+            "no component may be a parent reference: {path:?}"
+        );
+    }
+
+    #[test]
+    fn a_title_made_only_of_dots_does_not_produce_a_dot_folder() {
+        // "." and ".." are real directories; naming a folder after one would
+        // silently write into the output root or above it.
+        assert_eq!(safe_component(".."), "");
+        assert_eq!(safe_component("."), "");
+        assert_eq!(
+            build_path(Path::new("/out"), &volume("..", Some(1)), Format::Epub, true),
+            Path::new("/out/Unsorted/volume v01.epub")
+        );
+    }
+
+    #[test]
+    fn a_volume_with_no_number_is_named_after_the_series_alone() {
+        assert_eq!(file_stem(&volume("Oneshot Collection", None)), "Oneshot Collection");
+    }
+
+    #[test]
+    fn an_untitled_volume_still_gets_a_usable_name() {
+        assert_eq!(file_stem(&volume("", Some(2))), "volume v02");
+        assert_eq!(
+            build_path(Path::new("/out"), &volume("", Some(2)), Format::Epub, true),
+            Path::new("/out/Unsorted/volume v02.epub")
+        );
+    }
+
+    #[test]
+    fn windows_hostile_names_are_made_safe() {
+        assert_eq!(safe_component("Re:Zero"), "Re-Zero");
+        assert_eq!(safe_component("Vol."), "Vol");
+        assert_eq!(safe_component("  spaced  "), "spaced");
+    }
 }

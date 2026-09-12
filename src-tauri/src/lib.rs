@@ -23,6 +23,7 @@ mod volume;
 pub fn run() {
     tauri::Builder::default()
         .manage(fetch::BatchControl::default())
+        .manage(library::BuildControl::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
@@ -32,6 +33,10 @@ pub fn run() {
             volume::thumbnail,
             volume::build,
             volume::suggest_filename,
+            volume::resolve_build_path,
+            settings::get_settings,
+            settings::set_settings,
+            settings::suggested_output_root,
             meta::search_series,
             meta::series_covers,
             meta::series_chapters,
@@ -47,6 +52,8 @@ pub fn run() {
             library::library_download_covers,
             library::library_build_volume,
             library::library_delete_chapter,
+            library::build_library_volumes,
+            library::cancel_build,
             fetch::extract_chapter,
             fetch::measure_images,
             fetch::preview_image,

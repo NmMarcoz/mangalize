@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   ArrowLeft,
   BookOpen,
@@ -15,13 +17,25 @@ import {
 } from "lucide-react";
 
 import { BatchDownloadDialog } from "@/components/BatchDownloadDialog";
+import {
+  ContextMenu,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  type ContextMenuPosition,
+} from "@/components/ContextMenu";
 import { ChapterFetchDialog } from "@/components/ChapterFetchDialog";
 import { RemoveSeriesDialog } from "@/components/RemoveSeriesDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
 import { useThumbnail } from "@/hooks/useThumbnail";
-import type { Volume } from "@/lib/api";
+import { formatBytes, type Format, type Volume } from "@/lib/api";
+import {
+  buildLibraryVolumes,
+  cancelBuild,
+  type BuildBatchProgress,
+  type BuildBatchReport,
+} from "@/lib/settings";
 import {
   downloadedCount,
   importChapter,
@@ -46,6 +60,8 @@ interface SeriesViewProps {
   onBack: () => void;
   /** Hand a built volume to the editor. */
   onEditVolume: (volume: Volume, source: { seriesId: number; number: string }) => void;
+  /** From settings; what a batch build writes. */
+  defaultFormat: string;
   onError: (message: string | null) => void;
 }
 
@@ -57,7 +73,13 @@ interface SeriesViewProps {
  * missing" into something answerable by looking rather than reading. Selecting a
  * volume opens its chapters in the side panel.
  */
-export function SeriesView({ seriesId, onBack, onEditVolume, onError }: SeriesViewProps) {
+export function SeriesView({
+  seriesId,
+  onBack,
+  onEditVolume,
+  defaultFormat,
+  onError,
+}: SeriesViewProps) {
   const [series, setSeries] = useState<Series | null>(null);
   const [volumes, setVolumes] = useState<VolumeStatus[] | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -66,6 +88,14 @@ export function SeriesView({ seriesId, onBack, onEditVolume, onError }: SeriesVi
   const [selected, setSelected] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
   const [batching, setBatching] = useState(false);
+
+  // Volume numbers picked for a batch build, plus the anchor shift-click extends
+  // from. Mirrors how the page grid in the editor already behaves.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [anchor, setAnchor] = useState<string | null>(null);
+  const [menu, setMenu] = useState<ContextMenuPosition | null>(null);
+  const [buildProgress, setBuildProgress] = useState<BuildBatchProgress | null>(null);
+  const [buildReport, setBuildReport] = useState<BuildBatchReport | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -171,6 +201,114 @@ export function SeriesView({ seriesId, onBack, onEditVolume, onError }: SeriesVi
 
   const detail = volumes?.find((v) => v.number === selected) ?? null;
 
+  /* ----------------------------------------------------------- selection */
+
+  const order = useMemo(() => (volumes ?? []).map((v) => v.number), [volumes]);
+
+  /** Volumes with at least one chapter on disk; the rest cannot be built. */
+  const buildable = useMemo(
+    () => new Set((volumes ?? []).filter((v) => downloadedCount(v) > 0).map((v) => v.number)),
+    [volumes],
+  );
+
+  /**
+   * Click to select and open, ctrl/cmd-click to toggle, shift-click to extend.
+   *
+   * The same three gestures the page grid in the editor uses, so a range of
+   * volumes is picked exactly the way a range of pages is.
+   */
+  const pick = useCallback(
+    (number: string, event: React.MouseEvent) => {
+      if (event.shiftKey && anchor) {
+        const from = order.indexOf(anchor);
+        const to = order.indexOf(number);
+        if (from !== -1 && to !== -1) {
+          const [lo, hi] = from < to ? [from, to] : [to, from];
+          setPicked((prev) => new Set([...prev, ...order.slice(lo, hi + 1)]));
+          return;
+        }
+      }
+      if (event.metaKey || event.ctrlKey) {
+        setPicked((prev) => {
+          const next = new Set(prev);
+          if (next.has(number)) next.delete(number);
+          else next.add(number);
+          return next;
+        });
+        setAnchor(number);
+        return;
+      }
+      // A plain click is both "this one" and "show me its chapters".
+      setPicked(new Set([number]));
+      setAnchor(number);
+      setSelected((current) => (current === number ? null : number));
+    },
+    [anchor, order],
+  );
+
+  const openMenu = useCallback(
+    (number: string, event: React.MouseEvent) => {
+      event.preventDefault();
+      // Right-clicking outside the current selection replaces it, which is what
+      // every file manager does and what avoids acting on something unseen.
+      setPicked((prev) => (prev.has(number) ? prev : new Set([number])));
+      setAnchor(number);
+      setMenu({ x: event.clientX, y: event.clientY });
+    },
+    [],
+  );
+
+  /* ------------------------------------------------------- batch building */
+
+  useEffect(() => {
+    const pending = listen<BuildBatchProgress>("build-batch-progress", (e) => {
+      setBuildProgress(e.payload);
+    });
+    return () => {
+      void pending.then((fn) => fn());
+    };
+  }, []);
+
+  const runBuild = useCallback(
+    async (askWhere: boolean) => {
+      const chosen = order.filter((n) => picked.has(n) && buildable.has(n));
+      if (chosen.length === 0) return;
+
+      let outDir: string | null = null;
+      if (askWhere) {
+        const folder = await openDialog({ directory: true, multiple: false });
+        if (typeof folder !== "string") return;
+        outDir = folder;
+      }
+
+      onError(null);
+      setBuildReport(null);
+      setBuildProgress({
+        volume: chosen[0],
+        index: 1,
+        total: chosen.length,
+        done: 0,
+        pages: 0,
+      });
+      try {
+        const report = await buildLibraryVolumes({
+          id: seriesId,
+          volumes: chosen,
+          format: defaultFormat as Format,
+          outDir,
+        });
+        setBuildReport(report);
+      } catch (e) {
+        onError(String(e));
+      } finally {
+        setBuildProgress(null);
+      }
+    },
+    [order, picked, buildable, seriesId, defaultFormat, onError],
+  );
+
+  const pickedBuildable = order.filter((n) => picked.has(n) && buildable.has(n));
+
   return (
     <div className="flex h-full flex-col">
       <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-4 py-2.5">
@@ -220,7 +358,12 @@ export function SeriesView({ seriesId, onBack, onEditVolume, onError }: SeriesVi
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <main className="scrollbar-thin min-w-0 flex-1 overflow-y-auto p-5">
+        <main
+          className="scrollbar-thin min-w-0 flex-1 overflow-y-auto p-5"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPicked(new Set());
+          }}
+        >
           {volumes === null ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="size-3.5 animate-spin" /> Loading volumes…
@@ -240,14 +383,12 @@ export function SeriesView({ seriesId, onBack, onEditVolume, onError }: SeriesVi
                 <VolumeCard
                   key={volume.number}
                   volume={volume}
-                  selected={selected === volume.number}
+                  open={selected === volume.number}
+                  picked={picked.has(volume.number)}
                   building={building === volume.number}
-                  onSelect={() =>
-                    setSelected((current) =>
-                      current === volume.number ? null : volume.number,
-                    )
-                  }
-                  onBuild={() => void edit(volume.number)}
+                  onPick={(e) => pick(volume.number, e)}
+                  onContextMenu={(e) => openMenu(volume.number, e)}
+                  onEdit={() => void edit(volume.number)}
                 />
               ))}
             </div>
@@ -266,6 +407,64 @@ export function SeriesView({ seriesId, onBack, onEditVolume, onError }: SeriesVi
           />
         )}
       </div>
+
+      {menu && (
+        <ContextMenu at={menu} onClose={() => setMenu(null)}>
+          <ContextMenuItem
+            onSelect={() => {
+              setMenu(null);
+              void runBuild(false);
+            }}
+            disabled={pickedBuildable.length === 0}
+            hint={defaultFormat.toUpperCase()}
+          >
+            Build {pickedBuildable.length > 1 ? `${pickedBuildable.length} volumes` : "volume"}
+          </ContextMenuItem>
+
+          <ContextMenuItem
+            onSelect={() => {
+              setMenu(null);
+              void runBuild(true);
+            }}
+            disabled={pickedBuildable.length === 0}
+          >
+            Build as…
+          </ContextMenuItem>
+
+          {pickedBuildable.length < picked.size && (
+            <ContextMenuItem onSelect={() => {}} disabled>
+              {picked.size - pickedBuildable.length} not downloaded yet
+            </ContextMenuItem>
+          )}
+
+          <ContextMenuSeparator />
+
+          <ContextMenuItem
+            onSelect={() => {
+              setPicked(new Set(order.filter((n) => buildable.has(n))));
+              setMenu(null);
+            }}
+          >
+            Select all built
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() => {
+              setPicked(new Set());
+              setMenu(null);
+            }}
+          >
+            Clear selection
+          </ContextMenuItem>
+        </ContextMenu>
+      )}
+
+      {(buildProgress || buildReport) && (
+        <BuildStatus
+          progress={buildProgress}
+          report={buildReport}
+          onDismiss={() => setBuildReport(null)}
+        />
+      )}
 
       <RemoveSeriesDialog
         series={removing ? series : null}
@@ -300,16 +499,22 @@ export function SeriesView({ seriesId, onBack, onEditVolume, onError }: SeriesVi
 /** One volume on the shelf: its art, how much of it we hold, and a way in. */
 function VolumeCard({
   volume,
-  selected,
+  open,
+  picked,
   building,
-  onSelect,
-  onBuild,
+  onPick,
+  onContextMenu,
+  onEdit,
 }: {
   volume: VolumeStatus;
-  selected: boolean;
+  /** Its chapters are showing in the side panel. */
+  open: boolean;
+  /** Included in the current batch selection. */
+  picked: boolean;
   building: boolean;
-  onSelect: () => void;
-  onBuild: () => void;
+  onPick: (event: React.MouseEvent) => void;
+  onContextMenu: (event: React.MouseEvent) => void;
+  onEdit: () => void;
 }) {
   const have = downloadedCount(volume);
   const complete = isComplete(volume);
@@ -317,12 +522,17 @@ function VolumeCard({
 
   return (
     <div
+      onContextMenu={onContextMenu}
       className={cn(
         "group relative overflow-hidden rounded-lg border bg-card transition-colors",
-        selected ? "border-primary" : "border-border hover:border-muted-foreground/40",
+        picked
+          ? "border-primary ring-2 ring-primary/40"
+          : open
+            ? "border-primary"
+            : "border-border hover:border-muted-foreground/40",
       )}
     >
-      <button onClick={onSelect} className="flex w-full flex-col text-left">
+      <button onClick={onPick} className="flex w-full flex-col text-left">
         <VolumeArt volume={volume} dimmed={have === 0} />
 
         <div className="flex flex-col gap-1 p-2">
@@ -354,7 +564,10 @@ function VolumeCard({
 
       {have > 0 && (
         <button
-          onClick={onBuild}
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit();
+          }}
           disabled={building}
           title={`Build ${volumeLabel(volume)}`}
           className="absolute right-1.5 top-1.5 rounded-md bg-background/85 p-1.5 text-muted-foreground opacity-0 backdrop-blur-sm transition-opacity hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
@@ -397,6 +610,70 @@ function VolumeArt({ volume, dimmed }: { volume: VolumeStatus; dimmed: boolean }
       ) : (
         <BookOpen className="size-5 text-muted-foreground" />
       )}
+    </div>
+  );
+}
+
+/** Progress while a batch builds, then what it produced. */
+function BuildStatus({
+  progress,
+  report,
+  onDismiss,
+}: {
+  progress: BuildBatchProgress | null;
+  report: BuildBatchReport | null;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="absolute bottom-4 left-1/2 z-40 flex w-[min(34rem,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 shadow-lg">
+      {progress ? (
+        <>
+          <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium">
+              Building volume {progress.volume} ({progress.index}/{progress.total})
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {progress.pages > 0
+                ? `${progress.done}/${progress.pages} pages`
+                : "assembling…"}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void cancelBuild()}>
+            Stop
+          </Button>
+        </>
+      ) : report ? (
+        <>
+          <Check className="size-4 shrink-0 text-primary" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium">
+              {report.cancelled ? "Stopped. " : ""}
+              {report.built.length} built
+              {report.failed.length > 0 && `, ${report.failed.length} failed`}
+            </p>
+            <p className="truncate text-[11px] text-muted-foreground">
+              {report.failed.length > 0
+                ? report.failed.map((f) => `v${f.volume}: ${f.error}`).join(" · ")
+                : report.built
+                    .map((b) => `v${b.volume} ${formatBytes(b.bytes)}`)
+                    .join(" · ")}
+            </p>
+          </div>
+          {report.built[0] && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void revealItemInDir(report.built[0].path)}
+            >
+              Show
+            </Button>
+          )}
+          <Button variant="ghost" size="icon-sm" onClick={onDismiss}>
+            <X className="size-3" />
+          </Button>
+        </>
+      ) : null}
     </div>
   );
 }

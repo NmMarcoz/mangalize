@@ -65,6 +65,11 @@ pub fn write_with_progress(volume: &Volume, out: &Path, progress: &mut Progress)
         bail!("volume has no pages to write");
     }
 
+    // One canvas for the whole book. Everything downstream — every page's
+    // viewport and the `original-resolution` Kindle reads — is this one number,
+    // so they cannot disagree and cause a crop.
+    let canvas = canvas_size(&slots);
+
     ensure_parent(out)?;
     let file = File::create(out).with_context(|| format!("creating {}", out.display()))?;
     let mut zip = ZipWriter::new(file);
@@ -89,7 +94,7 @@ pub fn write_with_progress(volume: &Volume, out: &Path, progress: &mut Progress)
         zip.write_all(&slot.bytes)?;
 
         zip.start_file(format!("OEBPS/{}", slot.page_href()), deflated)?;
-        zip.write_all(page_xhtml(slot).as_bytes())?;
+        zip.write_all(page_xhtml(slot, canvas).as_bytes())?;
     }
 
     zip.start_file("OEBPS/nav.xhtml", deflated)?;
@@ -99,7 +104,7 @@ pub fn write_with_progress(volume: &Volume, out: &Path, progress: &mut Progress)
     zip.write_all(toc_ncx(volume, &slots, &chapters).as_bytes())?;
 
     zip.start_file("OEBPS/content.opf", deflated)?;
-    zip.write_all(content_opf(volume, &slots).as_bytes())?;
+    zip.write_all(content_opf(volume, &slots, canvas).as_bytes())?;
 
     zip.finish()?;
     Ok(())
@@ -170,7 +175,7 @@ fn build_slots(volume: &Volume, progress: &mut Progress) -> Result<Layout> {
     Ok(Layout { slots, chapters })
 }
 
-fn content_opf(volume: &Volume, slots: &[Slot]) -> String {
+fn content_opf(volume: &Volume, slots: &[Slot], canvas: (u32, u32)) -> String {
     let m = &volume.metadata;
     let identifier = if m.identifier.is_empty() {
         format!("urn:mangalize:{}", m.display_title())
@@ -206,7 +211,7 @@ fn content_opf(volume: &Volume, slots: &[Slot]) -> String {
 
     // Kindle-specific hints. These are EPUB 2 style on purpose; Amazon's
     // converter reads them and ignores the EPUB 3 equivalents above.
-    let (norm_w, norm_h) = modal_dimensions(slots);
+    let (norm_w, norm_h) = canvas;
     meta.push("    <meta name=\"cover\" content=\"img-1\"/>".into());
     meta.push("    <meta name=\"book-type\" content=\"comic\"/>".into());
     meta.push("    <meta name=\"fixed-layout\" content=\"true\"/>".into());
@@ -244,12 +249,11 @@ fn content_opf(volume: &Volume, slots: &[Slot]) -> String {
             slot.page_href()
         ));
 
-        let spread = if slot.spread {
-            " properties=\"rendition:page-spread-center\""
-        } else {
-            ""
-        };
-        spine.push(format!("    <itemref idref=\"page-{n}\"{spread}/>"));
+        // Deliberately no `rendition:page-spread-center`. That asks a reader to
+        // lay the page out across both halves of a two-page display, which on a
+        // single-page Kindle is part of what got spreads cut. The image is
+        // already one wide page; it just needs to be shown whole.
+        spine.push(format!("    <itemref idref=\"page-{n}\"/>"));
     }
 
     format!(
@@ -278,9 +282,19 @@ fn content_opf(volume: &Volume, slots: &[Slot]) -> String {
     )
 }
 
-/// Per-page document. The viewport must match the image's own pixel dimensions
-/// or fixed-layout readers letterbox the page.
-fn page_xhtml(slot: &Slot) -> String {
+/// Per-page document, laid out on the book's single canvas.
+///
+/// Every page declares the *same* viewport, which is the size reported to
+/// Kindle as `original-resolution`. Giving a double-page spread a viewport twice
+/// as wide as that canvas is what makes Kindle crop it: the converter treats
+/// `original-resolution` as the page size for the whole book and cuts anything
+/// that overflows it.
+///
+/// So the spread keeps its full pixel dimensions as an image, and CSS fits it
+/// inside the shared canvas. It is shown whole, letterboxed above and below,
+/// and because the stored image is still full resolution, zooming in on a
+/// reader reveals every bit of it.
+fn page_xhtml(slot: &Slot, canvas: (u32, u32)) -> String {
     format!(
         r#"<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
@@ -288,7 +302,7 @@ fn page_xhtml(slot: &Slot) -> String {
 <head>
   <meta charset="utf-8"/>
   <title>{stem}</title>
-  <meta name="viewport" content="width={w}, height={h}"/>
+  <meta name="viewport" content="width={cw}, height={ch}"/>
   <link href="../style.css" rel="stylesheet" type="text/css"/>
 </head>
 <body>
@@ -297,6 +311,8 @@ fn page_xhtml(slot: &Slot) -> String {
 </html>
 "#,
         stem = slot.stem,
+        cw = canvas.0,
+        ch = canvas.1,
         w = slot.width,
         h = slot.height,
         img = slot.image_href(),
@@ -386,17 +402,29 @@ fn toc_ncx(volume: &Volume, slots: &[Slot], starts: &[ChapterStart]) -> String {
     )
 }
 
-/// The most common page size, reported to Kindle as `original-resolution`.
-fn modal_dimensions(slots: &[Slot]) -> (u32, u32) {
-    use std::collections::HashMap;
-    let mut counts: HashMap<(u32, u32), usize> = HashMap::new();
-    for slot in slots {
-        *counts.entry((slot.width, slot.height)).or_insert(0) += 1;
+/// The page size the whole book is laid out on.
+///
+/// Measured across ordinary pages only. A spread is twice the width of a page by
+/// definition, so letting spreads vote would stretch the canvas and letterbox
+/// every single page in the book to accommodate a handful of wide ones.
+fn canvas_size(slots: &[Slot]) -> (u32, u32) {
+    let singles = || slots.iter().filter(|s| !s.spread);
+
+    let mut counts: std::collections::HashMap<(u32, u32), usize> =
+        std::collections::HashMap::new();
+    for slot in singles() {
+        if slot.width > 0 && slot.height > 0 {
+            *counts.entry((slot.width, slot.height)).or_insert(0) += 1;
+        }
     }
+
     counts
         .into_iter()
         .max_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)))
         .map(|(size, _)| size)
+        // A book of nothing but spreads still needs a canvas; the first page
+        // is a better guess than zero.
+        .or_else(|| slots.first().map(|s| (s.width, s.height)))
         .unwrap_or((0, 0))
 }
 
@@ -424,12 +452,22 @@ div.page {
   width: 100%;
   height: 100%;
   text-align: center;
+  /* Centres a page that does not fill the canvas, which is what a double-page
+     spread does once it has been scaled to fit. Readers that ignore flex fall
+     back to the image sitting at the top, still whole. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 div.page img {
   margin: 0;
   padding: 0;
+  /* The pair below is what guarantees a spread is never cut: it is scaled down
+     until it fits the canvas, rather than overflowing and being clipped. The
+     stored image keeps its full resolution, so zooming shows all of it. */
   max-width: 100%;
   max-height: 100%;
+  object-fit: contain;
 }
 "#;

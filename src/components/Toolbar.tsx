@@ -45,6 +45,8 @@ interface ToolbarProps {
   onBack: () => void;
   onRescan: () => void;
   onExport: () => void;
+  /** Always asks for a location, even when one is configured. */
+  onExportAs: () => void;
   onReveal: () => void;
 }
 
@@ -63,6 +65,7 @@ export function Toolbar({
   onBack,
   onRescan,
   onExport,
+  onExportAs,
   onReveal,
 }: ToolbarProps) {
   const pages = volumePageCount(volume);
@@ -125,8 +128,17 @@ export function Toolbar({
 
           <Button onClick={onExport} disabled={building !== null || pages === 0}>
             {building ? <Loader2 className="animate-spin" /> : <Upload />}
-            Export
+            Build
           </Button>
+          <Hint label="Choose a one-off location">
+            <Button
+              variant="outline"
+              onClick={onExportAs}
+              disabled={building !== null || pages === 0}
+            >
+              Build as…
+            </Button>
+          </Hint>
         </div>
       </div>
 

@@ -217,6 +217,25 @@ that is only ever *offered* to the user, never acted on.
   at the URL, so they carry the same `Referer` the download will.
 - Keyboard handlers must bail out on `INPUT` / `TEXTAREA` / `contentEditable`.
 
+## Settings and build output
+
+- `src-tauri/src/settings.rs` owns all configuration, stored as one JSON file in
+  the app config dir. Every field on disk is optional so an older file still
+  loads; defaults are applied on read.
+- `welcomed` is separate from `output_root` being set, because "decide later" is
+  a valid answer that must not re-prompt on every launch.
+- **Naming lives in `volume.rs`**, not the UI: `build_path` gives
+  `<output>/<Series>/<Series v01.epub>`, and `file_stem` pads to `v01` so `v2`
+  sorts before `v10`. A one-off "Build as…" and an unattended batch must produce
+  byte-identical names, which only holds while there is one implementation.
+- `safe_component` replaces path separators with dashes, so a series title can
+  never become a nested or parent path. There are tests for `..` and for titles
+  made only of dots, which would otherwise name a real directory.
+- Batch building happens entirely in the backend (`build_library_volumes`).
+  Shipping a `Volume` per item across IPC just to send it straight back would
+  move a lot of page metadata for nothing. A failed volume is recorded and the
+  batch continues.
+
 ## Releases and the updater
 
 - Tagging `v*` is the release trigger. The tag and `version` in

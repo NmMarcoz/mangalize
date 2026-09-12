@@ -20,6 +20,7 @@ import {
   type Page,
   type Volume,
 } from "@/lib/api";
+import { resolveBuildPath } from "@/lib/settings";
 
 interface EditorViewProps {
   volume: Volume;
@@ -29,6 +30,8 @@ interface EditorViewProps {
   onOpenFolder: () => void;
   /** Return to wherever this volume came from: a series, or the library. */
   onBack: () => void;
+  /** From settings; pre-selects the format for a freshly opened volume. */
+  defaultFormat: string;
   onError: (message: string | null) => void;
 }
 
@@ -46,6 +49,7 @@ export function EditorView({
   onRescan,
   onOpenFolder,
   onBack,
+  defaultFormat,
   onError,
 }: EditorViewProps) {
   const [activeChapter, setActiveChapter] = useState<number | null>(null);
@@ -56,7 +60,7 @@ export function EditorView({
   const [anchor, setAnchor] = useState<string | null>(null);
 
   const [lookupOpen, setLookupOpen] = useState(false);
-  const [format, setFormat] = useState<Format>("epub");
+  const [format, setFormat] = useState<Format>(defaultFormat as Format);
   const [building, setBuilding] = useState<{ done: number; total: number } | null>(null);
   const [report, setReport] = useState<BuildReport | null>(null);
 
@@ -326,30 +330,53 @@ export function EditorView({
 
   /* ---------------------------------------------------------------- export */
 
-  const handleExport = useCallback(async () => {
-    onError(null);
-    try {
-      // What the user typed wins; the derived name is only ever a default.
-      const chosen = fileName.trim()
-        ? withExtension(fileName, format)
-        : suggested || (await suggestFilename(volume, format));
+  /**
+   * Write the volume out.
+   *
+   * `askWhere` is the difference between Build and Build as…. Build only asks
+   * when there is no configured output folder to write to, so the common case
+   * is one click.
+   */
+  const handleExport = useCallback(
+    async (askWhere: boolean) => {
+      onError(null);
+      try {
+        // What the user typed wins; the derived name is only ever a default.
+        const chosen = fileName.trim()
+          ? withExtension(fileName, format)
+          : suggested || (await suggestFilename(volume, format));
 
-      const out = await save({
-        defaultPath: chosen,
-        filters: [{ name: format.toUpperCase(), extensions: [format] }],
-      });
-      if (!out) return;
+        let out: string | null = null;
+        if (!askWhere) {
+          const configured = await resolveBuildPath(volume, format);
+          // A typed name still applies, so replace only the last component.
+          if (configured && fileName.trim()) {
+            out = configured.replace(/[^/\\]+$/, chosen);
+          } else {
+            out = configured;
+          }
+        }
 
-      setReport(null);
-      setBuilding({ done: 0, total: volumePageCount(volume) });
-      const result = await buildVolume(volume, out, format);
-      setReport(result);
-    } catch (e) {
-      onError(String(e));
-    } finally {
-      setBuilding(null);
-    }
-  }, [volume, format, fileName, suggested, onError]);
+        if (!out) {
+          out = await save({
+            defaultPath: chosen,
+            filters: [{ name: format.toUpperCase(), extensions: [format] }],
+          });
+        }
+        if (!out) return;
+
+        setReport(null);
+        setBuilding({ done: 0, total: volumePageCount(volume) });
+        const result = await buildVolume(volume, out, format);
+        setReport(result);
+      } catch (e) {
+        onError(String(e));
+      } finally {
+        setBuilding(null);
+      }
+    },
+    [volume, format, fileName, suggested, onError],
+  );
 
   const pickCover = useCallback(async () => {
     const picked = await open({
@@ -375,7 +402,8 @@ export function EditorView({
         onOpenFolder={onOpenFolder}
         onBack={onBack}
         onRescan={onRescan}
-        onExport={() => void handleExport()}
+        onExport={() => void handleExport(false)}
+        onExportAs={() => void handleExport(true)}
         onReveal={() => report && void revealItemInDir(report.path)}
       />
 

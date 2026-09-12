@@ -7,6 +7,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  Settings,
   Trash2,
 } from "lucide-react";
 
@@ -31,6 +32,7 @@ interface LibraryViewProps {
   onError: (message: string | null) => void;
   updateStage: UpdateStage;
   onCheckUpdates: () => void;
+  onOpenSettings: () => void;
 }
 
 /** The shelf: every series in the library, and the way to add another. */
@@ -40,6 +42,7 @@ export function LibraryView({
   onError,
   updateStage,
   onCheckUpdates,
+  onOpenSettings,
 }: LibraryViewProps) {
   const [root, setRoot] = useState<string | null>(null);
   const [series, setSeries] = useState<Series[] | null>(null);
@@ -104,6 +107,11 @@ export function LibraryView({
             ) : (
               <CloudDownload />
             )}
+          </Button>
+        </Hint>
+        <Hint label="Settings">
+          <Button variant="ghost" size="icon" onClick={onOpenSettings}>
+            <Settings />
           </Button>
         </Hint>
         <Hint label="Build a volume from a folder instead">

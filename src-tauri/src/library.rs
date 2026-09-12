@@ -8,10 +8,16 @@ use mangalize_core::project::Volume;
 use mangalize_library::model::{NewSeries, PublishedChapter, PublishedVolume};
 use mangalize_library::{ChapterStatus, Library, Series, SeriesId, SyncReport, VolumeStatus};
 use mangalize_meta::{SeriesMatch, Source};
-use tauri::AppHandle;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+use mangalize_core::writers;
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, State};
 
 use crate::settings;
 use crate::util::blocking;
+use crate::volume::{build_path, Format};
 
 /// Open the library for one request.
 ///
@@ -176,6 +182,161 @@ pub async fn library_delete_chapter(
         library.chapter(SeriesId(id), &chapter)
     })
     .await
+}
+
+/* ------------------------------------------------------------ batch building */
+
+/// Lets a running batch build be stopped from the UI.
+#[derive(Default)]
+pub struct BuildControl {
+    cancelled: Arc<AtomicBool>,
+}
+
+#[derive(Clone, Serialize)]
+struct BuildBatchProgress {
+    volume: String,
+    /// 1-based position in the batch.
+    index: usize,
+    total: usize,
+    done: usize,
+    pages: usize,
+}
+
+#[derive(Serialize)]
+pub struct BuiltVolume {
+    volume: String,
+    path: String,
+    bytes: u64,
+    pages: usize,
+}
+
+#[derive(Serialize)]
+pub struct BuildBatchReport {
+    built: Vec<BuiltVolume>,
+    failed: Vec<BuildFailure>,
+    cancelled: bool,
+}
+
+#[derive(Serialize)]
+pub struct BuildFailure {
+    volume: String,
+    error: String,
+}
+
+#[tauri::command]
+pub fn cancel_build(control: State<BuildControl>) {
+    control.cancelled.store(true, Ordering::Relaxed);
+}
+
+/// Build several stored volumes in one go.
+///
+/// Assembling and writing happens entirely in the backend: shipping a `Volume`
+/// per item across IPC just to send it straight back would move a lot of page
+/// metadata for nothing.
+///
+/// A volume that fails is recorded and the batch carries on. Twelve volumes
+/// should not be lost because the fourth has an unreadable page.
+///
+/// `out_dir` overrides the configured output folder, which is what "Build as…"
+/// passes.
+#[tauri::command]
+pub async fn build_library_volumes(
+    app: AppHandle,
+    control: State<'_, BuildControl>,
+    id: i64,
+    volumes: Vec<String>,
+    format: Format,
+    out_dir: Option<String>,
+) -> Result<BuildBatchReport, String> {
+    let cancelled = control.cancelled.clone();
+    cancelled.store(false, Ordering::Relaxed);
+
+    blocking(move || {
+        let settings = settings::load(&app)?;
+        let root = match out_dir.map(std::path::PathBuf::from).or_else(|| settings.output_root.clone()) {
+            Some(root) => root,
+            None => anyhow::bail!("no output folder is set — choose one in Settings"),
+        };
+
+        let library = open_at(&settings.library_root)?;
+        let series = SeriesId(id);
+        let total = volumes.len();
+
+        let mut built = Vec::new();
+        let mut failed = Vec::new();
+
+        for (index, number) in volumes.iter().enumerate() {
+            if cancelled.load(Ordering::Relaxed) {
+                return Ok(BuildBatchReport { built, failed, cancelled: true });
+            }
+
+            match build_one(
+                &library,
+                series,
+                number,
+                format,
+                &root,
+                settings.folder_per_series,
+                &|done, pages| {
+                    let _ = app.emit(
+                        "build-batch-progress",
+                        BuildBatchProgress {
+                            volume: number.clone(),
+                            index: index + 1,
+                            total,
+                            done,
+                            pages,
+                        },
+                    );
+                },
+            ) {
+                Ok(done) => built.push(done),
+                Err(e) => failed.push(BuildFailure {
+                    volume: number.clone(),
+                    error: format!("{e:#}"),
+                }),
+            }
+        }
+
+        Ok(BuildBatchReport { built, failed, cancelled: false })
+    })
+    .await
+}
+
+/// Assemble one stored volume and write it out.
+fn build_one(
+    library: &Library,
+    series: SeriesId,
+    number: &str,
+    format: Format,
+    root: &std::path::Path,
+    folder_per_series: bool,
+    report: &dyn Fn(usize, usize),
+) -> anyhow::Result<BuiltVolume> {
+    let volume = library.build_volume(series, number)?;
+    let pages = volume.total_included();
+    if pages == 0 {
+        anyhow::bail!("volume {number} has no pages");
+    }
+
+    let out = build_path(root, &volume, format, folder_per_series);
+    let mut progress = |done: usize, _total: usize| report(done, pages);
+
+    match format {
+        Format::Epub => writers::epub::write_with_progress(&volume, &out, &mut progress)?,
+        Format::Cbz => writers::cbz::write_with_progress(&volume, &out, &mut progress)?,
+    }
+
+    Ok(BuiltVolume {
+        volume: number.to_string(),
+        bytes: std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0),
+        path: out.to_string_lossy().into_owned(),
+        pages,
+    })
+}
+
+fn open_at(root: &std::path::Path) -> Result<Library> {
+    Library::open(root)
 }
 
 /// Fetch the published layout and covers, and merge them in.
