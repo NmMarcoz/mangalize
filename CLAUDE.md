@@ -285,6 +285,86 @@ there while looking fine in desktop EPUB readers.
   and in any build not installed from a release. Only an explicit check reports
   errors.
 
+## Android
+
+The app ships from the same Rust and the same React. What differs is gated, not
+forked.
+
+### What is gated, and why
+
+| Gone on Android | Reason |
+| --- | --- |
+| Send to Kindle | `keyring` has no Android backend, so there is nowhere safe to keep the SMTP password. `send.rs` is `#[cfg(desktop)]` and the command returns `UNAVAILABLE`. |
+| The harvest window | It needs a second webview. Android has one. Pages that build themselves in JavaScript can only be reached by reading their markup. |
+| Folder pickers | Android sandboxes app storage. The library and the build folder both live in `app_data_dir()`; reaching outside needs a document picker this app has no use for. |
+| Reveal in Finder | No file manager to reveal into. |
+| The updater | No Android implementation, and a phone updates through whatever store installed it. Naming `updater:default` in a shared capability is what broke the first Android build — hence `capabilities/desktop.json` and its `platforms` field. |
+| Drag and drop | Nothing to drag from. |
+
+The frontend asks `src/lib/platform.ts`, which reads the user agent. It hides
+affordances rather than letting them fail: a button that opens a folder picker
+Android does not have is worse than no button, because it looks like something
+that should work.
+
+### Three things that are not obvious
+
+**`env(safe-area-inset-*)` does not do what it does on iOS.** Android's WebView
+only ever reports a *display cutout* through it, never the status bar or the
+gesture bar. On a phone without a notch every inset reads zero and the app draws
+its header under the clock. The insets are offered to the view hierarchy
+instead, so `MainActivity.kt` takes them there and pads the window the WebView
+lives in. The web side then knows nothing about it.
+
+**16 KB pages.** Android 15 devices use them, and a shared library linked for
+4 KB ones loads in a compatibility mode behind a system dialog telling the user
+the app is broken. `/.cargo/config.toml` passes `-Wl,-z,max-page-size=16384` for
+the four Android targets. Check it with:
+
+```sh
+llvm-readelf -l target/aarch64-linux-android/release/libmangalize_app.so | grep LOAD
+```
+
+The alignment column must read `0x4000`. The emulator image to test on is the
+one whose name contains `16k`.
+
+**The back button closes the app unless something listens.** Tauri only forwards
+it to the webview if a listener is registered, and otherwise finishes the
+activity — from any screen, including the middle of a chapter. `App.tsx`
+registers `onBackButtonPress` and answers it with `backFrom(view)`, the same
+function shape the in-app back buttons use, so the two can never disagree about
+where back goes.
+
+### `src-tauri/gen/android` is committed
+
+Generated, but not entirely: `MainActivity.kt` and the manifest are ours and
+`tauri android init` leaves them alone. Committing the project means those edits
+survive a fresh checkout. Only build output is ignored. Everything under
+`app/src/main/java/dev/mangalize/app/generated/` is Tauri's and is rewritten on
+every build — do not edit it.
+
+### Building
+
+```sh
+scripts/android.sh              # signed release APK at target/mangalize-release.apk
+scripts/android.sh install      # … and push it to the running device
+scripts/android.sh logs         # follow the app's log, web console included
+```
+
+Signing lives in that script rather than in `app/build.gradle.kts` because that
+file *is* regenerated. The keystore is outside the repo — `~/.mangalize/` by
+default, overridable with `MANGALIZE_KEYSTORE`.
+
+The default keystore is a local one with a throwaway password, good for putting
+a build on a device you own and nothing else. An Android app's signing key is
+its identity: publish with that one and anyone who reads `scripts/android.sh`
+can sign an update phones will accept as yours. Generate a real keystore, keep
+it somewhere it cannot be lost — a key that changes cannot update an installed
+app — and point `MANGALIZE_KEYSTORE` at it.
+
+Needs `ANDROID_HOME`, an NDK, and a JDK; the script finds the newest NDK and
+build-tools installed rather than pinning a version. Android Studio's bundled
+JBR works as `JAVA_HOME`.
+
 ## Style
 
 Rust and TypeScript both follow the same comment discipline, and it is the main

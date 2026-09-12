@@ -4,6 +4,7 @@ import { BookOpen, FolderOpen, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { canPickFolders } from "@/lib/platform";
 import {
   getSettings,
   setSettings,
@@ -76,13 +77,17 @@ export function WelcomeView({ onDone, onError }: WelcomeViewProps) {
             <span className="min-w-0 flex-1 truncate rounded-md border border-border bg-background px-3 py-2 font-mono text-[11px]">
               {folder ?? "…"}
             </span>
-            <Button variant="outline" size="sm" onClick={() => void pick()}>
-              <FolderOpen />
-              Change
-            </Button>
+            {canPickFolders && (
+              <Button variant="outline" size="sm" onClick={() => void pick()}>
+                <FolderOpen />
+                Change
+              </Button>
+            )}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Created for you if it does not exist yet.
+            {canPickFolders
+              ? "Created for you if it does not exist yet."
+              : "The app's own storage. Android does not hand out anywhere else without a document picker this app has no use for."}
           </p>
         </div>
 

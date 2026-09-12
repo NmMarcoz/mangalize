@@ -31,6 +31,7 @@ import {
   type ChapterStatus,
   type FetchProgress,
 } from "@/lib/library";
+import { canRenderPages } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 interface ChapterFetchDialogProps {
@@ -180,7 +181,7 @@ export function ChapterFetchDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
-      <DialogContent className="max-h-[88vh] max-w-5xl">
+      <DialogContent className="max-h-[88dvh] max-w-5xl">
         <div className="border-b border-border px-4 py-3">
           <DialogTitle>Get chapter {chapter}</DialogTitle>
           <DialogDescription>
@@ -204,15 +205,17 @@ export function ChapterFetchDialog({
             {stage === "looking" ? <Loader2 className="animate-spin" /> : <Search />}
             Find images
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => void openInWindow()}
-            disabled={busy || !url.trim()}
-            title="Render the page in a window and capture what it loads"
-          >
-            <Globe />
-            Open page
-          </Button>
+          {canRenderPages && (
+            <Button
+              variant="outline"
+              onClick={() => void openInWindow()}
+              disabled={busy || !url.trim()}
+              title="Render the page in a window and capture what it loads"
+            >
+              <Globe />
+              Open page
+            </Button>
+          )}
         </div>
 
         <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto border-t border-border p-4">
@@ -222,10 +225,21 @@ export function ChapterFetchDialog({
               <div>
                 <p className="font-medium">No images in that page's markup.</p>
                 <p className="mt-0.5 text-muted-foreground">
-                  It most likely builds itself in JavaScript. Use{" "}
-                  <span className="font-medium text-foreground">Open page</span>{" "}
-                  to render it in a window, scroll until the pages have loaded,
-                  and click Capture.
+                  {canRenderPages ? (
+                    <>
+                      It most likely builds itself in JavaScript. Use{" "}
+                      <span className="font-medium text-foreground">Open page</span>{" "}
+                      to render it in a window, scroll until the pages have
+                      loaded, and click Capture.
+                    </>
+                  ) : (
+                    <>
+                      It most likely builds itself in JavaScript, which needs a
+                      second window to render — something this platform does not
+                      have. Downloading it on the desktop app and syncing the
+                      library is the way round.
+                    </>
+                  )}
                 </p>
               </div>
             </div>

@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { List, Tags } from "lucide-react";
 
 import { ChapterSidebar } from "@/components/ChapterSidebar";
 import { MetadataDialog, type AppliedMetadata } from "@/components/MetadataDialog";
 import { MetadataPanel } from "@/components/MetadataPanel";
 import { PageGrid, type PageGroup } from "@/components/PageGrid";
 import { Toolbar } from "@/components/Toolbar";
+import { Button } from "@/components/ui/button";
 import {
   buildVolume,
   effectiveCover,
@@ -20,6 +22,7 @@ import {
   type Page,
   type Volume,
 } from "@/lib/api";
+import { isMobile } from "@/lib/platform";
 import { resolveBuildPath } from "@/lib/settings";
 import { sendFiles } from "@/lib/send";
 
@@ -54,6 +57,8 @@ export function EditorView({
   onError,
 }: EditorViewProps) {
   const [activeChapter, setActiveChapter] = useState<number | null>(null);
+  /** Which panel is covering the grid, on a window too narrow to hold both. */
+  const [panel, setPanel] = useState<"chapters" | "metadata" | null>(null);
   const [showExcluded, setShowExcluded] = useState(true);
   const [thumbWidth, setThumbWidth] = useState(150);
 
@@ -437,15 +442,44 @@ export function EditorView({
         onReveal={() => report && void revealItemInDir(report.path)}
       />
 
-      <div className="flex min-h-0 flex-1">
+      {/* On a phone the two panels are 560px of chrome in front of a 393px
+          window, so they cover the grid on demand instead of flanking it. The
+          grid is the part you came here to look at. */}
+      <div className="relative flex min-h-0 flex-1">
+        {isMobile && (
+          <div className="absolute bottom-3 left-1/2 z-40 flex -translate-x-1/2 gap-1 rounded-full border border-border bg-card/95 p-1 shadow-lg backdrop-blur">
+            <Button
+              variant={panel === "chapters" ? "default" : "ghost"}
+              size="sm"
+              className="rounded-full"
+              onClick={() => setPanel((p) => (p === "chapters" ? null : "chapters"))}
+            >
+              <List />
+              Chapters
+            </Button>
+            <Button
+              variant={panel === "metadata" ? "default" : "ghost"}
+              size="sm"
+              className="rounded-full"
+              onClick={() => setPanel((p) => (p === "metadata" ? null : "metadata"))}
+            >
+              <Tags />
+              Details
+            </Button>
+          </div>
+        )}
+
+        <Sheet show={!isMobile || panel === "chapters"} mobile={isMobile}>
         <ChapterSidebar
           volume={volume}
           active={activeChapter}
           onSelect={(index) => {
             setActiveChapter(index);
             setSelection(new Set());
+            setPanel(null);
           }}
         />
+        </Sheet>
 
         <main
           className="scrollbar-thin min-w-0 flex-1 overflow-y-auto"
@@ -468,6 +502,7 @@ export function EditorView({
           />
         </main>
 
+        <Sheet show={!isMobile || panel === "metadata"} mobile={isMobile}>
         <MetadataPanel
           volume={volume}
           onChange={patchMetadata}
@@ -478,6 +513,7 @@ export function EditorView({
           suggestedFileName={suggested}
           onFileName={setFileName}
         />
+        </Sheet>
       </div>
 
       <MetadataDialog
@@ -489,5 +525,30 @@ export function EditorView({
         onApply={applyLookup}
       />
     </>
+  );
+}
+
+/**
+ * A panel that is a column on a desktop and a cover over the grid on a phone.
+ *
+ * A wrapper rather than a prop on each panel: both already know what width they
+ * want beside a grid, and neither should have to learn a second layout to be
+ * shown on its own.
+ */
+function Sheet({
+  show,
+  mobile,
+  children,
+}: {
+  show: boolean;
+  mobile: boolean;
+  children: React.ReactNode;
+}) {
+  if (!show) return null;
+  if (!mobile) return <>{children}</>;
+  return (
+    <div className="absolute inset-0 z-30 flex bg-background [&>aside]:w-full [&>aside]:border-0">
+      {children}
+    </div>
   );
 }

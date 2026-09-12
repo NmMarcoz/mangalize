@@ -12,33 +12,63 @@ import {
 } from "lucide-react";
 
 import type { UpdateStage } from "@/hooks/useUpdater";
+import { canSendToDevice } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 /** Top-level destinations. A series or the editor both live under the library. */
 export type Section = "library" | "explore" | "history" | "send" | "settings";
+
+/**
+ * Where the app's navigation sits.
+ *
+ * `rail` is the desktop column. `bar` is the phone's bottom row, which is not
+ * the same control turned sideways: a thumb reaches the bottom of a phone and
+ * nothing else, so the items get wider targets, always-on labels, and none of
+ * the rail's chrome-management affordances.
+ */
+export type NavVariant = "rail" | "bar";
 
 interface SidebarProps {
   active: Section;
   onNavigate: (to: Section) => void;
   updateStage: UpdateStage;
   onCheckUpdates: () => void;
+  variant?: NavVariant;
 }
 
 /** Remembered across launches; purely chrome, so it does not belong in settings. */
 const EXPANDED_KEY = "mangalize:sidebar-expanded";
 
+interface Destination {
+  section: Section;
+  icon: React.ReactNode;
+  label: string;
+}
+
+function destinations(): Destination[] {
+  const all: Destination[] = [
+    { section: "library", icon: <BookOpen className="size-4" />, label: "Library" },
+    { section: "explore", icon: <Compass className="size-4" />, label: "Explore" },
+    { section: "history", icon: <Clock className="size-4" />, label: "History" },
+    { section: "send", icon: <Send className="size-4" />, label: "Send to Kindle" },
+    { section: "settings", icon: <Settings className="size-4" />, label: "Settings" },
+  ];
+  return all.filter((d) => d.section !== "send" || canSendToDevice);
+}
+
 /**
- * The app's left rail.
+ * The app's navigation.
  *
- * Collapsed to icons by default because the volume editor wants every pixel it
- * can get — a page grid and a metadata panel already compete for the width.
- * Expanding is one click and is remembered.
+ * As a rail it is collapsed to icons by default, because the volume editor wants
+ * every pixel it can get — a page grid and a metadata panel already compete for
+ * the width. Expanding is one click and is remembered.
  */
 export function Sidebar({
   active,
   onNavigate,
   updateStage,
   onCheckUpdates,
+  variant = "rail",
 }: SidebarProps) {
   const [expanded, setExpanded] = useState(
     () => localStorage.getItem(EXPANDED_KEY) === "true",
@@ -51,6 +81,27 @@ export function Sidebar({
     });
   }, []);
 
+  if (variant === "bar") {
+    return (
+      <nav
+        className="flex shrink-0 items-stretch border-t border-border bg-card/80 backdrop-blur"
+        // Android's gesture bar is already padded around by the activity; this
+        // is for a platform that reports it to CSS instead, and is zero here.
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        {destinations().map((d) => (
+          <Tab
+            key={d.section}
+            icon={d.icon}
+            label={d.section === "send" ? "Send" : d.label}
+            active={active === d.section}
+            onClick={() => onNavigate(d.section)}
+          />
+        ))}
+      </nav>
+    );
+  }
+
   return (
     <nav
       className={cn(
@@ -59,41 +110,16 @@ export function Sidebar({
       )}
     >
       <div className="flex flex-col gap-1 px-2">
-        <Item
-          icon={<BookOpen className="size-4" />}
-          label="Library"
-          expanded={expanded}
-          active={active === "library"}
-          onClick={() => onNavigate("library")}
-        />
-        <Item
-          icon={<Compass className="size-4" />}
-          label="Explore"
-          expanded={expanded}
-          active={active === "explore"}
-          onClick={() => onNavigate("explore")}
-        />
-        <Item
-          icon={<Clock className="size-4" />}
-          label="History"
-          expanded={expanded}
-          active={active === "history"}
-          onClick={() => onNavigate("history")}
-        />
-        <Item
-          icon={<Send className="size-4" />}
-          label="Send to Kindle"
-          expanded={expanded}
-          active={active === "send"}
-          onClick={() => onNavigate("send")}
-        />
-        <Item
-          icon={<Settings className="size-4" />}
-          label="Settings"
-          expanded={expanded}
-          active={active === "settings"}
-          onClick={() => onNavigate("settings")}
-        />
+        {destinations().map((d) => (
+          <Item
+            key={d.section}
+            icon={d.icon}
+            label={d.label}
+            expanded={expanded}
+            active={active === d.section}
+            onClick={() => onNavigate(d.section)}
+          />
+        ))}
       </div>
 
       <div className="mt-auto flex flex-col gap-1 px-2">
@@ -128,6 +154,34 @@ export function Sidebar({
         />
       </div>
     </nav>
+  );
+}
+
+/** One bottom-bar tab: a thumb-sized target with its label always showing. */
+function Tab({
+  icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 py-2 text-[10px] transition-colors",
+        active ? "text-primary" : "text-muted-foreground",
+      )}
+    >
+      <span className="shrink-0">{icon}</span>
+      <span className="truncate">{label}</span>
+    </button>
   );
 }
 

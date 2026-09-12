@@ -90,6 +90,18 @@
     user-select: none;
     font-synthesis-weight: none;
     text-rendering: optimizeLegibility;
+    /* A notch, where the platform tells CSS about one. Android does not — it
+       offers system bar insets to the view hierarchy instead, which is why
+       `MainActivity.kt` pads the window rather than leaving it to this. These
+       resolve to zero on desktop and on any phone without a cutout. */
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    /* Pull-to-refresh and rubber-banding are browser gestures, and this is not
+       a page to refresh. Scrolling inside the reader is unaffected. */
+    overscroll-behavior: none;
+    /* Wait 300ms to see if a tap is a double-tap and every tap feels broken. */
+    touch-action: manipulation;
   }
   /* Text the user may genuinely want to copy. */
   input,

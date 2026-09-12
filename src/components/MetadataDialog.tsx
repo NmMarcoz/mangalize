@@ -123,7 +123,7 @@ export function MetadataDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-4xl">
+      <DialogContent className="max-h-[85dvh] max-w-4xl">
         <div className="border-b border-border px-4 py-3">
           <DialogTitle>Fetch series metadata</DialogTitle>
           <DialogDescription>

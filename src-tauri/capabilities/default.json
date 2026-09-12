@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions for the main window.",
+  "description": "Permissions for the main window. `process:allow-exit` is here rather than in the desktop capability because Android's back button at the root screen is meant to close the app.",
   "windows": [
     "main"
   ],
@@ -9,7 +9,6 @@
     "core:default",
     "dialog:default",
     "opener:default",
-    "updater:default",
-    "process:allow-restart"
+    "process:allow-exit"
   ]
 }

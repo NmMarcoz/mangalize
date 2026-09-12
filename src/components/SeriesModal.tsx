@@ -41,6 +41,7 @@ import {
   type Series,
 } from "@/lib/library";
 import type { ReaderTarget } from "@/lib/reader";
+import { isMobile } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 interface SeriesModalProps {
@@ -213,11 +214,18 @@ export function SeriesModal({
 
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-h-[88vh] max-w-4xl">
+      <DialogContent className="max-h-[88dvh] max-w-4xl">
         <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
           {/* ------------------------------------------------------ header */}
-          <div className="flex gap-4 p-5">
-            <div className="flex h-56 w-40 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted/40">
+          {/* A 160px cover next to a text column leaves a phone barely 180px to
+              set a description in, so there the cover goes above it instead. */}
+          <div className={cn("flex gap-4 p-5", isMobile && "flex-col")}>
+            <div
+              className={cn(
+                "flex items-center justify-center overflow-hidden rounded-lg bg-muted/40",
+                isMobile ? "h-52 w-36 self-start" : "h-56 w-40 shrink-0",
+              )}
+            >
               {series.thumbnail_url ? (
                 <img
                   src={series.thumbnail_url}
@@ -324,7 +332,12 @@ export function SeriesModal({
           <Separator />
 
           {/* ---------------------------------------------------- chapters */}
-          <div className="flex items-end gap-3 px-5 py-3">
+          <div
+            className={cn(
+              "gap-3 px-5 py-3",
+              isMobile ? "flex flex-col items-stretch" : "flex items-end",
+            )}
+          >
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="language">Translation</Label>
               <Select
@@ -332,7 +345,7 @@ export function SeriesModal({
                 onValueChange={(v) => setLanguage(v)}
                 disabled={series.available_languages.length === 0}
               >
-                <SelectTrigger id="language" className="w-56">
+                <SelectTrigger id="language" className={isMobile ? "w-full" : "w-56"}>
                   <SelectValue placeholder="No translations listed" />
                 </SelectTrigger>
                 <SelectContent>
@@ -345,7 +358,7 @@ export function SeriesModal({
               </Select>
             </div>
 
-            <p className="flex-1 pb-2 text-[11px] text-muted-foreground">
+            <p className={cn("text-[11px] text-muted-foreground", isMobile ? "-mt-1" : "flex-1 pb-2")}>
               {series.available_languages.length > 1 &&
                 `${series.available_languages.length} translations available. `}
               {layout && `${flat.length} chapters in this one.`}

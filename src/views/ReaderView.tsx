@@ -26,6 +26,7 @@ import {
   type ReaderPrefs,
   type ReaderTarget,
 } from "@/lib/reader";
+import { isMobile } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 interface ReaderViewProps {
@@ -40,6 +41,9 @@ const PRELOAD = 2;
 
 /** How long to sit still before writing the reading position. */
 const SAVE_DELAY = 600;
+
+/** Pixels a touch must travel across the page before it counts as a turn. */
+const SWIPE_MIN = 50;
 
 /**
  * A chapter, flattened to the handful of things the reader draws.
@@ -298,6 +302,11 @@ export function ReaderView({ target, onNavigate, onExit }: ReaderViewProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [advance, onExit, rtl, prefs.mode, total]);
 
+  // Where a touch started, and whether the gesture that just ended was a swipe
+  // rather than a tap. Refs because neither ever needs to paint anything.
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+  const swiped = useRef(false);
+
   const patchPrefs = useCallback((patch: Partial<ReaderPrefs>) => {
     setPrefs((current) => {
       const next = { ...current, ...patch };
@@ -344,7 +353,9 @@ export function ReaderView({ target, onNavigate, onExit }: ReaderViewProps) {
               <h2 className="mt-3 text-sm font-medium text-white">
                 This chapter cannot be read here
               </h2>
-              <p className="mt-1.5 text-xs leading-relaxed text-white/60">
+              {/* The message ends in a publisher URL, which has no spaces in
+                  it to wrap at and runs off both edges of a phone without this. */}
+              <p className="mt-1.5 break-words text-xs leading-relaxed text-white/60">
                 {failure.message}
               </p>
 
@@ -368,7 +379,7 @@ export function ReaderView({ target, onNavigate, onExit }: ReaderViewProps) {
               </div>
 
               <p className="mt-4 text-[10px] text-white/35">
-                Esc also closes the reader.
+                {isMobile ? "Back also closes the reader." : "Esc also closes the reader."}
               </p>
             </div>
           ) : (
@@ -425,12 +436,37 @@ export function ReaderView({ target, onNavigate, onExit }: ReaderViewProps) {
         <div
           className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden"
           onClick={(event) => {
+            // A swipe ends in a click too, and turning the page twice for one
+            // gesture is worse than either behaviour on its own.
+            if (swiped.current) {
+              swiped.current = false;
+              return;
+            }
             // Thirds: outer edges turn, the middle shows and hides the chrome.
             const { left, width } = event.currentTarget.getBoundingClientRect();
             const position = (event.clientX - left) / width;
             if (position < 0.33) advance(rtl ? 1 : -1);
             else if (position > 0.67) advance(rtl ? -1 : 1);
             else setShowChrome((v) => !v);
+          }}
+          onTouchStart={(event) => {
+            const touch = event.touches[0];
+            swipe.current = { x: touch.clientX, y: touch.clientY };
+          }}
+          onTouchEnd={(event) => {
+            const from = swipe.current;
+            swipe.current = null;
+            if (!from) return;
+            const touch = event.changedTouches[0];
+            const dx = touch.clientX - from.x;
+            const dy = touch.clientY - from.y;
+            // Mostly-horizontal and far enough to be deliberate. A drifting
+            // thumb on a tap moves a few pixels in every direction.
+            if (Math.abs(dx) < SWIPE_MIN || Math.abs(dx) < Math.abs(dy)) return;
+            swiped.current = true;
+            // Dragging left pulls the next page in from the right, which is the
+            // previous page in a right-to-left book.
+            advance(dx < 0 ? (rtl ? -1 : 1) : rtl ? 1 : -1);
           }}
         >
           {visible.map((index) => (

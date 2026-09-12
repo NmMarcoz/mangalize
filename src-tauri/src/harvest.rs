@@ -26,12 +26,16 @@
 //! fetched until they pick it in the picker.
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Listener, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::AppHandle;
+#[cfg(desktop)]
+use tauri::{Listener, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 /// Label of the harvest window. Only ever one at a time.
+#[cfg(desktop)]
 const WINDOW: &str = "harvest";
 
 /// The event the injected script emits on capture.
+#[cfg(desktop)]
 const EVENT: &str = "harvest:pages";
 
 /// One image the rendered page had loaded.
@@ -46,6 +50,17 @@ pub struct Harvested {
 ///
 /// An empty list means they closed the window without capturing, which is a
 /// perfectly ordinary outcome and not an error.
+#[cfg(not(desktop))]
+#[tauri::command]
+pub async fn harvest_images(_app: AppHandle, _url: String) -> Result<Vec<Harvested>, String> {
+    // Android has one webview and no notion of opening a second window beside
+    // it. Reading a page's markup still works; only rendering it does not.
+    Err("Opening a page in a window is not available on this platform. \
+         Try Find images, which reads the page's markup instead."
+        .into())
+}
+
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn harvest_images(app: AppHandle, url: String) -> Result<Vec<Harvested>, String> {
     let target = url
@@ -105,6 +120,7 @@ pub async fn harvest_images(app: AppHandle, url: String) -> Result<Vec<Harvested
 /// anything lazy-loaded has been asked for, keeps a live count in a floating
 /// bar, and reports only when asked. Images smaller than a page are ignored so
 /// the count reflects pages rather than icons and avatars.
+#[cfg(desktop)]
 const COLLECTOR: &str = r#"
 (function () {
   // Ad frames would each add their own bar and report their own images.

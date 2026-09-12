@@ -1,0 +1,8 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Not DayNight: the app is dark whatever the system is set to, because
+         `index.html` hard-codes `class="dark"`. Following the system here would
+         only put a light frame around a dark window. -->
+    <style name="Theme.mangalize_app" parent="Theme.MaterialComponents.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+</resources>

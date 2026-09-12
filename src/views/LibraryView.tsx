@@ -21,6 +21,7 @@ import {
   setLibraryRoot,
   type Series,
 } from "@/lib/library";
+import { canPickFolders } from "@/lib/platform";
 
 interface LibraryViewProps {
   onOpenSeries: (id: number) => void;
@@ -71,20 +72,27 @@ export function LibraryView({
       <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-4 py-2.5">
         <div className="min-w-0 flex-1">
           <h1 className="text-sm font-semibold">Library</h1>
-          <button
-            onClick={() => void relocate()}
-            className="truncate text-[11px] text-muted-foreground hover:text-foreground"
-            title={root ? `${root} — click to move the library` : undefined}
-          >
-            {root ?? "…"}
-          </button>
+          {canPickFolders ? (
+            <button
+              onClick={() => void relocate()}
+              className="block w-full truncate text-left text-[11px] text-muted-foreground hover:text-foreground"
+              title={root ? `${root} — click to move the library` : undefined}
+            >
+              {root ?? "…"}
+            </button>
+          ) : (
+            // Nowhere to move it to. See `canPickFolders`.
+            <p className="truncate text-[11px] text-muted-foreground">{root ?? "…"}</p>
+          )}
         </div>
 
-        <Hint label="Build a volume from a folder instead">
-          <Button variant="ghost" size="icon" onClick={onOpenFolder}>
-            <FolderOpen />
-          </Button>
-        </Hint>
+        {canPickFolders && (
+          <Hint label="Build a volume from a folder instead">
+            <Button variant="ghost" size="icon" onClick={onOpenFolder}>
+              <FolderOpen />
+            </Button>
+          </Hint>
+        )}
         <Hint label="Reload the library">
           <Button variant="ghost" size="icon" onClick={() => void refresh()}>
             <RefreshCw />

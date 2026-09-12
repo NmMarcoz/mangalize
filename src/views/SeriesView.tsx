@@ -56,6 +56,7 @@ import {
   type Series,
   type VolumeStatus,
 } from "@/lib/library";
+import { isMobile } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 interface SeriesViewProps {
@@ -415,7 +416,9 @@ export function SeriesView({
         </Hint>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      {/* `relative` so the volume panel has something to cover when it is an
+          overlay rather than a column. */}
+      <div className="relative flex min-h-0 flex-1">
         <main
           className="scrollbar-thin min-w-0 flex-1 overflow-y-auto p-5"
           onClick={(e) => {
@@ -786,7 +789,16 @@ function VolumePanel({
   const missing = missingChapters(volume);
 
   return (
-    <aside className="flex w-96 shrink-0 flex-col border-l border-border bg-card/40">
+    <aside
+      className={cn(
+        "flex flex-col border-border bg-card/40",
+        // A 384px panel beside a grid leaves a phone's grid nothing, so there
+        // it covers the grid instead of sitting next to it.
+        isMobile
+          ? "absolute inset-0 z-30 border-l-0 bg-background"
+          : "w-96 shrink-0 border-l",
+      )}
+    >
       <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-medium">{volumeLabel(volume)}</h2>

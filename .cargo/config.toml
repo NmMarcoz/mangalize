@@ -1,0 +1,19 @@
+# Android 15 moved devices to 16 KB memory pages, and a shared library linked
+# for 4 KB ones is loaded in a slower compatibility mode behind a system dialog
+# telling the user the app is broken. The NDK's own libraries are already
+# aligned; ours needs to be asked.
+#
+# Set per-target rather than through RUSTFLAGS so a desktop build is untouched,
+# and here rather than in `gen/android` because that directory is generated and
+# any edit to it is lost on the next `tauri android init`.
+[target.aarch64-linux-android]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
+
+[target.armv7-linux-androideabi]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
+
+[target.i686-linux-android]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]
+
+[target.x86_64-linux-android]
+rustflags = ["-C", "link-arg=-Wl,-z,max-page-size=16384"]

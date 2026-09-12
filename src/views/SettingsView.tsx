@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { canPickFolders, canRevealFiles } from "@/lib/platform";
 import {
   COMPRESSION_PRESETS,
   getSettings,
@@ -216,17 +217,19 @@ function FolderSetting({
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => value && void revealItemInDir(value)}
-          disabled={!value}
+          onClick={() => value && canRevealFiles && void revealItemInDir(value)}
+          disabled={!value || !canRevealFiles}
           title={value ? "Reveal in file manager" : undefined}
           className="min-w-0 flex-1 truncate rounded-md border border-border bg-background px-3 py-2 text-left font-mono text-[11px] enabled:hover:border-muted-foreground/40 disabled:text-muted-foreground"
         >
           {value ?? placeholder ?? "Not set"}
         </button>
-        <Button variant="outline" size="sm" onClick={onPick}>
-          <FolderOpen />
-          Change
-        </Button>
+        {canPickFolders && (
+          <Button variant="outline" size="sm" onClick={onPick}>
+            <FolderOpen />
+            Change
+          </Button>
+        )}
         {onClear && value && (
           <Button variant="ghost" size="sm" onClick={onClear}>
             Clear

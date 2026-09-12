@@ -48,6 +48,17 @@ pub struct SendFailure {
     error: String,
 }
 
+/// Why sending is held back on mobile.
+///
+/// Android has no equivalent of the macOS Keychain or Windows Credential
+/// Manager that this reaches for. Falling back to a plaintext file would put a
+/// live credential for the user's whole mail account on disk, which is a worse
+/// answer than not offering the feature yet.
+#[cfg(not(desktop))]
+const UNAVAILABLE: &str = "Send to Kindle is not available on this platform yet: \
+                           there is nowhere secure to keep your mail password.";
+
+#[cfg(desktop)]
 fn entry() -> Result<keyring::Entry> {
     keyring::Entry::new(SERVICE, ACCOUNT).context("opening the system keychain")
 }
@@ -57,8 +68,14 @@ fn entry() -> Result<keyring::Entry> {
 /// A keychain that cannot be read at all is reported as "no password" rather
 /// than an error: on a machine where the keychain is unavailable the useful
 /// message is the one the send produces, not one from here.
+#[cfg(desktop)]
 fn stored_password() -> Option<String> {
     entry().ok()?.get_password().ok()
+}
+
+#[cfg(not(desktop))]
+fn stored_password() -> Option<String> {
+    None
 }
 
 #[tauri::command]
@@ -88,6 +105,7 @@ pub async fn save_send_config(
         current.delivery = config;
         settings::save(&app, &current)?;
 
+        #[cfg(desktop)]
         if let Some(secret) = password {
             let entry = entry()?;
             if secret.is_empty() {
@@ -98,6 +116,10 @@ pub async fn save_send_config(
                     .set_password(&secret)
                     .context("saving the password to the system keychain")?;
             }
+        }
+        #[cfg(not(desktop))]
+        if password.is_some() {
+            bail!("{UNAVAILABLE}");
         }
 
         Ok(DeliveryStatus {
@@ -112,12 +134,18 @@ pub async fn save_send_config(
 #[tauri::command]
 pub async fn send_test_email(app: AppHandle) -> Result<(), String> {
     blocking(move || {
+        #[cfg(not(desktop))]
+        bail!("{UNAVAILABLE}");
+
+        #[cfg(desktop)]
+        {
         let config = settings::load(&app)?.delivery;
         let to = config.kindle_email.trim().to_string();
         if to.is_empty() {
             bail!("no device address set");
         }
         mangalize_send::send_test(&account(&config)?, &stored_password().unwrap_or_default(), &to)
+        }
     })
     .await
 }
@@ -133,6 +161,11 @@ pub async fn send_test_email(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn send_files(app: AppHandle, paths: Vec<String>) -> Result<SendReport, String> {
     blocking(move || {
+        #[cfg(not(desktop))]
+        bail!("{UNAVAILABLE}");
+
+        #[cfg(desktop)]
+        {
         if paths.is_empty() {
             bail!("nothing to send");
         }
@@ -170,6 +203,7 @@ pub async fn send_files(app: AppHandle, paths: Vec<String>) -> Result<SendReport
         }
 
         Ok(SendReport { sent, failed })
+        }
     })
     .await
 }

@@ -10,6 +10,11 @@
 //! - [`fetch`] — pulling a chapter's images off a URL (`mangalize-fetch`)
 //! - [`harvest`] — rendering a page to see what images it really loads
 //! - [`send`] — mailing a finished volume to a device (`mangalize-send`)
+//!
+//! Two of those are desktop-only in substance: `harvest` needs a second window
+//! and `send` needs an OS keychain, neither of which Android offers. Their
+//! commands still exist on mobile and refuse politely, which keeps one command
+//! list and gives the frontend something clearer than a missing-command error.
 //! - [`reader`] — reading a downloaded chapter; library only, works offline
 
 mod fetch;
@@ -25,13 +30,19 @@ mod volume;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(fetch::BatchControl::default())
         .manage(library::BuildControl::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init());
+
+    // The updater has no Android implementation; mobile builds update through
+    // the store they were installed from.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+
+    builder
         .invoke_handler(tauri::generate_handler![
             volume::scan,
             volume::thumbnail,
@@ -72,11 +83,11 @@ pub fn run() {
             fetch::plan_batch,
             fetch::download_batch,
             fetch::cancel_batch,
-            harvest::harvest_images,
             send::send_config,
             send::save_send_config,
             send::send_test_email,
             send::send_files,
+            harvest::harvest_images,
             reader::reader_chapter,
             reader::reader_page,
             reader::reader_online_chapter,
@@ -89,3 +100,4 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running mangalize");
 }
+

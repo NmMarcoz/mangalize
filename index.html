@@ -2,7 +2,14 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover so the Android gesture bar and notch are ours to pad
+         around; user-scalable=no because browser zoom on an app shell moves the
+         chrome rather than the page, and the reader does its own scaling. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"
+    />
+    <meta name="color-scheme" content="dark" />
     <title>Mangalize</title>
   </head>
   <body>

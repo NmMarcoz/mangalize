@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 
+import { isMobile } from "@/lib/platform";
+
 export type UpdateStage =
   | "idle"
   | "checking"
@@ -37,6 +39,12 @@ export function useUpdater() {
   const pending = useRef<Update | null>(null);
 
   const runCheck = useCallback(async (silent: boolean) => {
+    // Mobile apps update through whatever store installed them; the plugin has
+    // no implementation there, so asking would only produce a confusing error.
+    if (isMobile) {
+      setState({ stage: "idle" });
+      return;
+    }
     setState({ stage: "checking" });
     try {
       const found = await check();

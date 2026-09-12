@@ -90,7 +90,7 @@ pub fn load(app: &AppHandle) -> Result<Settings> {
     Ok(Settings {
         library_root: match stored.library_root {
             Some(root) => root,
-            None => default_library_root()?,
+            None => default_library_root(app)?,
         },
         output_root: stored.output_root,
         default_format: stored.default_format.unwrap_or_else(|| "epub".into()),
@@ -175,32 +175,45 @@ pub async fn set_settings(app: AppHandle, settings: Settings) -> Result<Settings
 
 /// The folder offered on first run, so the UI can show it before it exists.
 #[tauri::command]
-pub fn suggested_output_root() -> Result<String, String> {
-    default_output_root()
+pub fn suggested_output_root(app: AppHandle) -> Result<String, String> {
+    default_output_root(&app)
         .map(|p| p.to_string_lossy().into_owned())
         .map_err(|e| format!("{e:#}"))
 }
 
-/// `~/Mangalize`.
+/// Where a library lives when the user has not said otherwise.
 ///
-/// Deliberately a plain, visible folder in the home directory rather than an
-/// app-private one, and deliberately the same default the CLI uses so both
-/// front ends see the same collection. This is the user's library; they should
-/// be able to find it, back it up and move it without our help.
-pub fn default_library_root() -> Result<PathBuf> {
-    Ok(home()?.join("Mangalize"))
+/// On desktop, `~/Mangalize`: deliberately a plain, visible folder rather than
+/// an app-private one, and deliberately the same default the CLI uses so both
+/// front ends see the same collection. It is the user's library; they should be
+/// able to find it, back it up and move it without our help.
+///
+/// On Android there is no such place. Storage outside the app's own directory
+/// needs permissions and a document picker, and `$HOME` is either unset or
+/// points somewhere meaningless, so the app's private data directory is used
+/// instead.
+pub fn default_library_root(app: &AppHandle) -> Result<PathBuf> {
+    Ok(base_dir(app)?.join("Mangalize"))
 }
 
 /// Where builds land by default, offered on first run.
-pub fn default_output_root() -> Result<PathBuf> {
-    Ok(home()?.join("Mangalize").join("Exports"))
+pub fn default_output_root(app: &AppHandle) -> Result<PathBuf> {
+    Ok(base_dir(app)?.join("Mangalize").join("Exports"))
 }
 
-fn home() -> Result<PathBuf> {
+#[cfg(desktop)]
+fn base_dir(_app: &AppHandle) -> Result<PathBuf> {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .context("could not find your home directory")?;
     Ok(PathBuf::from(home))
+}
+
+#[cfg(not(desktop))]
+fn base_dir(app: &AppHandle) -> Result<PathBuf> {
+    app.path()
+        .app_data_dir()
+        .context("could not find the app's data directory")
 }
 
 fn path(app: &AppHandle) -> Result<PathBuf> {

@@ -118,7 +118,7 @@ export function BatchDownloadDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
-      <DialogContent className="max-h-[85vh] max-w-2xl">
+      <DialogContent className="max-h-[85dvh] max-w-2xl">
         <div className="border-b border-border px-4 py-3">
           <DialogTitle>Download missing chapters</DialogTitle>
           <DialogDescription>

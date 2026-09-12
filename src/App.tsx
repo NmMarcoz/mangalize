@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { onBackButtonPress } from "@tauri-apps/api/app";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
+import { exit } from "@tauri-apps/plugin-process";
 import { AlertTriangle, X } from "lucide-react";
 
 import { EmptyState } from "@/components/EmptyState";
@@ -8,6 +10,7 @@ import { Sidebar, type Section } from "@/components/Sidebar";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { EditorView } from "@/views/EditorView";
 import { LibraryView } from "@/views/LibraryView";
 import { SeriesView } from "@/views/SeriesView";
@@ -21,6 +24,7 @@ import { WelcomeView } from "@/views/WelcomeView";
 import { useUpdater } from "@/hooks/useUpdater";
 import { scanFolder, type Volume } from "@/lib/api";
 import { getSettings, type Settings } from "@/lib/settings";
+import { isMobile } from "@/lib/platform";
 import { clearThumbnails } from "@/lib/thumbs";
 
 /**
@@ -41,6 +45,36 @@ type View =
   | { kind: "settings" }
   | { kind: "editor"; from: { seriesId: number } | null };
 
+/**
+ * Where the back gesture goes from a given screen.
+ *
+ * Deliberately derived from the view rather than from a stack of visited ones:
+ * every screen already carries where it came from, because the in-app back
+ * buttons needed that first. Android's back button is the same question asked
+ * by a different control, so it gets the same answer, and the two can never
+ * disagree about it.
+ *
+ * `null` means this is as far back as it goes and the system should have the
+ * press — on Android that closes the app, which is what a user at the library
+ * pressing back means.
+ */
+function backFrom(view: View): View | null {
+  switch (view.kind) {
+    case "reader":
+      return view.back;
+    case "series":
+      return { kind: "library" };
+    case "editor":
+      return view.from ? { kind: "series", id: view.from.seriesId } : { kind: "library" };
+    case "library":
+      return null;
+    default:
+      // A tab other than the first one. Back goes home rather than retracing
+      // which tabs were visited in what order.
+      return { kind: "library" };
+  }
+}
+
 export default function App() {
   const [view, setView] = useState<View>({ kind: "library" });
   const [volume, setVolume] = useState<Volume | null>(null);
@@ -56,6 +90,43 @@ export default function App() {
     getSettings()
       .then(setSettings)
       .catch((e) => setError(String(e)));
+  }, []);
+
+  // Android's back button, which otherwise closes the app from any screen —
+  // the same dead end the reader used to be, with no way out but relaunching.
+  // Registering a listener at all is what stops Tauri handling it itself.
+  const latest = useRef(view);
+  latest.current = view;
+
+  useEffect(() => {
+    if (!isMobile) return;
+    let listener: { unregister: () => void } | undefined;
+    let disposed = false;
+
+    onBackButtonPress(() => {
+      // A dialog is the topmost thing on screen, so it is what back means while
+      // one is open. Asked of the DOM rather than tracked in state because
+      // every dialog in the app is a Radix one and they all already close on
+      // Escape — the alternative is threading an "is anything open" flag up
+      // from a dozen components that have no other reason to report it.
+      if (document.querySelector('[role="dialog"][data-state="open"]')) {
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        return;
+      }
+      const previous = backFrom(latest.current);
+      if (previous) setView(previous);
+      else void exit(0);
+    })
+      .then((handle) => {
+        if (disposed) handle.unregister();
+        else listener = handle;
+      })
+      .catch(() => {});
+
+    return () => {
+      disposed = true;
+      listener?.unregister();
+    };
   }, []);
 
   /* ---------------------------------------------------------------- scanning */
@@ -86,7 +157,10 @@ export default function App() {
   }, [runScan]);
 
   // Dropping a folder anywhere jumps straight to the editor, from any screen.
+  // There is nothing to drop from on a phone, and asking for the listener there
+  // only produces an error on startup.
   useEffect(() => {
+    if (isMobile) return;
     let unlisten: (() => void) | undefined;
     let disposed = false;
 
@@ -251,17 +325,29 @@ export default function App() {
 
   return (
     <TooltipProvider delayDuration={400}>
-      <div className="flex h-full">
+      {/* The rail sits beside the content; the phone's bar sits under it, which
+          is the same two children in the other direction with the nav last. */}
+      <div className={isMobile ? "flex h-full flex-col" : "flex h-full"}>
         {chrome && (
           <Sidebar
             active={section}
             onNavigate={(to) => setView({ kind: to } as View)}
             updateStage={updater.state.stage}
             onCheckUpdates={updater.checkNow}
+            variant={isMobile ? "bar" : "rail"}
           />
         )}
 
-        <div className="flex min-w-0 flex-1 flex-col">{body()}</div>
+        <div
+          className={cn(
+            "flex min-w-0 flex-1 flex-col",
+            // Above the bar in source order would put it under the content in a
+            // column, so the bar is moved rather than the content.
+            isMobile && "order-first",
+          )}
+        >
+          {body()}
+        </div>
 
         <UpdateBanner
           state={updater.state}
