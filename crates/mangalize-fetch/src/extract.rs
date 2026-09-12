@@ -94,6 +94,12 @@ pub fn image_urls(base: &str, html: &str) -> Vec<String> {
 
 /// Whether a resolved URL is worth offering as a page.
 fn is_page_candidate(url: &str) -> bool {
+    // An embedded image has already been vetted by `resolve`, and picking an
+    // "extension" out of a base64 payload would be nonsense.
+    if crate::data_uri::is_data_uri(url) {
+        return true;
+    }
+
     match url::extension_of(url) {
         Some(ext) => !NOT_A_PAGE.contains(&ext.as_str()),
         // No extension at all is common for CDN-served pages, so it is not

@@ -14,6 +14,7 @@
 //! of image URLs back to [`measure`], which is why measurement is a separate
 //! step from extraction.
 
+pub mod data_uri;
 pub mod download;
 pub mod extract;
 pub mod series;

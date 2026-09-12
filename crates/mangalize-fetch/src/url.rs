@@ -17,6 +17,9 @@ pub fn resolve(base: &str, reference: &str) -> Option<String> {
     if let Some(scheme_end) = scheme_of(reference) {
         return match &reference[..scheme_end].to_ascii_lowercase()[..] {
             "http" | "https" => Some(reference.to_string()),
+            "data" if crate::data_uri::is_data_image(reference) => {
+                Some(reference.to_string())
+            }
             _ => None,
         };
     }
@@ -160,9 +163,22 @@ mod tests {
 
     #[test]
     fn unfetchable_schemes_are_refused() {
-        assert_eq!(resolve(PAGE, "data:image/png;base64,AAA"), None);
         assert_eq!(resolve(PAGE, "javascript:void(0)"), None);
         assert_eq!(resolve(PAGE, "#top"), None);
+        // A blob URL only resolves inside the document that created it, so it
+        // is useless to us even though it looks like an address.
+        assert_eq!(resolve(PAGE, "blob:https://example.test/abc-123"), None);
+    }
+
+    #[test]
+    fn an_embedded_image_is_kept_because_it_needs_no_request() {
+        let embedded = "data:image/jpeg;base64,aGk=";
+        assert_eq!(resolve(PAGE, embedded).as_deref(), Some(embedded));
+    }
+
+    #[test]
+    fn an_embedded_non_image_is_still_refused() {
+        assert_eq!(resolve(PAGE, "data:text/html;base64,PGI+"), None);
     }
 
     #[test]

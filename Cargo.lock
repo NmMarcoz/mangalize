@@ -2425,6 +2425,7 @@ name = "mangalize-fetch"
 version = "1.4.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "image",
  "mangalize-core",
  "serde",

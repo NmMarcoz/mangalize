@@ -67,6 +67,42 @@ fn index_html() -> String {
 /// How many chapters the fixture site has published.
 const CHAPTERS: u32 = 6;
 
+/// A page that carries its images inside the markup instead of linking them.
+///
+/// This is the shape that has no address you could open in a new tab, and the
+/// reason embedded pages were invisible before: they were discarded alongside
+/// `javascript:` as "not fetchable".
+fn embedded_html() -> String {
+    use base64::Engine;
+    // Each page must differ, or dedup-by-source correctly collapses them into
+    // one. Real pages do; four copies of the same blank image do not.
+    let encode = |shade: u8| {
+        let mut image = image::RgbImage::new(800, 1168);
+        for pixel in image.pixels_mut() {
+            *pixel = image::Rgb([shade, shade, shade]);
+        }
+        let mut bytes = Vec::new();
+        image::DynamicImage::ImageRgb8(image)
+            .write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Jpeg)
+            .unwrap();
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    };
+
+    format!(
+        "<!doctype html><html><body>\
+         <img src=\"data:image/jpeg;base64,{}\">\
+         <img src=\"data:image/jpeg;base64,{}\">\
+         <img src=\"data:image/jpeg;base64,{}\">\
+         <img src=\"data:image/jpeg;base64,{}\">\
+         <img src=\"blob:http://localhost/abc-123\">\
+         </body></html>",
+        encode(40),
+        encode(90),
+        encode(160),
+        encode(220),
+    )
+}
+
 /// Body for a path, or `None` for 404.
 fn body_for(path: &str) -> Option<(&'static str, Vec<u8>)> {
     // Chapter pages exist only up to `CHAPTERS`; anything beyond 404s, which is
@@ -83,6 +119,7 @@ fn body_for(path: &str) -> Option<(&'static str, Vec<u8>)> {
     }
 
     match path {
+        "/embedded" => Some(("text/html; charset=utf-8", embedded_html().into_bytes())),
         "/manga/x/" => Some(("text/html; charset=utf-8", index_html().into_bytes())),
         "/chapter-7" => Some(("text/html; charset=utf-8", chapter_html().into_bytes())),
         "/pages/01.jpg" | "/pages/02.jpg" | "/pages/04.jpg" => {
@@ -459,4 +496,65 @@ fn a_url_with_no_number_and_no_links_cannot_be_planned_from() {
     // honest answer is "could not resolve", not a fabricated URL.
     assert!(plan.items.is_empty());
     assert_eq!(plan.unresolved, ["1"]);
+}
+
+
+/* ------------------------------------------------- pages baked into the html */
+
+#[test]
+fn images_embedded_in_the_markup_are_found_and_measured() {
+    let server = Server::start(false);
+    let found =
+        mangalize_fetch::extract_page(&format!("{}/embedded", server.base), &mut silent())
+            .unwrap();
+
+    // Four embedded pages; the blob: URL is correctly ignored, because it only
+    // resolves inside the document that created it.
+    assert_eq!(found.candidates.len(), 4, "expected four embedded pages");
+    assert!(found.candidates.iter().all(|c| c.selected));
+    assert!(found.candidates.iter().all(|c| c.error.is_none()));
+    assert!(
+        found.candidates.iter().all(|c| (c.width, c.height) == (800, 1168)),
+        "embedded pages must be measured without a request"
+    );
+}
+
+#[test]
+fn embedded_pages_are_written_out_like_any_other() {
+    let server = Server::start(false);
+    let page_url = format!("{}/embedded", server.base);
+    let found = mangalize_fetch::extract_page(&page_url, &mut silent()).unwrap();
+
+    let chosen: Vec<String> = found.candidates.iter().map(|c| c.url.clone()).collect();
+    let dir = TempDir::new().unwrap();
+    let written =
+        mangalize_fetch::download_pages(&chosen, dir.path(), Some(&page_url), &mut silent())
+            .unwrap();
+
+    assert_eq!(written.len(), 4);
+    for path in &written {
+        let (w, h) = image::image_dimensions(path).unwrap();
+        assert_eq!((w, h), (800, 1168));
+    }
+}
+
+#[test]
+fn an_embedded_page_needs_no_server_at_all() {
+    // The decisive property: no request is made, so this works with nothing
+    // listening anywhere.
+    use base64::Engine;
+    let uri = format!(
+        "data:image/jpeg;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(jpeg(800, 1168))
+    );
+
+    let measured = mangalize_fetch::measure(std::slice::from_ref(&uri), None, &mut silent());
+    assert_eq!(measured.len(), 1);
+    assert_eq!((measured[0].width, measured[0].height), (800, 1168));
+    assert!(measured[0].error.is_none());
+
+    let dir = TempDir::new().unwrap();
+    let written =
+        mangalize_fetch::download_pages(&[uri], dir.path(), None, &mut silent()).unwrap();
+    assert_eq!(written.len(), 1);
 }

@@ -7,6 +7,7 @@ use std::sync::Mutex;
 
 use anyhow::{bail, Context, Result};
 
+use crate::data_uri;
 use crate::url;
 use crate::{Progress, MAX_IMAGE_BYTES, TIMEOUT, USER_AGENT};
 
@@ -47,6 +48,23 @@ pub fn probe_all(urls: &[String], referer: Option<&str>, progress: &mut Progress
 }
 
 fn probe_one(url: &str, referer: Option<&str>) -> Result<Probe> {
+    // An embedded page needs no request: the bytes are already here.
+    if data_uri::is_data_uri(url) {
+        data_uri::check_size(url, MAX_IMAGE_BYTES)?;
+        let bytes = data_uri::decode(url)?;
+        let (width, height) = image::ImageReader::new(std::io::Cursor::new(&bytes))
+            .with_guessed_format()
+            .context("reading embedded image header")?
+            .into_dimensions()
+            .context("embedded data was not a readable image")?;
+        return Ok(Probe {
+            width,
+            height,
+            bytes: bytes.len() as u64,
+            error: None,
+        });
+    }
+
     // A range request keeps this to one round trip and a few KB even when the
     // page is a 4 MB PNG. Servers that ignore it just send more than we read.
     let response = request(url, referer)
@@ -123,6 +141,11 @@ pub fn download_all(
 /// few bytes are read: this is an existence check, not a download.
 pub fn reachable(urls: &[String], referer: Option<&str>, progress: &mut Progress) -> Vec<bool> {
     parallel(urls, referer, progress, |url, referer| {
+        // Nothing to reach: an embedded page is already in hand.
+        if data_uri::is_data_uri(url) {
+            return true;
+        }
+
         let mut request = ureq::get(url)
             .set("User-Agent", USER_AGENT)
             .set("Accept", "text/html,application/xhtml+xml")
@@ -145,6 +168,14 @@ pub fn reachable(urls: &[String], referer: Option<&str>, progress: &mut Progress
 
 /// Fetch one image whole, refusing anything that is not one.
 pub fn fetch_image(url: &str, referer: Option<&str>) -> Result<(Vec<u8>, &'static str)> {
+    if data_uri::is_data_uri(url) {
+        data_uri::check_size(url, MAX_IMAGE_BYTES)?;
+        let bytes = data_uri::decode(url)?;
+        let format = image::guess_format(&bytes)
+            .map_err(|_| anyhow::anyhow!("embedded data was not a recognisable image"))?;
+        return Ok((bytes, extension_for(format)));
+    }
+
     // One retry: a single failed page ruins a whole chapter, and the usual cause
     // is a transient 5xx from an overloaded image host.
     let response = match request(url, referer).call() {

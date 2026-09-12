@@ -10,6 +10,11 @@
 //! gallery, and click Capture when the pages are actually on screen. Nothing is
 //! collected without that click.
 //!
+//! Pages with no address — a `blob:` URL built in script, or a canvas the
+//! reader paints into — are read back out of the document as data URIs. They
+//! cannot be fetched from outside it, which is exactly why rendering the page
+//! is the only way to reach them.
+//!
 //! ## On the capability this needs
 //!
 //! The injected script reports back through Tauri's event system, so the harvest
@@ -108,20 +113,55 @@ const COLLECTOR: &str = r#"
   var MIN_EDGE = 200;
   var EVENT = 'harvest:pages';
 
+  // Some readers never give a page an address: the bytes are a blob: URL made
+  // in script, or drawn onto a canvas. Neither can be opened in a new tab and
+  // neither can be fetched from outside the document, but both can be read
+  // back out of it here. A cross-origin image taints the canvas and throws,
+  // which is why this is wrapped rather than trusted.
+  function readPixels(source, width, height) {
+    try {
+      var canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(source, 0, 0);
+      return canvas.toDataURL('image/jpeg', 0.92);
+    } catch (e) {
+      return null;
+    }
+  }
+
   function collect() {
     var seen = Object.create(null);
     var found = [];
+
     var images = document.querySelectorAll('img');
     for (var i = 0; i < images.length; i++) {
       var img = images[i];
-      var url = img.currentSrc || img.src || '';
-      if (!/^https?:/.test(url)) continue;
       if (img.naturalWidth < MIN_EDGE || img.naturalHeight < MIN_EDGE) continue;
+
+      var url = img.currentSrc || img.src || '';
+      if (!/^https?:/.test(url)) {
+        // blob:, data:, or anything else with no fetchable address.
+        url = readPixels(img, img.naturalWidth, img.naturalHeight);
+        if (!url) continue;
+      }
       if (seen[url]) continue;
       seen[url] = true;
       // DOM order is reading order on essentially every reader.
       found.push({ url: url, width: img.naturalWidth, height: img.naturalHeight });
     }
+
+    // Readers that paint pages into a canvas have no <img> to find at all.
+    var canvases = document.querySelectorAll('canvas');
+    for (var j = 0; j < canvases.length; j++) {
+      var canvas = canvases[j];
+      if (canvas.width < MIN_EDGE || canvas.height < MIN_EDGE) continue;
+      var drawn = readPixels(canvas, canvas.width, canvas.height);
+      if (!drawn || seen[drawn]) continue;
+      seen[drawn] = true;
+      found.push({ url: drawn, width: canvas.width, height: canvas.height });
+    }
+
     return found;
   }
 
