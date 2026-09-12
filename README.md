@@ -221,25 +221,25 @@ than failing the batch, and a long run can be stopped part-way.
 
 ### Cutting a release
 
+Go to **Actions → Release → Run workflow**, type a version like `1.4.1`, and run
+it. CI bumps the version files, commits, tags, builds both platforms and
+publishes the release. Nothing to do locally.
+
+Pushing a tag by hand still works if you prefer:
+
 ```sh
-# 1. bump the version in src-tauri/tauri.conf.json, commit it
-# 2. tag it, matching that version exactly
-git tag v0.2.0
-git push origin v0.2.0
+# bump "version" in src-tauri/tauri.conf.json first, and commit it
+git tag v1.4.1 && git push origin v1.4.1
 ```
 
-`.github/workflows/release.yml` builds on macOS and Windows runners, and opens a
-**draft** release with the installers attached. Review it, then publish — the
-in-app updater reads the latest *published* release, so a draft is invisible to
-users until you are happy with it.
+Running the workflow with the version field **empty** builds both installers and
+attaches them as workflow artifacts without tagging or releasing anything. That
+is the way to check a CI change without spending a version number.
 
-The workflow fails early if the tag and the version in `tauri.conf.json`
-disagree, because an updater that offers `v0.2.0` and installs something else is
-a miserable thing to debug.
-
-Running the workflow manually (`workflow_dispatch`) builds the same installers
-and attaches them as workflow artifacts without creating a release, which is how
-to test a CI change without spending a version number.
+Releases publish immediately, so tests, the frontend build and
+`clippy -D warnings` all run *before* anything is tagged. A failure that arrived
+after tagging would leave a pushed tag with no release, which is far more
+annoying to unpick once an updater has seen it.
 
 ### How updates are trusted
 

@@ -258,10 +258,17 @@ there while looking fine in desktop EPUB readers.
 
 ## Releases and the updater
 
-- Tagging `v*` is the release trigger. The tag and `version` in
-  `src-tauri/tauri.conf.json` **must** match; CI enforces it.
-- Releases are created as drafts. The updater reads the latest *published*
-  release, so a draft is invisible to users until someone publishes it.
+- Two entry points: run the workflow with a version (CI bumps, commits, tags,
+  builds, publishes), or push a `v*` tag yourself. For a hand-pushed tag the tag
+  and `version` in `src-tauri/tauri.conf.json` **must** match; CI enforces it.
+- **Bump, tag and build happen in one run on purpose.** A tag pushed with
+  `GITHUB_TOKEN` does not trigger another workflow, so the obvious "tag here,
+  build over there" split silently produces no release at all.
+- Releases publish immediately, so the `check` job (tests, frontend build,
+  `clippy -D warnings`) gates the tag rather than following it. Tagging first and
+  failing after leaves a pushed tag with no release.
+- Running the workflow with an empty version builds installers as artifacts and
+  releases nothing — use it to test CI changes.
 - `updaterJsonPreferNsis: true` in the workflow is load-bearing. Both a `.msi`
   and an NSIS `.exe` are built, and tauri-action otherwise points `latest.json`
   at the `.msi`, whose installer needs elevation and so prompts for UAC on every

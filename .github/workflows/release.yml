@@ -1,24 +1,117 @@
 name: Release
 
-# Tagging is the release trigger: push `v0.2.0` and this builds the installers
-# and opens a draft release holding them.
+# Three ways in:
 #
-# `workflow_dispatch` builds the same artifacts without publishing anything,
-# which is the way to check a CI change without burning a version number.
+#   1. Run this workflow and give it a version (e.g. 1.4.1). CI bumps the version
+#      files, commits, tags, builds and publishes. Nothing to do locally.
+#   2. Push a `v*` tag yourself. CI builds and publishes that tag.
+#   3. Run this workflow with no version. Builds both installers and attaches
+#      them as workflow artifacts, without tagging or releasing anything — the
+#      way to check a CI change without spending a version number.
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 1.4.1. Leave empty to build only."
+        required: false
+        default: ""
 
-# tauri-action creates the release and uploads to it.
+# Needed to push the version bump and the tag, and to create the release.
 permissions:
   contents: write
 
 jobs:
-  # The tag and the version in tauri.conf.json must agree, or the updater will
-  # offer an update that reports a different version than the one it installs.
-  # Cheap to check here, confusing to debug later.
+  # Run before anything is tagged. Publishing is automatic, so a broken commit
+  # must never reach a tag: recovering means deleting a pushed tag and a release
+  # that users' updaters may already have seen.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+          key: check
+      - run: bun install --frozen-lockfile
+      - run: cargo test --workspace
+      - run: bun run build
+      - run: cargo clippy --all-targets -- -D warnings
+
+  # Turns a version number into a commit and a tag.
+  #
+  # This deliberately does the tagging in the *same* run that builds, rather than
+  # tagging and letting the push trigger a second run: a tag pushed with
+  # GITHUB_TOKEN does not trigger another workflow, so that second run would
+  # never happen and the release would silently never appear.
+  prepare:
+    needs: [check]
+    if: inputs.version != ''
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          # Tags are not fetched by default, and without them the "already
+          # exists" check below silently passes for a version already released.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Bump, commit and tag
+        id: bump
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::'$VERSION' is not a three-part version like 1.4.1."
+            echo "Tauri's config and the Windows MSI bundler both require major.minor.patch."
+            exit 1
+          fi
+
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "::error::tag v$VERSION already exists"
+            exit 1
+          fi
+
+          # tauri.conf.json is the version the app reports and the updater
+          # compares against; Cargo.toml keeps the crates in step.
+          jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > /tmp/conf.json
+          mv /tmp/conf.json src-tauri/tauri.conf.json
+          sed -i "0,/^version = \".*\"/s//version = \"$VERSION\"/" Cargo.toml
+          # Refresh only the workspace members' own versions in the lockfile.
+          cargo update --workspace
+
+          # Cheap insurance: the two files and the tag must agree, or the
+          # updater will offer one version and install another.
+          conf=$(jq -r .version src-tauri/tauri.conf.json)
+          crate=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          if [ "$conf" != "$VERSION" ] || [ "$crate" != "$VERSION" ]; then
+            echo "::error::bump failed — tauri.conf.json=$conf Cargo.toml=$crate wanted=$VERSION"
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src-tauri/tauri.conf.json Cargo.toml Cargo.lock
+          git commit -m "chore: version $VERSION"
+          git tag -a "v$VERSION" -m "Mangalize $VERSION"
+          git push origin main
+          git push origin "v$VERSION"
+
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+  # For a tag pushed by hand, the tag and tauri.conf.json must already agree.
+  # The prepare job makes them agree by construction, so this only guards path 2.
   check-version:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -31,16 +124,21 @@ jobs:
           conf=$(jq -r .version src-tauri/tauri.conf.json)
           if [ "$tag" != "$conf" ]; then
             echo "::error::tag $GITHUB_REF_NAME does not match tauri.conf.json version $conf"
-            echo "Bump \"version\" in src-tauri/tauri.conf.json to $tag, commit, then re-tag."
+            echo "Either bump the file and re-tag, or run this workflow with a version instead."
             exit 1
           fi
           echo "version $conf matches tag $GITHUB_REF_NAME"
 
   build:
-    needs: [check-version]
-    # `always()` lets workflow_dispatch run even though the version check is
-    # skipped for anything that is not a tag.
-    if: always() && (needs.check-version.result == 'success' || needs.check-version.result == 'skipped')
+    needs: [check, prepare, check-version]
+    # `prepare` and `check-version` are each skipped on the paths they do not
+    # apply to, so the build runs unless one of them actually failed. `check`
+    # always runs and must pass.
+    if: |
+      always()
+      && needs.check.result == 'success'
+      && needs.prepare.result != 'failure'
+      && needs.check-version.result != 'failure'
 
     strategy:
       fail-fast: false
@@ -66,6 +164,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # When prepare ran, build the tag it just created rather than whatever
+          # main pointed at when this run started.
+          ref: ${{ needs.prepare.outputs.tag || github.ref }}
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -88,10 +190,11 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - name: Check
-        run: |
-          cargo test --workspace
-          bun run build
+      # Re-run the tests per platform. File naming and path handling are where
+      # this codebase differs across operating systems, and the gate job only
+      # covers Linux.
+      - name: Test on this platform
+        run: cargo test --workspace
 
       - uses: tauri-apps/tauri-action@v0
         env:
@@ -110,10 +213,10 @@ jobs:
           # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          # Empty on workflow_dispatch, which makes tauri-action build without
+          # Empty on a build-only run, which makes tauri-action build without
           # creating or touching a release.
-          tagName: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
-          releaseName: "Mangalize ${{ github.ref_name }}"
+          tagName: ${{ needs.prepare.outputs.tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
+          releaseName: "Mangalize ${{ needs.prepare.outputs.tag || github.ref_name }}"
           releaseBody: |
             Download the installer for your platform below.
 
@@ -123,7 +226,9 @@ jobs:
 
             The `.sig`, `.tar.gz` and `latest.json` files are what the in-app
             updater reads. You do not need to download them.
-          releaseDraft: true
+          # Published straight away: the updater reads the latest *published*
+          # release, so this is what makes an update reach users.
+          releaseDraft: false
           prerelease: false
           # Both a .msi and an NSIS .exe are built. Without this the updater JSON
           # points at the .msi, whose installer needs elevation and so prompts for
@@ -131,10 +236,10 @@ jobs:
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
 
-      # Only useful for the build-without-releasing path; on a tag the installers
-      # are already attached to the draft release.
+      # Only useful for the build-without-releasing path; on a release the
+      # installers are already attached to the release itself.
       - name: Upload installers as workflow artifacts
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') && inputs.version == '' }}
         uses: actions/upload-artifact@v4
         with:
           name: mangalize-${{ matrix.platform }}
