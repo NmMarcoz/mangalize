@@ -77,9 +77,13 @@ jobs:
 
       # Tauri's dependency tree is large; without this every release build
       # compiles it from scratch on both runners.
+      #
+      # `src-tauri` is a member of the root Cargo workspace, so the target dir is
+      # at the repo root and NOT inside src-tauri. Pointing this at the wrong
+      # place silently caches nothing.
       - uses: swatinem/rust-cache@v2
         with:
-          workspaces: "src-tauri -> target"
+          workspaces: ". -> target"
           key: ${{ matrix.platform }}
 
       - run: bun install --frozen-lockfile
@@ -137,6 +141,6 @@ jobs:
           retention-days: 7
           if-no-files-found: error
           path: |
-            src-tauri/target/**/release/bundle/dmg/*.dmg
-            src-tauri/target/**/release/bundle/msi/*.msi
-            src-tauri/target/**/release/bundle/nsis/*.exe
+            target/**/release/bundle/dmg/*.dmg
+            target/**/release/bundle/msi/*.msi
+            target/**/release/bundle/nsis/*.exe
