@@ -11,6 +11,8 @@ export interface Settings {
   folder_per_series: boolean;
   /** Cut double-page spreads into two pages. On by default, for Kindle. */
   split_spreads: boolean;
+  /** `original` | `large` | `kindle` | `compact` */
+  compression: string;
   /** Whether the first-run screen has been answered. */
   welcomed: boolean;
 }
@@ -63,3 +65,37 @@ export const buildLibraryVolumes = (args: {
 }) => invoke<BuildBatchReport>("build_library_volumes", args);
 
 export const cancelBuild = () => invoke<void>("cancel_build");
+
+/**
+ * What each compression preset does, in the terms that matter: how big the
+ * result is and what it looks like on the device.
+ */
+export const COMPRESSION_PRESETS: {
+  value: string;
+  label: string;
+  detail: string;
+}[] = [
+  {
+    value: "original",
+    label: "Original",
+    detail:
+      "Pages are copied untouched. Largest files, and usually far more detail than any e-reader can show.",
+  },
+  {
+    value: "large",
+    label: "Large · 2400px",
+    detail: "For a Kindle Scribe or a tablet. Roughly half the size of the original.",
+  },
+  {
+    value: "kindle",
+    label: "Kindle · 1600px",
+    detail:
+      "Matches a Paperwhite or Oasis exactly. Typically a quarter of the original size, with nothing visible lost on the device.",
+  },
+  {
+    value: "compact",
+    label: "Compact · 1280px",
+    detail:
+      "When a volume has to fit an email attachment limit. Softer if you zoom right in.",
+  },
+];

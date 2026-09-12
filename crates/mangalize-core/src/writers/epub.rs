@@ -16,7 +16,8 @@ use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
 use super::timestamp::now_utc;
-use super::{ensure_parent, esc, media_type, render_page, Progress};
+use super::{ensure_parent, esc, media_type, render_page, Progress, Target};
+use crate::compress::Compression;
 use crate::page::PageKind;
 use crate::project::{Direction, Volume};
 
@@ -54,13 +55,18 @@ struct Layout {
 
 /// Write `volume` to `out` as a fixed-layout EPUB 3.
 pub fn write(volume: &Volume, out: &Path) -> Result<()> {
-    write_with_progress(volume, out, &mut |_, _| {})
+    write_with_progress(volume, out, &Compression::ORIGINAL, &mut |_, _| {})
 }
 
 /// As [`write`], reporting `(pages_done, pages_total)` as each page is encoded.
 /// Encoding dominates export time, so this is where a UI wants its progress.
-pub fn write_with_progress(volume: &Volume, out: &Path, progress: &mut Progress) -> Result<()> {
-    let Layout { slots, chapters } = build_slots(volume, progress)?;
+pub fn write_with_progress(
+    volume: &Volume,
+    out: &Path,
+    compression: &Compression,
+    progress: &mut Progress,
+) -> Result<()> {
+    let Layout { slots, chapters } = build_slots(volume, compression, progress)?;
     if slots.is_empty() {
         bail!("volume has no pages to write");
     }
@@ -115,7 +121,11 @@ pub fn write_with_progress(volume: &Volume, out: &Path, progress: &mut Progress)
 /// When the user picked a cover that is not already the first page, it is
 /// prepended as its own slot. Otherwise the first page doubles as the cover, so
 /// the image is stored once and simply marked `cover-image` in the manifest.
-fn build_slots(volume: &Volume, progress: &mut Progress) -> Result<Layout> {
+fn build_slots(
+    volume: &Volume,
+    compression: &Compression,
+    progress: &mut Progress,
+) -> Result<Layout> {
     let mut slots: Vec<Slot> = Vec::new();
     let mut chapters: Vec<ChapterStart> = Vec::new();
     let direction = volume.metadata.direction;
@@ -155,7 +165,7 @@ fn build_slots(volume: &Volume, progress: &mut Progress) -> Result<Layout> {
         });
 
         for page in chapter.included() {
-            let rendered_pages = render_page(page, direction)?;
+            let rendered_pages = render_page(page, direction, compression, Target::Epub)?;
             done += 1;
             progress(done, total);
             for rendered in rendered_pages {

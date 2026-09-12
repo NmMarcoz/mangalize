@@ -61,6 +61,7 @@ pub fn run() {
             fetch::preview_image,
             fetch::download_chapter,
             fetch::import_chapter,
+            fetch::download_chapter_from_source,
             fetch::plan_batch,
             fetch::download_batch,
             fetch::cancel_batch,

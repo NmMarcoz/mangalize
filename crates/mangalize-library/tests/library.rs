@@ -32,6 +32,9 @@ fn layout() -> Vec<PublishedVolume> {
                 .map(|c| PublishedChapter {
                     number: (v * 3 + c).to_string(),
                     title: None,
+                    // As MangaDex returns them: an id per chapter, all hosted.
+                    source_id: Some(format!("chapter-uuid-{}", v * 3 + c)),
+                    unavailable: false,
                 })
                 .collect(),
         })

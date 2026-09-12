@@ -14,7 +14,12 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { getSettings, setSettings, type Settings } from "@/lib/settings";
+import {
+  COMPRESSION_PRESETS,
+  getSettings,
+  setSettings,
+  type Settings,
+} from "@/lib/settings";
 
 interface SettingsViewProps {
   /** Lets the rest of the app pick up a changed library or output folder. */
@@ -132,6 +137,36 @@ export function SettingsView({ onSaved, onError }: SettingsViewProps) {
                 </span>
               </span>
             </label>
+
+            <Separator />
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="compression">Page size</Label>
+              <Select
+                value={settings.compression}
+                onValueChange={(v) => patch({ compression: v })}
+              >
+                <SelectTrigger id="compression" className="w-60">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {COMPRESSION_PRESETS.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                {COMPRESSION_PRESETS.find((p) => p.value === settings.compression)
+                  ?.detail}
+              </p>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Black-and-white pages are stored as greyscale, which removes about
+                a third again. Colour covers keep their colour, and a page already
+                smaller than the limit is left alone.
+              </p>
+            </div>
 
             <Separator />
 

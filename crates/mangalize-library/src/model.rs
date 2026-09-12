@@ -86,6 +86,11 @@ pub struct ChapterStatus {
     /// Chapter label as published, e.g. `"7"` or `"7.5"`.
     pub number: String,
     pub title: Option<String>,
+    /// The metadata source's id for this chapter, when it has one. Present means
+    /// the pages can be fetched from the source directly.
+    pub source_id: Option<String>,
+    /// The source indexes it but cannot serve the images, so a URL is needed.
+    pub unavailable: bool,
     /// Absolute path to the chapter's images. `None` means we do not have it.
     pub folder: Option<PathBuf>,
     pub page_count: u32,
@@ -112,6 +117,10 @@ pub struct PublishedVolume {
 pub struct PublishedChapter {
     pub number: String,
     pub title: Option<String>,
+    /// The source's own id, which is what fetching pages from it needs.
+    pub source_id: Option<String>,
+    /// The source lists the chapter but cannot serve its images.
+    pub unavailable: bool,
 }
 
 /// What changed when a published layout was merged in.

@@ -78,11 +78,26 @@ pub struct VolumeCover {
     pub thumbnail_url: String,
 }
 
+/// One chapter as the source knows it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChapterRef {
+    /// Chapter number as published, e.g. `"7"` or `"7.5"`.
+    pub number: String,
+    /// The source's own identifier, which is what fetching pages needs.
+    pub id: Option<String>,
+    /// The source lists this chapter but cannot serve its images.
+    ///
+    /// True for officially licensed series: MangaDex indexes them so the volume
+    /// layout is complete, but the pages live on the publisher's own reader and
+    /// are not theirs to hand out.
+    pub unavailable: bool,
+}
+
 /// Which chapters a published volume contains.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VolumeChapters {
     pub volume: String,
-    pub chapters: Vec<String>,
+    pub chapters: Vec<ChapterRef>,
 }
 
 /// Search for a series, falling back to Kitsu if MangaDex is unavailable.
@@ -113,6 +128,17 @@ pub fn volume_covers(source: Source, id: &str) -> Result<Vec<VolumeCover>> {
     match source {
         Source::MangaDex => mangadex::volume_covers(id),
         Source::Kitsu => kitsu::poster(id).map(|c| c.into_iter().collect()),
+    }
+}
+
+/// Image URLs for one chapter, straight from the source.
+///
+/// Far better than reading a page: no rendering, no guessing which `<img>` is a
+/// page, and the ordering is the publisher's own. Only MangaDex offers this.
+pub fn chapter_pages(source: Source, chapter_id: &str) -> Result<Vec<String>> {
+    match source {
+        Source::MangaDex => mangadex::chapter_pages(chapter_id),
+        Source::Kitsu => bail!("Kitsu does not host chapter images"),
     }
 }
 

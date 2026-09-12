@@ -181,7 +181,12 @@ fn sync(library: &mut Library, id: SeriesId) -> Result<()> {
             chapters: v
                 .chapters
                 .into_iter()
-                .map(|number| PublishedChapter { number, title: None })
+                .map(|c| PublishedChapter {
+                    number: c.number,
+                    title: None,
+                    source_id: c.id,
+                    unavailable: c.unavailable,
+                })
                 .collect(),
             number: v.volume,
         })

@@ -4,10 +4,10 @@
 //! shapes are deeply nested, heavily optional, and mostly discarded, so a full
 //! typed mirror would be more code to maintain for no safety we actually use.
 
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 use serde_json::Value;
 
-use crate::{get_json, volume_sort_key, SeriesMatch, Source, VolumeChapters, VolumeCover};
+use crate::{get_json, volume_sort_key, ChapterRef, SeriesMatch, Source, VolumeChapters, VolumeCover};
 
 const API: &str = "https://api.mangadex.org";
 const UPLOADS: &str = "https://uploads.mangadex.org/covers";
@@ -138,13 +138,27 @@ pub fn volume_chapters(manga_id: &str) -> Result<Vec<VolumeChapters>> {
             map.iter()
                 .filter(|(name, _)| name.as_str() != "none")
                 .map(|(name, value)| {
-                    let mut chapters: Vec<String> = value["chapters"]
+                    // The id is the useful part and was previously thrown away:
+                    // it is what `/at-home/server` needs to hand back real page
+                    // URLs, which beats reading the site's markup outright.
+                    let mut chapters: Vec<ChapterRef> = value["chapters"]
                         .as_object()
-                        .map(|c| c.keys().cloned().collect())
+                        .map(|entries| {
+                            entries
+                                .iter()
+                                .map(|(number, entry)| ChapterRef {
+                                    number: number.clone(),
+                                    id: entry["id"].as_str().map(String::from),
+                                    unavailable: entry["isUnavailable"]
+                                        .as_bool()
+                                        .unwrap_or(false),
+                                })
+                                .collect()
+                        })
                         .unwrap_or_default();
                     chapters.sort_by(|a, b| {
-                        volume_sort_key(a)
-                            .partial_cmp(&volume_sort_key(b))
+                        volume_sort_key(&a.number)
+                            .partial_cmp(&volume_sort_key(&b.number))
                             .unwrap_or(std::cmp::Ordering::Equal)
                     });
                     VolumeChapters {
@@ -162,6 +176,59 @@ pub fn volume_chapters(manga_id: &str) -> Result<Vec<VolumeChapters>> {
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     Ok(volumes)
+}
+
+/// Page image URLs for a chapter, via the MangaDex@Home network.
+///
+/// The server handing out images is chosen per request and its address is only
+/// valid for a short while, so this must be called immediately before
+/// downloading rather than cached.
+pub fn chapter_pages(chapter_id: &str) -> Result<Vec<String>> {
+    let body = get_json(&format!("{API}/at-home/server/{chapter_id}"), &[])
+        .with_context(|| format!("asking MangaDex for chapter {chapter_id}"))?;
+
+    let base = body["baseUrl"]
+        .as_str()
+        .context("MangaDex did not return an image server")?;
+    let hash = body["chapter"]["hash"].as_str().unwrap_or_default();
+    let files: Vec<&str> = body["chapter"]["data"]
+        .as_array()
+        .map(|items| items.iter().filter_map(|f| f.as_str()).collect())
+        .unwrap_or_default();
+
+    // A chapter MangaDex indexes but does not host answers with an empty list
+    // rather than an error, so the useful message has to be built here.
+    if hash.is_empty() || files.is_empty() {
+        bail!("{}", unhosted_reason(chapter_id));
+    }
+
+    Ok(files
+        .into_iter()
+        .map(|file| format!("{base}/data/{hash}/{file}"))
+        .collect())
+}
+
+/// Explain an empty chapter by asking what the chapter itself says.
+///
+/// Worth the extra request: "no images" is baffling, whereas "MangaDex does not
+/// host this one, the publisher does, here is where" is actionable.
+fn unhosted_reason(chapter_id: &str) -> String {
+    let external = get_json(&format!("{API}/chapter/{chapter_id}"), &[])
+        .ok()
+        .and_then(|body| {
+            body["data"]["attributes"]["externalUrl"]
+                .as_str()
+                .map(String::from)
+        });
+
+    match external {
+        Some(url) => format!(
+            "MangaDex indexes this chapter but does not host its images — it is \
+             officially licensed and published at {url}. Paste that page's URL \
+             into the chapter's Get dialog instead."
+        ),
+        None => "MangaDex has no images for this chapter yet.".to_string(),
+    }
 }
 
 #[cfg(test)]

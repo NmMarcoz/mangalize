@@ -55,6 +55,10 @@ pub struct Settings {
     pub default_format: String,
     /// Put each volume in a folder named after its series.
     pub folder_per_series: bool,
+    /// How hard to shrink pages on export: `original`, `large`, `kindle` or
+    /// `compact`. Named rather than numeric so the meaning survives a change to
+    /// what the numbers are.
+    pub compression: String,
     /// Cut double-page spreads into two pages.
     ///
     /// On by default because that is what a Kindle needs; readers that handle a
@@ -76,6 +80,7 @@ struct Stored {
     default_format: Option<String>,
     folder_per_series: Option<bool>,
     split_spreads: Option<bool>,
+    compression: Option<String>,
     delivery: Option<DeliveryConfig>,
     welcomed: Option<bool>,
 }
@@ -93,6 +98,9 @@ pub fn load(app: &AppHandle) -> Result<Settings> {
         // series is the thing this is meant to avoid.
         folder_per_series: stored.folder_per_series.unwrap_or(true),
         split_spreads: stored.split_spreads.unwrap_or(true),
+        // Sized for a Kindle by default: this app exists to put volumes on one,
+        // and an untouched scrape is routinely three times the size it needs.
+        compression: stored.compression.unwrap_or_else(|| "kindle".into()),
         delivery: stored.delivery.unwrap_or_default(),
         welcomed: stored.welcomed.unwrap_or(false),
     })
@@ -108,10 +116,22 @@ pub fn save(app: &AppHandle, next: &Settings) -> Result<()> {
             default_format: Some(next.default_format.clone()),
             folder_per_series: Some(next.folder_per_series),
             split_spreads: Some(next.split_spreads),
+            compression: Some(next.compression.clone()),
             delivery: Some(next.delivery.clone()),
             welcomed: Some(next.welcomed),
         },
     )
+}
+
+/// Turn the stored preset name into the settings the writers take.
+pub fn compression(name: &str) -> mangalize_core::Compression {
+    use mangalize_core::Compression;
+    match name {
+        "original" => Compression::ORIGINAL,
+        "large" => Compression::LARGE,
+        "compact" => Compression::COMPACT,
+        _ => Compression::KINDLE,
+    }
 }
 
 /// The library folder: what the user chose, else the default.

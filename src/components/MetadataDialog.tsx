@@ -233,7 +233,7 @@ function ChapterCheck({
           {matches ? " — matches your folder" : ` — your folder has ${actual}`}
         </p>
         <p className="mt-0.5 text-muted-foreground">
-          Chapters {expected.chapters.join(", ")}
+          Chapters {expected.chapters.map((c) => c.number).join(", ")}
         </p>
       </div>
     </div>

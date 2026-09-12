@@ -92,6 +92,9 @@ pub async fn build(
 ) -> Result<BuildReport, String> {
     let out = PathBuf::from(out);
     let pages = volume.total_included();
+    let compression = settings::load(&app)
+        .map(|s| settings::compression(&s.compression))
+        .unwrap_or_default();
 
     tauri::async_runtime::spawn_blocking(move || {
         // Emitting on every page would flood the IPC channel on a long volume;
@@ -105,8 +108,12 @@ pub async fn build(
         };
 
         let result = match format {
-            Format::Epub => writers::epub::write_with_progress(&volume, &out, &mut progress),
-            Format::Cbz => writers::cbz::write_with_progress(&volume, &out, &mut progress),
+            Format::Epub => {
+                writers::epub::write_with_progress(&volume, &out, &compression, &mut progress)
+            }
+            Format::Cbz => {
+                writers::cbz::write_with_progress(&volume, &out, &compression, &mut progress)
+            }
         };
         result.map_err(|e| format!("{e:#}"))?;
 

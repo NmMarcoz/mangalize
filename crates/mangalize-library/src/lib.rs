@@ -266,17 +266,22 @@ impl Library {
                 // A chapter already on disk keeps its folder and page count; only
                 // its volume tag and title are refreshed.
                 tx.execute(
-                    "INSERT INTO chapters (series_id, number, sort_key, volume, title)
-                     VALUES (?1, ?2, ?3, ?4, ?5)
+                    "INSERT INTO chapters
+                       (series_id, number, sort_key, volume, title, source_id, unavailable)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                      ON CONFLICT(series_id, number) DO UPDATE SET
-                       volume = excluded.volume,
-                       title  = COALESCE(excluded.title, chapters.title)",
+                       volume      = excluded.volume,
+                       title       = COALESCE(excluded.title, chapters.title),
+                       source_id   = COALESCE(excluded.source_id, chapters.source_id),
+                       unavailable = excluded.unavailable",
                     params![
                         id.0,
                         chapter.number,
                         paths::sort_key(&chapter.number),
                         volume.number,
                         chapter.title,
+                        chapter.source_id,
+                        chapter.unavailable,
                     ],
                 )?;
                 if !known.contains(&chapter.number) {
@@ -328,7 +333,8 @@ impl Library {
             .collect::<rusqlite::Result<_>>()?;
 
         let mut stmt = self.db.prepare(
-            "SELECT volume, number, title, folder, page_count, source_url, downloaded_at
+            "SELECT volume, number, title, folder, page_count, source_url, downloaded_at,
+                    source_id, unavailable
                FROM chapters WHERE series_id = ?1
               ORDER BY sort_key IS NULL, sort_key, number",
         )?;
@@ -344,6 +350,8 @@ impl Library {
                         page_count: row.get::<_, i64>(4)? as u32,
                         source_url: row.get(5)?,
                         downloaded_at: row.get(6)?,
+                        source_id: row.get(7)?,
+                        unavailable: row.get(8)?,
                     },
                 ))
             })?
@@ -441,7 +449,8 @@ impl Library {
         let folder = self.series(id)?.folder;
         self.db
             .query_row(
-                "SELECT number, title, folder, page_count, source_url, downloaded_at
+                "SELECT number, title, folder, page_count, source_url, downloaded_at,
+                        source_id, unavailable
                    FROM chapters WHERE series_id = ?1 AND number = ?2",
                 params![id.0, number],
                 |row| {
@@ -453,6 +462,8 @@ impl Library {
                         page_count: row.get::<_, i64>(3)? as u32,
                         source_url: row.get(4)?,
                         downloaded_at: row.get(5)?,
+                        source_id: row.get(6)?,
+                        unavailable: row.get(7)?,
                     })
                 },
             )

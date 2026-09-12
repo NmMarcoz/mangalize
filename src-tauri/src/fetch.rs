@@ -137,6 +137,60 @@ pub async fn download_chapter(
     .await
 }
 
+/// Download a chapter straight from the metadata source.
+///
+/// Much better than reading a page when the source will do it: no rendering, no
+/// guessing which `<img>` is a page, and the order is the publisher's own. Only
+/// possible when a sync recorded the source's chapter id.
+#[tauri::command]
+pub async fn download_chapter_from_source(
+    app: AppHandle,
+    id: i64,
+    chapter: String,
+) -> Result<ChapterStatus, String> {
+    blocking(move || {
+        let library = Library::open(settings::library_root(&app)?)?;
+        let series_id = SeriesId(id);
+        let series = library.series(series_id)?;
+        let stored = library.chapter(series_id, &chapter)?;
+
+        let source = match series.source.as_deref() {
+            Some("mangadex") => mangalize_meta::Source::MangaDex,
+            Some("kitsu") => mangalize_meta::Source::Kitsu,
+            _ => anyhow::bail!("{} has no metadata source to download from", series.title),
+        };
+        let Some(chapter_id) = stored.source_id else {
+            anyhow::bail!(
+                "no source id for chapter {chapter} — refresh the series layout first"
+            );
+        };
+
+        // The image server is handed out per request and expires, so this is
+        // resolved immediately before downloading rather than stored.
+        let pages = mangalize_meta::chapter_pages(source, &chapter_id)?;
+
+        let dest = library.chapter_dir(series_id, &chapter)?;
+        if dest.exists() {
+            std::fs::remove_dir_all(&dest)?;
+        }
+
+        let written = mangalize_fetch::download_pages(
+            &pages,
+            &dest,
+            None,
+            &mut emit(&app, "downloading"),
+        )?;
+
+        library.record_chapter(
+            series_id,
+            &chapter,
+            written.len() as u32,
+            series.site_url.as_deref(),
+        )
+    })
+    .await
+}
+
 /// Import a folder the user already has as a chapter of a series.
 #[tauri::command]
 pub async fn import_chapter(

@@ -65,7 +65,36 @@ enum Command {
         /// rather than fitting it, so half the drawing goes unseen.
         #[arg(long)]
         keep_spreads: bool,
+        /// How hard to shrink pages. Scraped pages are routinely far larger
+        /// than any e-reader can display.
+        #[arg(long, value_enum, default_value_t = Compress::Kindle)]
+        compress: Compress,
     },
+}
+
+/// How hard to shrink pages on export.
+#[derive(Copy, Clone, ValueEnum)]
+enum Compress {
+    /// Leave every page exactly as scanned.
+    Original,
+    /// 2400px, for a Kindle Scribe or a tablet.
+    Large,
+    /// 1600px, sized for a Paperwhite or Oasis. The default.
+    Kindle,
+    /// 1280px, when the volume has to fit an email attachment.
+    Compact,
+}
+
+impl Compress {
+    fn settings(self) -> mangalize_core::Compression {
+        use mangalize_core::Compression;
+        match self {
+            Compress::Original => Compression::ORIGINAL,
+            Compress::Large => Compression::LARGE,
+            Compress::Kindle => Compression::KINDLE,
+            Compress::Compact => Compression::COMPACT,
+        }
+    }
 }
 
 #[derive(Copy, Clone, ValueEnum)]
@@ -90,7 +119,8 @@ fn main() -> Result<()> {
             author,
             ltr,
             keep_spreads,
-        } => build(folder, out, format, title, author, ltr, keep_spreads),
+            compress,
+        } => build(folder, out, format, title, author, ltr, keep_spreads, compress),
     }
 }
 
@@ -191,7 +221,12 @@ fn lookup(query: &str, detail: bool) -> Result<()> {
                     "      volume {} = {} chapters ({})",
                     volume.volume,
                     volume.chapters.len(),
-                    volume.chapters.join(", ")
+                    volume
+                        .chapters
+                        .iter()
+                        .map(|c| c.number.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 );
             }
         }
@@ -220,6 +255,7 @@ fn build(
     author: Option<String>,
     ltr: bool,
     keep_spreads: bool,
+    compress: Compress,
 ) -> Result<()> {
     let mut volume = scan_volume(&folder)?;
 
@@ -246,9 +282,15 @@ fn build(
         bail!("no pages found in {}", folder.display());
     }
 
+    let compression = compress.settings();
+    let mut progress = |_: usize, _: usize| {};
     match format {
-        Format::Epub => writers::epub::write(&volume, &out)?,
-        Format::Cbz => writers::cbz::write(&volume, &out)?,
+        Format::Epub => {
+            writers::epub::write_with_progress(&volume, &out, &compression, &mut progress)?
+        }
+        Format::Cbz => {
+            writers::cbz::write_with_progress(&volume, &out, &compression, &mut progress)?
+        }
     }
 
     let size = std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0);

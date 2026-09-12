@@ -38,6 +38,8 @@ import {
   type BuildBatchReport,
 } from "@/lib/settings";
 import {
+  canFetchDirectly,
+  downloadChapterFromSource,
   downloadedCount,
   importChapter,
   isComplete,
@@ -98,6 +100,7 @@ export function SeriesView({
   const [buildProgress, setBuildProgress] = useState<BuildBatchProgress | null>(null);
   const [buildReport, setBuildReport] = useState<BuildBatchReport | null>(null);
   const [sending, setSending] = useState(false);
+  const [fetchingDirect, setFetchingDirect] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -174,6 +177,28 @@ export function SeriesView({
         await refresh();
       } catch (e) {
         onError(String(e));
+      }
+    },
+    [seriesId, refresh, onError],
+  );
+
+  /**
+   * Pull a chapter straight from the metadata source.
+   *
+   * Only offered when a sync recorded the source's chapter id and the source
+   * actually hosts the images. Everything else falls back to pasting a URL.
+   */
+  const fetchDirect = useCallback(
+    async (chapter: string) => {
+      setFetchingDirect(chapter);
+      onError(null);
+      try {
+        await downloadChapterFromSource(seriesId, chapter);
+        await refresh();
+      } catch (e) {
+        onError(String(e));
+      } finally {
+        setFetchingDirect(null);
       }
     },
     [seriesId, refresh, onError],
@@ -432,6 +457,8 @@ export function SeriesView({
             onClose={() => setSelected(null)}
             onBuild={() => void edit(detail.number)}
             onGet={setFetching}
+            onFetchDirect={(chapter) => void fetchDirect(chapter)}
+            fetchingDirect={fetchingDirect}
             onImport={(chapter) => void importFolder(chapter)}
             onRemove={(chapter) => void removeChapter(chapter)}
           />
@@ -733,6 +760,8 @@ function VolumePanel({
   onClose,
   onBuild,
   onGet,
+  onFetchDirect,
+  fetchingDirect,
   onImport,
   onRemove,
 }: {
@@ -741,6 +770,9 @@ function VolumePanel({
   onClose: () => void;
   onBuild: () => void;
   onGet: (chapter: string) => void;
+  onFetchDirect: (chapter: string) => void;
+  /** Chapter number currently being pulled from the source, if any. */
+  fetchingDirect: string | null;
   onImport: (chapter: string) => void;
   onRemove: (chapter: string) => void;
 }) {
@@ -772,7 +804,9 @@ function VolumePanel({
             <ChapterRow
               key={chapter.number}
               chapter={chapter}
+              busy={fetchingDirect === chapter.number}
               onGet={() => onGet(chapter.number)}
+              onFetchDirect={() => onFetchDirect(chapter.number)}
               onImport={() => onImport(chapter.number)}
               onRemove={() => onRemove(chapter.number)}
             />
@@ -792,16 +826,21 @@ function VolumePanel({
 
 function ChapterRow({
   chapter,
+  busy,
   onGet,
+  onFetchDirect,
   onImport,
   onRemove,
 }: {
   chapter: ChapterStatus;
+  busy: boolean;
   onGet: () => void;
+  onFetchDirect: () => void;
   onImport: () => void;
   onRemove: () => void;
 }) {
   const have = chapter.folder !== null;
+  const direct = canFetchDirectly(chapter);
 
   return (
     <div
@@ -822,6 +861,11 @@ function ChapterRow({
       <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
         {have ? `${chapter.page_count} pages` : "missing"}
         {chapter.title ? ` · ${chapter.title}` : ""}
+        {!have && chapter.unavailable && (
+          // Not an error: the source indexes the chapter but the publisher
+          // hosts it. Saying so stops this looking like a broken download.
+          <span className="ml-1.5 text-amber-500/80">· not hosted by the source</span>
+        )}
       </span>
 
       {have ? (
@@ -840,14 +884,47 @@ function ChapterRow({
       ) : (
         <>
           <Hint label="Import a folder you already have">
-            <Button variant="ghost" size="icon-sm" onClick={onImport}>
+            <Button variant="ghost" size="icon-sm" onClick={onImport} disabled={busy}>
               <FolderInput className="size-3" />
             </Button>
           </Hint>
-          <Button variant="outline" size="sm" onClick={onGet}>
-            <Download className="size-3" />
-            Get
-          </Button>
+          {direct ? (
+            <>
+              <Hint label="Paste a URL from somewhere else instead">
+                <Button variant="ghost" size="sm" onClick={onGet} disabled={busy}>
+                  URL
+                </Button>
+              </Hint>
+              <Hint label="Download straight from the metadata source">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onFetchDirect}
+                  disabled={busy}
+                >
+                  {busy ? (
+                    <Loader2 className="size-3 animate-spin" />
+                  ) : (
+                    <Download className="size-3" />
+                  )}
+                  Get
+                </Button>
+              </Hint>
+            </>
+          ) : (
+            <Hint
+              label={
+                chapter.unavailable
+                  ? "The source does not host this one — paste the publisher's page"
+                  : "Paste the page holding this chapter's images"
+              }
+            >
+              <Button variant="outline" size="sm" onClick={onGet} disabled={busy}>
+                <Download className="size-3" />
+                Get
+              </Button>
+            </Hint>
+          )}
         </>
       )}
     </div>

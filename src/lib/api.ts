@@ -80,9 +80,18 @@ export interface VolumeCover {
   thumbnail_url: string;
 }
 
+/** Mirrors `mangalize_meta::ChapterRef`. */
+export interface ChapterRef {
+  number: string;
+  /** The source's own id; present means its pages can be fetched directly. */
+  id: string | null;
+  /** The source lists the chapter but cannot serve its images. */
+  unavailable: boolean;
+}
+
 export interface VolumeChapters {
   volume: string;
-  chapters: string[];
+  chapters: ChapterRef[];
 }
 
 export const searchSeries = (query: string) =>

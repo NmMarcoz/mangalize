@@ -272,6 +272,7 @@ pub async fn build_library_volumes(
             root: &root,
             folder_per_series: settings.folder_per_series,
             split_spreads: settings.split_spreads,
+            compression: settings::compression(&settings.compression),
         };
 
         let mut built = Vec::new();
@@ -320,6 +321,7 @@ struct BuildOptions<'a> {
     root: &'a std::path::Path,
     folder_per_series: bool,
     split_spreads: bool,
+    compression: mangalize_core::Compression,
 }
 
 /// Assemble one stored volume and write it out.
@@ -341,8 +343,12 @@ fn build_one(
     let mut progress = |done: usize, _total: usize| report(done, pages);
 
     match options.format {
-        Format::Epub => writers::epub::write_with_progress(&volume, &out, &mut progress)?,
-        Format::Cbz => writers::cbz::write_with_progress(&volume, &out, &mut progress)?,
+        Format::Epub => {
+            writers::epub::write_with_progress(&volume, &out, &options.compression, &mut progress)?
+        }
+        Format::Cbz => {
+            writers::cbz::write_with_progress(&volume, &out, &options.compression, &mut progress)?
+        }
     }
 
     Ok(BuiltVolume {
@@ -377,7 +383,12 @@ fn pull_layout(
             chapters: v
                 .chapters
                 .into_iter()
-                .map(|number| PublishedChapter { number, title: None })
+                .map(|c| PublishedChapter {
+                    number: c.number,
+                    title: None,
+                    source_id: c.id,
+                    unavailable: c.unavailable,
+                })
                 .collect(),
             number: v.volume,
         })

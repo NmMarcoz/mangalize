@@ -9,7 +9,7 @@ use anyhow::{bail, Result};
 use rusqlite::Connection;
 
 /// Bump this and add a step whenever the schema changes.
-const CURRENT: i64 = 1;
+const CURRENT: i64 = 2;
 
 pub fn migrate(db: &Connection) -> Result<()> {
     db.execute_batch(
@@ -36,6 +36,9 @@ pub fn migrate(db: &Connection) -> Result<()> {
 
     if version < 1 {
         db.execute_batch(V1)?;
+    }
+    if version < 2 {
+        db.execute_batch(V2)?;
     }
 
     db.execute(
@@ -104,6 +107,19 @@ CREATE TABLE chapters (
 CREATE INDEX chapters_by_volume ON chapters (series_id, volume);
 "#;
 
+/// Carry the metadata source's own chapter id.
+///
+/// Without it a chapter can only be fetched by pasting a URL. With it, a source
+/// that serves images (MangaDex does, for everything it is allowed to) can be
+/// asked for the pages directly.
+///
+/// Added rather than backfilled: the ids arrive on the next sync, and a library
+/// that never syncs again is no worse off than before.
+const V2: &str = r#"
+ALTER TABLE chapters ADD COLUMN source_id TEXT;
+ALTER TABLE chapters ADD COLUMN unavailable INTEGER NOT NULL DEFAULT 0;
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,6 +129,45 @@ mod tests {
         let db = Connection::open_in_memory().unwrap();
         migrate(&db).unwrap();
         migrate(&db).unwrap();
+    }
+
+    #[test]
+    fn an_existing_library_gains_the_new_columns() {
+        let db = Connection::open_in_memory().unwrap();
+        // Start at v1, as a library created before this change would be.
+        db.execute_batch(V1).unwrap();
+        db.execute_batch(
+            "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO meta (key, value) VALUES ('schema_version', '1')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO series (slug, title, added_at) VALUES ('x', 'X', 0)",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO chapters (series_id, number) VALUES (1, '7')",
+            [],
+        )
+        .unwrap();
+
+        migrate(&db).unwrap();
+
+        // The row survives, and the new columns are queryable.
+        let (number, source_id): (String, Option<String>) = db
+            .query_row(
+                "SELECT number, source_id FROM chapters WHERE series_id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(number, "7");
+        assert_eq!(source_id, None);
     }
 
     #[test]

@@ -35,6 +35,10 @@ export interface Series {
 export interface ChapterStatus {
   number: string;
   title: string | null;
+  /** The metadata source's chapter id, when a sync recorded one. */
+  source_id: string | null;
+  /** The source indexes the chapter but does not host its images. */
+  unavailable: boolean;
   /** `null` means we know the chapter exists but do not have it. */
   folder: string | null;
   page_count: number;
@@ -181,6 +185,19 @@ export const downloadChapter = (args: {
 
 export const importChapter = (id: number, chapter: string, folder: string) =>
   invoke<ChapterStatus>("import_chapter", { id, chapter, folder });
+
+/** Fetch a chapter's pages straight from the metadata source. */
+export const downloadChapterFromSource = (id: number, chapter: string) =>
+  invoke<ChapterStatus>("download_chapter_from_source", { id, chapter });
+
+/**
+ * Whether a chapter can be fetched without pasting a URL.
+ *
+ * Needs an id from a sync, and the source has to actually host the images —
+ * officially licensed series are indexed but not served.
+ */
+export const canFetchDirectly = (chapter: ChapterStatus) =>
+  chapter.source_id !== null && !chapter.unavailable;
 
 export const planBatch = (url: string, wanted: string[]) =>
   invoke<BatchPlan>("plan_batch", { url, wanted });
