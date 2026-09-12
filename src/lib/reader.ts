@@ -63,6 +63,10 @@ export type ReaderTarget =
 
 export interface OnlineChapter {
   pages: string[];
+  /** The publisher's own page, when the source only indexes this chapter. */
+  external_url: string | null;
+  /** Ready to show. Null when the pages came back fine. */
+  message: string | null;
 }
 
 export const readerOnlineChapter = (source: MetaSource, chapterId: string) =>

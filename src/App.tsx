@@ -132,7 +132,6 @@ export default function App() {
           target={view.target}
           onNavigate={(target) => setView({ kind: "reader", target, back })}
           onExit={() => setView(back)}
-          onError={setError}
         />
       );
     }

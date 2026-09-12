@@ -287,12 +287,24 @@ pub fn volume_chapters(manga_id: &str) -> Result<Vec<VolumeChapters>> {
     Ok(volumes)
 }
 
-/// Page image URLs for a chapter, via the MangaDex@Home network.
+/// Where a chapter's images actually live.
+pub enum ChapterImages {
+    /// Served by the source. These are the page URLs.
+    Hosted(Vec<String>),
+    /// Indexed but not served, with the publisher's own page when it is known.
+    ///
+    /// `isUnavailable` in the chapter list does *not* reliably mark these — a
+    /// licensed series can report itself available and still hand back nothing.
+    /// The only dependable answer comes from asking for the pages.
+    External(Option<String>),
+}
+
+/// Ask the source for a chapter's pages.
 ///
 /// The server handing out images is chosen per request and its address is only
-/// valid for a short while, so this must be called immediately before
+/// valid for a short while, so this must be called immediately before reading or
 /// downloading rather than cached.
-pub fn chapter_pages(chapter_id: &str) -> Result<Vec<String>> {
+pub fn chapter_images(chapter_id: &str) -> Result<ChapterImages> {
     let body = get_json(&format!("{API}/at-home/server/{chapter_id}"), &[])
         .with_context(|| format!("asking MangaDex for chapter {chapter_id}"))?;
 
@@ -306,15 +318,50 @@ pub fn chapter_pages(chapter_id: &str) -> Result<Vec<String>> {
         .unwrap_or_default();
 
     // A chapter MangaDex indexes but does not host answers with an empty list
-    // rather than an error, so the useful message has to be built here.
+    // and a success status, so the distinction has to be drawn here.
     if hash.is_empty() || files.is_empty() {
-        bail!("{}", unhosted_reason(chapter_id));
+        return Ok(ChapterImages::External(external_url(chapter_id)));
     }
 
-    Ok(files
-        .into_iter()
-        .map(|file| format!("{base}/data/{hash}/{file}"))
-        .collect())
+    Ok(ChapterImages::Hosted(
+        files
+            .into_iter()
+            .map(|file| format!("{base}/data/{hash}/{file}"))
+            .collect(),
+    ))
+}
+
+/// Page URLs, treating an externally hosted chapter as an error.
+///
+/// What the download path wants: there is nothing to download, and the message
+/// has to explain why rather than reporting an empty chapter.
+pub fn chapter_pages(chapter_id: &str) -> Result<Vec<String>> {
+    match chapter_images(chapter_id)? {
+        ChapterImages::Hosted(pages) => Ok(pages),
+        ChapterImages::External(url) => bail!("{}", unhosted_message(url.as_deref())),
+    }
+}
+
+/// The publisher's page for a chapter the source does not host.
+fn external_url(chapter_id: &str) -> Option<String> {
+    get_json(&format!("{API}/chapter/{chapter_id}"), &[])
+        .ok()
+        .and_then(|body| {
+            body["data"]["attributes"]["externalUrl"]
+                .as_str()
+                .map(String::from)
+        })
+}
+
+/// Explain an empty chapter in terms someone can act on.
+pub fn unhosted_message(external: Option<&str>) -> String {
+    match external {
+        Some(url) => format!(
+            "MangaDex indexes this chapter but does not host its images — it is \
+             officially licensed and published at {url}"
+        ),
+        None => "MangaDex has no images for this chapter.".to_string(),
+    }
 }
 
 /// Whether a URL is served by the MangaDex@Home network.
@@ -352,29 +399,6 @@ pub fn report_at_home(url: &str, success: bool, cached: bool, bytes: usize, mill
         .set("Content-Type", "application/json")
         .timeout(std::time::Duration::from_secs(5))
         .send_json(body);
-}
-
-/// Explain an empty chapter by asking what the chapter itself says.
-///
-/// Worth the extra request: "no images" is baffling, whereas "MangaDex does not
-/// host this one, the publisher does, here is where" is actionable.
-fn unhosted_reason(chapter_id: &str) -> String {
-    let external = get_json(&format!("{API}/chapter/{chapter_id}"), &[])
-        .ok()
-        .and_then(|body| {
-            body["data"]["attributes"]["externalUrl"]
-                .as_str()
-                .map(String::from)
-        });
-
-    match external {
-        Some(url) => format!(
-            "MangaDex indexes this chapter but does not host its images — it is \
-             officially licensed and published at {url}. Paste that page's URL \
-             into the chapter's Get dialog instead."
-        ),
-        None => "MangaDex has no images for this chapter yet.".to_string(),
-    }
 }
 
 #[cfg(test)]

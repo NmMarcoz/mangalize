@@ -21,9 +21,16 @@ use crate::thumbs;
 use crate::util::blocking;
 
 /// Page URLs for a chapter read straight from the source.
+///
+/// An empty `pages` with `external_url` set is not a failure — it is the source
+/// saying it indexes the chapter but the publisher hosts it. The reader shows
+/// that as a destination rather than an error.
 #[derive(Serialize)]
 pub struct OnlineChapter {
     pub pages: Vec<String>,
+    pub external_url: Option<String>,
+    /// Ready to show. Empty when the pages came back fine.
+    pub message: Option<String>,
 }
 
 /// Everything the reader needs to open a chapter.
@@ -122,8 +129,19 @@ pub async fn reader_online_chapter(
     chapter_id: String,
 ) -> Result<OnlineChapter, String> {
     blocking(move || {
-        Ok(OnlineChapter {
-            pages: mangalize_meta::chapter_pages(source, &chapter_id)?,
+        use mangalize_meta::mangadex::{unhosted_message, ChapterImages};
+
+        Ok(match mangalize_meta::chapter_images(source, &chapter_id)? {
+            ChapterImages::Hosted(pages) => OnlineChapter {
+                pages,
+                external_url: None,
+                message: None,
+            },
+            ChapterImages::External(url) => OnlineChapter {
+                pages: Vec::new(),
+                message: Some(unhosted_message(url.as_deref())),
+                external_url: url,
+            },
         })
     })
     .await

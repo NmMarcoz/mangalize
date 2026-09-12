@@ -4,8 +4,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Cloud,
+  ExternalLink,
   Loader2,
   Settings2,
+  TriangleAlert,
 } from "lucide-react";
 
 import { ReaderSettings } from "@/components/ReaderSettings";
@@ -31,7 +33,6 @@ interface ReaderViewProps {
   /** Move to another chapter without leaving the reader. */
   onNavigate: (target: ReaderTarget) => void;
   onExit: () => void;
-  onError: (message: string | null) => void;
 }
 
 /** How many pages either side of the current one to fetch ahead of time. */
@@ -73,8 +74,19 @@ interface OpenChapter {
  * and a chapter read that way can be downloaded afterwards if it is worth
  * keeping.
  */
-export function ReaderView({ target, onNavigate, onExit, onError }: ReaderViewProps) {
+export function ReaderView({ target, onNavigate, onExit }: ReaderViewProps) {
   const [open, setOpen] = useState<OpenChapter | null>(null);
+  /**
+   * Why the chapter could not be shown.
+   *
+   * Kept here rather than pushed to the app's error toast: the reader fills the
+   * window, and a chapter that will not open has to say so *and* offer a way
+   * out in the same place. An endless spinner is not a failure state.
+   */
+  const [failure, setFailure] = useState<{
+    message: string;
+    externalUrl: string | null;
+  } | null>(null);
   const [page, setPage] = useState(0);
   const [prefs, setPrefs] = useState<ReaderPrefs>(loadPrefs);
   const [showChrome, setShowChrome] = useState(true);
@@ -91,12 +103,13 @@ export function ReaderView({ target, onNavigate, onExit, onError }: ReaderViewPr
   useEffect(() => {
     let cancelled = false;
     setOpen(null);
-    onError(null);
+    setFailure(null);
 
-    const load = async (): Promise<OpenChapter> => {
+    const run = async () => {
       if (target.kind === "library") {
         const found = await readerChapter(target.seriesId, target.chapter);
-        return {
+        if (cancelled) return;
+        setOpen({
           seriesTitle: found.series_title,
           number: found.number,
           title: found.title,
@@ -111,46 +124,55 @@ export function ReaderView({ target, onNavigate, onExit, onError }: ReaderViewPr
             ? { kind: "library", seriesId: target.seriesId, chapter: found.next }
             : null,
           progress: { seriesId: target.seriesId, chapter: found.number },
-        };
+        });
+        setPage(found.last_page);
+        return;
       }
 
       const found = await readerOnlineChapter(target.source, target.chapterId);
+      if (cancelled) return;
+
+      // Not an error: the source indexes the chapter but the publisher hosts
+      // it. Nothing in the chapter list marks this reliably, so it can only be
+      // discovered by asking, and the honest response is to say where it lives.
+      if (found.pages.length === 0) {
+        setFailure({
+          message: found.message ?? "This chapter has no pages.",
+          externalUrl: found.external_url,
+        });
+        return;
+      }
+
       const sibling = (at: { id: string; number: string } | null): ReaderTarget | null =>
         at
           ? { ...target, chapterId: at.id, chapterNumber: at.number, kind: "online" }
           : null;
 
-      return {
+      setOpen({
         seriesTitle: target.seriesTitle,
         number: target.chapterNumber,
         title: null,
         direction: target.direction,
         pages: found.pages,
         online: true,
-        // Nothing to resume from: a streamed chapter has no library row.
         startPage: 0,
         previous: sibling(target.previous),
         next: sibling(target.next),
         progress: target.librarySeriesId
           ? { seriesId: target.librarySeriesId, chapter: target.chapterNumber }
           : null,
-      };
+      });
+      setPage(0);
     };
 
-    load()
-      .then((found) => {
-        if (cancelled) return;
-        setOpen(found);
-        setPage(found.startPage);
-      })
-      .catch((e) => {
-        if (!cancelled) onError(String(e));
-      });
+    run().catch((e) => {
+      if (!cancelled) setFailure({ message: String(e), externalUrl: null });
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [target, onError]);
+  }, [target]);
 
   // Decoded pages are large; holding a whole series' worth would be a leak.
   useEffect(() => clearPages, []);
@@ -301,10 +323,58 @@ export function ReaderView({ target, onNavigate, onExit, onError }: ReaderViewPr
     return rtl ? pair.reverse() : pair;
   }, [open, page, prefs.mode, rtl]);
 
+  // Loading and failure both need the way out. Being unable to leave a screen
+  // that will never finish is worse than the thing that went wrong.
   if (!open) {
     return (
-      <div className={cn("flex h-full items-center justify-center", surface)}>
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      <div className={cn("relative flex h-full flex-col", surface)}>
+        <header className="flex items-center gap-3 bg-black/70 px-4 py-2.5 text-white">
+          <Button variant="ghost" size="icon" onClick={onExit} className="text-white">
+            <ArrowLeft />
+          </Button>
+          <p className="flex-1 truncate text-sm font-medium">
+            {target.kind === "online" ? target.seriesTitle : "Opening chapter"}
+          </p>
+        </header>
+
+        <div className="flex min-h-0 flex-1 items-center justify-center p-8">
+          {failure ? (
+            <div className="max-w-md text-center">
+              <TriangleAlert className="mx-auto size-7 text-amber-500" />
+              <h2 className="mt-3 text-sm font-medium text-white">
+                This chapter cannot be read here
+              </h2>
+              <p className="mt-1.5 text-xs leading-relaxed text-white/60">
+                {failure.message}
+              </p>
+
+              <div className="mt-5 flex items-center justify-center gap-2">
+                <Button variant="outline" onClick={onExit}>
+                  <ArrowLeft />
+                  Go back
+                </Button>
+                {failure.externalUrl && (
+                  <Button asChild>
+                    <a
+                      href={failure.externalUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <ExternalLink />
+                      Read at the publisher
+                    </a>
+                  </Button>
+                )}
+              </div>
+
+              <p className="mt-4 text-[10px] text-white/35">
+                Esc also closes the reader.
+              </p>
+            </div>
+          ) : (
+            <Loader2 className="size-5 animate-spin text-white/50" />
+          )}
+        </div>
       </div>
     );
   }

@@ -269,6 +269,15 @@ pub fn tags() -> Result<Vec<Tag>> {
     mangadex::tags()
 }
 
+/// Where a chapter's images live, distinguishing "not hosted here" from an
+/// error. See [`mangadex::ChapterImages`].
+pub fn chapter_images(source: Source, chapter_id: &str) -> Result<mangadex::ChapterImages> {
+    match source {
+        Source::MangaDex => mangadex::chapter_images(chapter_id),
+        Source::Kitsu => bail!("Kitsu does not host chapter images"),
+    }
+}
+
 /// Image URLs for one chapter, straight from the source.
 ///
 /// Far better than reading a page: no rendering, no guessing which `<img>` is a
