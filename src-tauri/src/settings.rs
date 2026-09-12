@@ -10,6 +10,38 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
+/// How a finished volume reaches a device.
+///
+/// The password is absent on purpose: it lives in the OS keychain, so it is not
+/// part of anything written to disk here, copied into a backup, or returned
+/// across IPC.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeliveryConfig {
+    /// The device address, e.g. `something@kindle.com`.
+    pub kindle_email: String,
+    /// The `From:` address. Amazon must have this on its approved list.
+    pub from: String,
+    pub host: String,
+    pub port: u16,
+    /// Mirrors `mangalize_send::Security`: `start-tls`, `tls` or `none`.
+    pub security: String,
+    pub username: String,
+}
+
+impl Default for DeliveryConfig {
+    fn default() -> Self {
+        Self {
+            kindle_email: String::new(),
+            from: String::new(),
+            host: String::new(),
+            // 587 with STARTTLS is what nearly every provider wants.
+            port: 587,
+            security: "start-tls".into(),
+            username: String::new(),
+        }
+    }
+}
+
 /// Everything the user can configure, as the frontend sees it.
 ///
 /// Paths are resolved here rather than in the UI, so `library_root` and
@@ -28,6 +60,7 @@ pub struct Settings {
     /// On by default because that is what a Kindle needs; readers that handle a
     /// wide page properly can turn it off.
     pub split_spreads: bool,
+    pub delivery: DeliveryConfig,
     /// Whether the first-run screen has been answered.
     ///
     /// Separate from `output_root` being set, because "decide later" is a valid
@@ -43,6 +76,7 @@ struct Stored {
     default_format: Option<String>,
     folder_per_series: Option<bool>,
     split_spreads: Option<bool>,
+    delivery: Option<DeliveryConfig>,
     welcomed: Option<bool>,
 }
 
@@ -59,6 +93,7 @@ pub fn load(app: &AppHandle) -> Result<Settings> {
         // series is the thing this is meant to avoid.
         folder_per_series: stored.folder_per_series.unwrap_or(true),
         split_spreads: stored.split_spreads.unwrap_or(true),
+        delivery: stored.delivery.unwrap_or_default(),
         welcomed: stored.welcomed.unwrap_or(false),
     })
 }
@@ -73,6 +108,7 @@ pub fn save(app: &AppHandle, next: &Settings) -> Result<()> {
             default_format: Some(next.default_format.clone()),
             folder_per_series: Some(next.folder_per_series),
             split_spreads: Some(next.split_spreads),
+            delivery: Some(next.delivery.clone()),
             welcomed: Some(next.welcomed),
         },
     )

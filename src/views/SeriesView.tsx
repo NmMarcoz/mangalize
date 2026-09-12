@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
 import { useThumbnail } from "@/hooks/useThumbnail";
 import { formatBytes, type Format, type Volume } from "@/lib/api";
+import { sendFiles } from "@/lib/send";
 import {
   buildLibraryVolumes,
   cancelBuild,
@@ -96,6 +97,7 @@ export function SeriesView({
   const [menu, setMenu] = useState<ContextMenuPosition | null>(null);
   const [buildProgress, setBuildProgress] = useState<BuildBatchProgress | null>(null);
   const [buildReport, setBuildReport] = useState<BuildBatchReport | null>(null);
+  const [sending, setSending] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -270,14 +272,14 @@ export function SeriesView({
   }, []);
 
   const runBuild = useCallback(
-    async (askWhere: boolean) => {
+    async (askWhere: boolean): Promise<BuildBatchReport | null> => {
       const chosen = order.filter((n) => picked.has(n) && buildable.has(n));
-      if (chosen.length === 0) return;
+      if (chosen.length === 0) return null;
 
       let outDir: string | null = null;
       if (askWhere) {
         const folder = await openDialog({ directory: true, multiple: false });
-        if (typeof folder !== "string") return;
+        if (typeof folder !== "string") return null;
         outDir = folder;
       }
 
@@ -298,14 +300,42 @@ export function SeriesView({
           outDir,
         });
         setBuildReport(report);
+        return report;
       } catch (e) {
         onError(String(e));
+        return null;
       } finally {
         setBuildProgress(null);
       }
     },
     [order, picked, buildable, seriesId, defaultFormat, onError],
   );
+
+  /**
+   * Build the selection, then mail each volume to the device.
+   *
+   * Built to the configured folder first rather than to a temporary file: a
+   * volume worth sending is worth keeping, and the send is the part most likely
+   * to fail.
+   */
+  const runBuildAndSend = useCallback(async () => {
+    const built = await runBuild(false);
+    if (!built || built.built.length === 0) return;
+
+    setSending(true);
+    try {
+      const result = await sendFiles(built.built.map((b) => b.path));
+      if (result.failed.length > 0) {
+        onError(
+          `Sent ${result.sent.length}, failed ${result.failed.length}: ${result.failed[0].error}`,
+        );
+      }
+    } catch (e) {
+      onError(String(e));
+    } finally {
+      setSending(false);
+    }
+  }, [runBuild, onError]);
 
   const pickedBuildable = order.filter((n) => picked.has(n) && buildable.has(n));
 
@@ -431,6 +461,16 @@ export function SeriesView({
             Build as…
           </ContextMenuItem>
 
+          <ContextMenuItem
+            onSelect={() => {
+              setMenu(null);
+              void runBuildAndSend();
+            }}
+            disabled={pickedBuildable.length === 0 || sending}
+          >
+            Build and send to Kindle
+          </ContextMenuItem>
+
           {pickedBuildable.length < picked.size && (
             <ContextMenuItem onSelect={() => {}} disabled>
               {picked.size - pickedBuildable.length} not downloaded yet
@@ -458,9 +498,10 @@ export function SeriesView({
         </ContextMenu>
       )}
 
-      {(buildProgress || buildReport) && (
+      {(buildProgress || buildReport || sending) && (
         <BuildStatus
           progress={buildProgress}
+          sending={sending}
           report={buildReport}
           onDismiss={() => setBuildReport(null)}
         />
@@ -617,16 +658,23 @@ function VolumeArt({ volume, dimmed }: { volume: VolumeStatus; dimmed: boolean }
 /** Progress while a batch builds, then what it produced. */
 function BuildStatus({
   progress,
+  sending,
   report,
   onDismiss,
 }: {
   progress: BuildBatchProgress | null;
+  sending: boolean;
   report: BuildBatchReport | null;
   onDismiss: () => void;
 }) {
   return (
     <div className="absolute bottom-4 left-1/2 z-40 flex w-[min(34rem,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 shadow-lg">
-      {progress ? (
+      {sending ? (
+        <>
+          <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+          <p className="min-w-0 flex-1 text-xs font-medium">Sending to your Kindle…</p>
+        </>
+      ) : progress ? (
         <>
           <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
           <div className="min-w-0 flex-1">

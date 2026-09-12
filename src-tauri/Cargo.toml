@@ -16,6 +16,15 @@ mangalize-core = { path = "../crates/mangalize-core" }
 mangalize-meta = { path = "../crates/mangalize-meta" }
 mangalize-library = { path = "../crates/mangalize-library" }
 mangalize-fetch = { path = "../crates/mangalize-fetch" }
+mangalize-send = { path = "../crates/mangalize-send" }
+# Only the two platforms we ship. Enabling a Linux backend would pull in
+# secret-service and its dbus system libraries, which the CI check job compiles
+# on and would have to install for no benefit. Without one, keyring builds
+# everywhere and only fails at runtime on Linux, which we do not ship.
+keyring = { version = "3", default-features = false, features = [
+    "apple-native",
+    "windows-native",
+] }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"

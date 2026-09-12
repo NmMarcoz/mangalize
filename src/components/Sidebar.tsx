@@ -5,6 +5,7 @@ import {
   Loader2,
   PanelLeftClose,
   PanelLeftOpen,
+  Send,
   Settings,
 } from "lucide-react";
 
@@ -12,7 +13,7 @@ import type { UpdateStage } from "@/hooks/useUpdater";
 import { cn } from "@/lib/utils";
 
 /** Top-level destinations. A series or the editor both live under the library. */
-export type Section = "library" | "settings";
+export type Section = "library" | "send" | "settings";
 
 interface SidebarProps {
   active: Section;
@@ -62,6 +63,13 @@ export function Sidebar({
           expanded={expanded}
           active={active === "library"}
           onClick={() => onNavigate("library")}
+        />
+        <Item
+          icon={<Send className="size-4" />}
+          label="Send to Kindle"
+          expanded={expanded}
+          active={active === "send"}
+          onClick={() => onNavigate("send")}
         />
         <Item
           icon={<Settings className="size-4" />}

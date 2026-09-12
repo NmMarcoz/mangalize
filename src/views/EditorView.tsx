@@ -21,6 +21,7 @@ import {
   type Volume,
 } from "@/lib/api";
 import { resolveBuildPath } from "@/lib/settings";
+import { sendFiles } from "@/lib/send";
 
 interface EditorViewProps {
   volume: Volume;
@@ -67,6 +68,7 @@ export function EditorView({
   /** Empty means "use whatever the metadata suggests". */
   const [fileName, setFileName] = useState("");
   const [suggested, setSuggested] = useState("");
+  const [sending, setSending] = useState(false);
 
   // A different volume means the previous one's selection is meaningless, and
   // an export name typed for it certainly is.
@@ -338,7 +340,7 @@ export function EditorView({
    * is one click.
    */
   const handleExport = useCallback(
-    async (askWhere: boolean) => {
+    async (askWhere: boolean): Promise<BuildReport | null> => {
       onError(null);
       try {
         // What the user typed wins; the derived name is only ever a default.
@@ -363,20 +365,46 @@ export function EditorView({
             filters: [{ name: format.toUpperCase(), extensions: [format] }],
           });
         }
-        if (!out) return;
+        if (!out) return null;
 
         setReport(null);
         setBuilding({ done: 0, total: volumePageCount(volume) });
         const result = await buildVolume(volume, out, format);
         setReport(result);
+        return result;
       } catch (e) {
         onError(String(e));
+        return null;
       } finally {
         setBuilding(null);
       }
     },
     [volume, format, fileName, suggested, onError],
   );
+
+  /**
+   * Build if needed, then mail the result.
+   *
+   * Reuses the last build when there is one — re-encoding a few hundred pages
+   * just to attach them again would be a long wait for no difference.
+   */
+  const handleSend = useCallback(async () => {
+    onError(null);
+    const built = report ?? (await handleExport(false));
+    if (!built) return;
+
+    setSending(true);
+    try {
+      const result = await sendFiles([built.path]);
+      if (result.failed.length > 0) {
+        onError(`Could not send: ${result.failed[0].error}`);
+      }
+    } catch (e) {
+      onError(String(e));
+    } finally {
+      setSending(false);
+    }
+  }, [report, handleExport, onError]);
 
   const pickCover = useCallback(async () => {
     const picked = await open({
@@ -404,6 +432,8 @@ export function EditorView({
         onRescan={onRescan}
         onExport={() => void handleExport(false)}
         onExportAs={() => void handleExport(true)}
+        onSend={() => void handleSend()}
+        sending={sending}
         onReveal={() => report && void revealItemInDir(report.path)}
       />
 

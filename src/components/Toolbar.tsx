@@ -4,6 +4,7 @@ import {
   Loader2,
   PackageCheck,
   RefreshCw,
+  Send,
   Upload,
 } from "lucide-react";
 
@@ -47,6 +48,9 @@ interface ToolbarProps {
   onExport: () => void;
   /** Always asks for a location, even when one is configured. */
   onExportAs: () => void;
+  /** Build if needed, then mail the result to the configured device. */
+  onSend: () => void;
+  sending: boolean;
   onReveal: () => void;
 }
 
@@ -66,6 +70,8 @@ export function Toolbar({
   onRescan,
   onExport,
   onExportAs,
+  onSend,
+  sending,
   onReveal,
 }: ToolbarProps) {
   const pages = volumePageCount(volume);
@@ -137,6 +143,16 @@ export function Toolbar({
               disabled={building !== null || pages === 0}
             >
               Build as…
+            </Button>
+          </Hint>
+          <Hint label="Build if needed, then email it to your Kindle">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={onSend}
+              disabled={building !== null || sending || pages === 0}
+            >
+              {sending ? <Loader2 className="animate-spin" /> : <Send />}
             </Button>
           </Hint>
         </div>

@@ -11,6 +11,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { EditorView } from "@/views/EditorView";
 import { LibraryView } from "@/views/LibraryView";
 import { SeriesView } from "@/views/SeriesView";
+import { SendView } from "@/views/SendView";
 import { SettingsView } from "@/views/SettingsView";
 import { WelcomeView } from "@/views/WelcomeView";
 import { useUpdater } from "@/hooks/useUpdater";
@@ -27,6 +28,7 @@ import { clearThumbnails } from "@/lib/thumbs";
 type View =
   | { kind: "library" }
   | { kind: "series"; id: number }
+  | { kind: "send" }
   | { kind: "settings" }
   | { kind: "editor"; from: { seriesId: number } | null };
 
@@ -112,6 +114,10 @@ export default function App() {
       return <WelcomeView onDone={setSettings} onError={setError} />;
     }
 
+    if (view.kind === "send") {
+      return <SendView onSaved={() => {}} onError={setError} />;
+    }
+
     if (view.kind === "settings") {
       return (
         <SettingsView
@@ -177,7 +183,8 @@ export default function App() {
 
   // A series and the editor both sit under the library as far as navigation is
   // concerned, so neither gets its own rail entry.
-  const section: Section = view.kind === "settings" ? "settings" : "library";
+  const section: Section =
+    view.kind === "settings" || view.kind === "send" ? view.kind : "library";
   const chrome = settings !== null && settings.welcomed;
 
   return (
@@ -186,9 +193,7 @@ export default function App() {
         {chrome && (
           <Sidebar
             active={section}
-            onNavigate={(to) =>
-              setView(to === "settings" ? { kind: "settings" } : { kind: "library" })
-            }
+            onNavigate={(to) => setView({ kind: to } as View)}
             updateStage={updater.state.stage}
             onCheckUpdates={updater.checkNow}
           />

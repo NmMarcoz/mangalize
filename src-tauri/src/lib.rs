@@ -9,11 +9,13 @@
 //! - [`library`] — the stored collection (`mangalize-library`)
 //! - [`fetch`] — pulling a chapter's images off a URL (`mangalize-fetch`)
 //! - [`harvest`] — rendering a page to see what images it really loads
+//! - [`send`] — mailing a finished volume to a device (`mangalize-send`)
 
 mod fetch;
 mod harvest;
 mod library;
 mod meta;
+mod send;
 mod settings;
 mod thumbs;
 mod util;
@@ -63,6 +65,10 @@ pub fn run() {
             fetch::download_batch,
             fetch::cancel_batch,
             harvest::harvest_images,
+            send::send_config,
+            send::save_send_config,
+            send::send_test_email,
+            send::send_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running mangalize");
