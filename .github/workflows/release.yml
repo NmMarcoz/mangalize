@@ -31,6 +31,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # The workspace includes the Tauri app, and on Linux Tauri links against
+      # the system GTK/WebKit stack. macOS and Windows use their native webviews
+      # and need none of this, which is why only this job wants it.
+      - name: Linux webview dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            build-essential
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -157,8 +172,8 @@ jobs:
           # Linux would go here:
           #   - platform: ubuntu-22.04
           #     args: ""
-          # It also needs a step installing libwebkit2gtk-4.1-dev, libappindicator3-dev,
-          # librsvg2-dev and patchelf before the build.
+          # It needs the same apt step the `check` job runs, plus `patchelf`,
+          # which only the AppImage bundler uses.
 
     runs-on: ${{ matrix.platform }}
 
