@@ -26,6 +26,11 @@ serde_json.workspace = true
 image.workspace = true
 anyhow.workspace = true
 
+# Only Android needs it, for the self-update that platform has no plugin for.
+# Left unconditional because the workspace already builds it for the fetch and
+# metadata crates, so this costs nothing on a desktop build.
+ureq.workspace = true
+
 # Desktop only, for two different reasons.
 #
 # `keyring` has no Android backend to speak to, and enabling its Linux one would

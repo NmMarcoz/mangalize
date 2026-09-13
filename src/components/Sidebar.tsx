@@ -36,6 +36,9 @@ interface SidebarProps {
   variant?: NavVariant;
 }
 
+// The bottom bar has no room for a check-for-updates entry and no sensible
+// place to put one; on a phone that lives in Settings instead.
+
 /** Remembered across launches; purely chrome, so it does not belong in settings. */
 const EXPANDED_KEY = "mangalize:sidebar-expanded";
 

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { Check, FolderOpen, Loader2 } from "lucide-react";
+import { Check, CloudDownload, FolderOpen, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import type { UpdateStage } from "@/hooks/useUpdater";
 import {
   Select,
   SelectContent,
@@ -14,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { canPickFolders, canRevealFiles } from "@/lib/platform";
+import { canPickFolders, canRevealFiles, isAndroid } from "@/lib/platform";
 import {
   COMPRESSION_PRESETS,
   getSettings,
@@ -26,10 +27,18 @@ interface SettingsViewProps {
   /** Lets the rest of the app pick up a changed library or output folder. */
   onSaved: (settings: Settings) => void;
   onError: (message: string | null) => void;
+  /** Android only: the rail that normally carries these is not there. */
+  updateStage: UpdateStage;
+  onCheckUpdates: () => void;
 }
 
 /** Where things live and what Build does by default. */
-export function SettingsView({ onSaved, onError }: SettingsViewProps) {
+export function SettingsView({
+  onSaved,
+  onError,
+  updateStage,
+  onCheckUpdates,
+}: SettingsViewProps) {
   const [settings, setLocal] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -189,6 +198,35 @@ export function SettingsView({ onSaved, onError }: SettingsViewProps) {
                 Pre-selected in the editor, and what a batch build uses.
               </p>
             </div>
+
+            {/* Only on Android. Everywhere else this lives in the rail, which a
+                phone does not have and the bottom bar has no room for. */}
+            {isAndroid && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Updates</Label>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onCheckUpdates}
+                    disabled={updateStage === "checking"}
+                  >
+                    {updateStage === "checking" ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <CloudDownload />
+                    )}
+                    {updateStage === "uptodate" ? "Up to date" : "Check for updates"}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  There is no store to update a sideloaded build, so the app
+                  fetches the release itself and Android asks before installing
+                  it. An update signed with a different key is refused — by the
+                  system, not by us.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </main>

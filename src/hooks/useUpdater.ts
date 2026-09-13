@@ -2,7 +2,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 
-import { isMobile } from "@/lib/platform";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+
+import { isAndroid } from "@/lib/platform";
+
+/** What `android_update_check` answers with. */
+interface AndroidUpdate {
+  version: string;
+  notes: string;
+  url: string;
+  bytes: number;
+}
 
 export type UpdateStage =
   | "idle"
@@ -38,14 +49,37 @@ export function useUpdater() {
   // Held between check and install so the download does not re-resolve it.
   const pending = useRef<Update | null>(null);
 
+  /**
+   * The Android release, when there is a newer one.
+   *
+   * Held separately from `pending` because the two update paths have nothing in
+   * common: one is a plugin's `Update` object, the other is a URL to fetch.
+   */
+  const androidUpdate = useRef<AndroidUpdate | null>(null);
+
   const runCheck = useCallback(async (silent: boolean) => {
-    // Mobile apps update through whatever store installed them; the plugin has
-    // no implementation there, so asking would only produce a confusing error.
-    if (isMobile) {
-      setState({ stage: "idle" });
+    setState({ stage: "checking" });
+
+    // Android has no updater plugin, so the app asks GitHub itself and hands
+    // the APK to the system installer. See `src-tauri/src/update.rs`.
+    if (isAndroid) {
+      try {
+        const found = await invoke<AndroidUpdate | null>("android_update_check");
+        if (!found) {
+          androidUpdate.current = null;
+          setState({ stage: "uptodate" });
+          return;
+        }
+        androidUpdate.current = found;
+        setDismissed(false);
+        setState({ stage: "available", version: found.version, notes: found.notes });
+      } catch (e) {
+        androidUpdate.current = null;
+        setState(silent ? { stage: "idle" } : { stage: "error", error: String(e) });
+      }
       return;
     }
-    setState({ stage: "checking" });
+
     try {
       const found = await check();
       if (!found) {
@@ -69,6 +103,27 @@ export function useUpdater() {
   }, []);
 
   const install = useCallback(async () => {
+    if (isAndroid) {
+      const found = androidUpdate.current;
+      if (!found) return;
+      setState((current) => ({
+        ...current,
+        stage: "downloading",
+        downloaded: 0,
+        total: found.bytes,
+      }));
+      try {
+        await invoke("android_update_install", { url: found.url });
+        // The system installer takes over from here, and whether the user goes
+        // through with it is not something the app is told. "Installed" would
+        // be a claim; this is only "we handed it over".
+        setState((current) => ({ ...current, stage: "idle" }));
+      } catch (e) {
+        setState((current) => ({ ...current, stage: "error", error: String(e) }));
+      }
+      return;
+    }
+
     const update = pending.current;
     if (!update) return;
 
@@ -96,6 +151,24 @@ export function useUpdater() {
   /** Restart into the version that was just installed. */
   const restart = useCallback(async () => {
     await relaunch();
+  }, []);
+
+  // The Android download reports itself over an event, because it is the
+  // backend doing the fetching rather than a plugin with a callback.
+  useEffect(() => {
+    if (!isAndroid) return;
+    const pending = listen<{ downloaded: number; total: number }>(
+      "android-update-progress",
+      (e) =>
+        setState((current) =>
+          current.stage === "downloading"
+            ? { ...current, downloaded: e.payload.downloaded, total: e.payload.total }
+            : current,
+        ),
+    );
+    return () => {
+      void pending.then((fn) => fn());
+    };
   }, []);
 
   // One silent check per launch. Re-checking on every render or on a timer

@@ -265,6 +265,8 @@ export default function App() {
         <SettingsView
           onSaved={setSettings}
           onError={setError}
+          updateStage={updater.state.stage}
+          onCheckUpdates={updater.checkNow}
         />
       );
     }

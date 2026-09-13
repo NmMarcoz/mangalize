@@ -2,6 +2,9 @@ package dev.mangalize.app
 
 import android.app.Activity
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.core.content.FileProvider
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
@@ -14,6 +17,11 @@ import java.io.File
 class ShareArgs {
   lateinit var path: String
   var title: String? = null
+}
+
+@InvokeArg
+class InstallArgs {
+  lateinit var path: String
 }
 
 /**
@@ -65,6 +73,58 @@ class SharePlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     activity.startActivity(Intent.createChooser(send, label))
+    invoke.resolve()
+  }
+
+  /**
+   * Hand a downloaded APK to Android's package installer.
+   *
+   * Never silent, and that is the point: the system asks, and it refuses
+   * outright unless the new APK is signed with the same key as the installed
+   * one. That is the same guarantee the desktop updater gets from checking a
+   * signature, except enforced by the OS rather than by us.
+   *
+   * Installing from outside a store needs the user's permission per app, so a
+   * device that has not granted it is sent to the settings screen that grants
+   * it rather than being shown a failure.
+   */
+  @Command
+  fun installApk(invoke: Invoke) {
+    val args = invoke.parseArgs(InstallArgs::class.java)
+
+    val file = File(args.path)
+    if (!file.isFile) {
+      invoke.reject("no update at ${args.path}")
+      return
+    }
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+      !activity.packageManager.canRequestPackageInstalls()
+    ) {
+      activity.startActivity(
+        Intent(
+          Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+          Uri.parse("package:${activity.packageName}"),
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+      )
+      invoke.reject(
+        "Allow Mangalize to install apps, then tap update again.",
+      )
+      return
+    }
+
+    val uri = FileProvider.getUriForFile(
+      activity,
+      "${activity.packageName}.fileprovider",
+      file,
+    )
+    activity.startActivity(
+      Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, "application/vnd.android.package-archive")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      },
+    )
     invoke.resolve()
   }
 }

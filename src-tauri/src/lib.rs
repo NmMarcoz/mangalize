@@ -18,6 +18,7 @@
 //! - [`reader`] — reading a downloaded chapter; library only, works offline
 
 mod export;
+mod update;
 mod fetch;
 mod harvest;
 mod library;
@@ -52,6 +53,8 @@ pub fn run() {
             volume::suggest_filename,
             volume::resolve_build_path,
             export::share_file,
+            update::android_update_check,
+            update::android_update_install,
             fetch::download_from_source,
             reader::reader_track_online,
             library::library_record_built,

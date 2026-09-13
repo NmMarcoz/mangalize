@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Sideloaded builds update themselves: there is no store to do it, and
+         the Tauri updater has no Android implementation. This only lets the app
+         *ask*; the system still shows its own dialog, and still refuses an APK
+         signed with a different key than the installed one. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />

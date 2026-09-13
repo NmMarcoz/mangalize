@@ -34,6 +34,26 @@ struct ShareArgs {
     title: Option<String>,
 }
 
+#[cfg(target_os = "android")]
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InstallArgs {
+    path: String,
+}
+
+/// Hand a downloaded APK to Android's installer. See `update.rs`.
+///
+/// Lives here because the Kotlin side is the same plugin: both are "give this
+/// file to the system and let it decide what happens next".
+#[cfg(target_os = "android")]
+pub async fn install_apk<R: Runtime>(app: &AppHandle<R>, path: String) -> Result<(), String> {
+    let share = app.state::<Share<R>>();
+    share
+        .0
+        .run_mobile_plugin::<()>("installApk", InstallArgs { path })
+        .map_err(|e| e.to_string())
+}
+
 /// Registers the Kotlin side. A no-op plugin elsewhere, so `lib.rs` stays free
 /// of a `cfg` around the builder chain.
 pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
