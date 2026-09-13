@@ -323,7 +323,7 @@ forked.
 | The harvest window | It needs a second webview. Android has one. Pages that build themselves in JavaScript can only be reached by reading their markup. |
 | Folder pickers | Android sandboxes app storage. The library and the build folder both live in `app_data_dir()`; reaching outside needs a document picker this app has no use for. |
 | Reveal in Finder | No file manager to reveal into. |
-| The updater | No Android implementation, and a phone updates through whatever store installed it. Naming `updater:default` in a shared capability is what broke the first Android build — hence `capabilities/desktop.json` and its `platforms` field. |
+| The Tauri updater | No Android implementation. Naming `updater:default` in a shared capability is what broke the first Android build — hence `capabilities/desktop.json` and its `platforms` field. Android updates itself instead; see below. |
 | Drag and drop | Nothing to drag from. |
 
 The frontend asks `src/lib/platform.ts`, which reads the user agent. It hides
@@ -393,6 +393,26 @@ Generated, but not entirely: `MainActivity.kt` and the manifest are ours and
 survive a fresh checkout. Only build output is ignored. Everything under
 `app/src/main/java/dev/mangalize/app/generated/` is Tauri's and is rewritten on
 every build — do not edit it.
+
+### Updating a sideloaded build
+
+"A phone updates through whatever store installed it" is no answer for an APK
+the user sideloaded, so `update.rs` asks GitHub for the latest release,
+downloads the APK and hands it to Android's package installer.
+
+The install is never silent, and that is the guarantee: the system asks, and it
+refuses an APK signed with a different key than the installed one. That is what
+the desktop updater's signature check buys, enforced by the OS instead.
+
+Two things learned from watching it run on a device:
+
+- A device that has not allowed installs from this app gets sent to the settings
+  screen that allows it. The update offer has to *survive* that failure — the
+  user is expected to grant permission and come back — so a failed install
+  returns to `available`, never `error`.
+- Play Protect interposes its own dialog for an app it has not seen. There is
+  nothing to do about that from inside the app, and "Install without scanning"
+  is behind "More details".
 
 ### Building
 

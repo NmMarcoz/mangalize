@@ -1,6 +1,7 @@
 import { Download, Loader2, RefreshCw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { isAndroid } from "@/lib/platform";
 import { Progress } from "@/components/ui/progress";
 import type { UpdateState } from "@/hooks/useUpdater";
 import { formatBytes } from "@/lib/api";
@@ -76,10 +77,21 @@ export function UpdateBanner({
             <p className="text-xs font-medium">
               Mangalize {state.version} is available
             </p>
-            {state.notes && (
-              <p className="truncate text-[11px] text-muted-foreground" title={state.notes}>
-                {state.notes}
+            {/* An error here is not a dead end — it is usually "allow installs
+                from this app first", and the offer is still good. Notes are the
+                release body, which on Android is desktop download instructions
+                and not worth the line. */}
+            {state.error ? (
+              <p className="text-[11px] text-amber-500" title={state.error}>
+                {state.error}
               </p>
+            ) : (
+              !isAndroid &&
+              state.notes && (
+                <p className="truncate text-[11px] text-muted-foreground" title={state.notes}>
+                  {state.notes}
+                </p>
+              )
             )}
           </div>
           <Button size="sm" onClick={onInstall}>

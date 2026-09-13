@@ -119,7 +119,15 @@ export function useUpdater() {
         // be a claim; this is only "we handed it over".
         setState((current) => ({ ...current, stage: "idle" }));
       } catch (e) {
-        setState((current) => ({ ...current, stage: "error", error: String(e) }));
+        // Back to "available", not "error". The likeliest failure is a device
+        // that has not allowed installs from this app yet, which sends the user
+        // to a settings screen and expects them to come back and try again — so
+        // the offer has to survive, or there is nothing to come back to.
+        setState((current) => ({
+          ...current,
+          stage: "available",
+          error: String(e),
+        }));
       }
       return;
     }
