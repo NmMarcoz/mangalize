@@ -20,6 +20,7 @@ import {
   loadPrefs,
   readerChapter,
   readerOnlineChapter,
+  readerTrackOnline,
   savePrefs,
   saveReadingProgress,
   type FitMode,
@@ -152,6 +153,21 @@ export function ReaderView({ target, onNavigate, onExit }: ReaderViewProps) {
           ? { ...target, chapterId: at.id, chapterNumber: at.number, kind: "online" }
           : null;
 
+      // Recorded whether or not the series is in the library, so history is
+      // the same question however the pages were reached. Failing to record is
+      // not worth refusing to read over — it costs the history entry, nothing
+      // more.
+      const seriesId = await readerTrackOnline({
+        source: target.source,
+        seriesSourceId: target.seriesSourceId,
+        title: target.seriesTitle,
+        coverUrl: target.coverUrl,
+        chapter: target.chapterNumber,
+        chapterSourceId: target.chapterId,
+        pages: found.pages.length,
+      }).catch(() => target.librarySeriesId);
+      if (cancelled) return;
+
       setOpen({
         seriesTitle: target.seriesTitle,
         number: target.chapterNumber,
@@ -162,9 +178,7 @@ export function ReaderView({ target, onNavigate, onExit }: ReaderViewProps) {
         startPage: 0,
         previous: sibling(target.previous),
         next: sibling(target.next),
-        progress: target.librarySeriesId
-          ? { seriesId: target.librarySeriesId, chapter: target.chapterNumber }
-          : null,
+        progress: seriesId ? { seriesId, chapter: target.chapterNumber } : null,
       });
       setPage(0);
     };

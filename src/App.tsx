@@ -22,7 +22,7 @@ import { SendView } from "@/views/SendView";
 import { SettingsView } from "@/views/SettingsView";
 import { WelcomeView } from "@/views/WelcomeView";
 import { useUpdater } from "@/hooks/useUpdater";
-import { scanFolder, type Volume } from "@/lib/api";
+import { scanFolder, type MetaSource, type Volume } from "@/lib/api";
 import { getSettings, type Settings } from "@/lib/settings";
 import { isMobile } from "@/lib/platform";
 import { recordBuilt } from "@/lib/library";
@@ -214,10 +214,27 @@ export default function App() {
     if (view.kind === "history") {
       return (
         <HistoryView
-          onRead={(seriesId, chapter) =>
+          onRead={(entry) =>
             setView({
               kind: "reader",
-              target: { kind: "library", seriesId, chapter },
+              // How it was read decides where it reopens from. A streamed
+              // chapter has no pages on disk to go back to.
+              target:
+                entry.downloaded || !entry.chapter_source_id || !entry.series_source_id
+                  ? { kind: "library", seriesId: entry.series_id, chapter: entry.chapter }
+                  : {
+                      kind: "online",
+                      source: (entry.source ?? "mangadex") as MetaSource,
+                      chapterId: entry.chapter_source_id,
+                      seriesTitle: entry.series_title,
+                      chapterNumber: entry.chapter,
+                      direction: "right-to-left",
+                      previous: null,
+                      next: null,
+                      seriesSourceId: entry.series_source_id,
+                      coverUrl: null,
+                      librarySeriesId: entry.series_id,
+                    },
               back: { kind: "history" },
             })
           }

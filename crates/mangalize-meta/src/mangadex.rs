@@ -109,6 +109,23 @@ pub fn browse(query: &BrowseQuery) -> Result<BrowsePage> {
     })
 }
 
+/// One series by its id.
+///
+/// Browsing and searching both return everything about a series, so this exists
+/// only for the case where the id is all that was kept — a library entry, whose
+/// tags and rating want refreshing without knowing what to search for.
+pub fn manga(manga_id: &str) -> Result<SeriesMatch> {
+    let body = get_json(
+        &format!("{API}/manga/{manga_id}"),
+        &[
+            ("includes[]", "author"),
+            ("includes[]", "artist"),
+            ("includes[]", "cover_art"),
+        ],
+    )?;
+    parse_series(&body["data"]).context("MangaDex returned a series shape we could not read")
+}
+
 /// Every tag a series can carry.
 ///
 /// Small and effectively static, so the caller is expected to ask once and keep

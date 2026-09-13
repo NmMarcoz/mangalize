@@ -9,7 +9,14 @@ import { clearReadingProgress, readingHistory, type HistoryEntry } from "@/lib/r
 import { cn } from "@/lib/utils";
 
 interface HistoryViewProps {
-  onRead: (seriesId: number, chapter: string) => void;
+  /**
+   * Reopen an entry.
+   *
+   * The entry says how it was read, because history does not care and the
+   * reader does: a downloaded chapter comes off disk, a streamed one goes back
+   * to the source.
+   */
+  onRead: (entry: HistoryEntry) => void;
   onOpenSeries: (id: number) => void;
   onError: (message: string | null) => void;
 }
@@ -73,7 +80,7 @@ export function HistoryView({ onRead, onOpenSeries, onError }: HistoryViewProps)
               <Row
                 key={`${entry.series_id}-${entry.chapter}-${entry.opened_at}`}
                 entry={entry}
-                onRead={() => onRead(entry.series_id, entry.chapter)}
+                onRead={() => onRead(entry)}
                 onOpenSeries={() => onOpenSeries(entry.series_id)}
                 onForget={() => void forget(entry)}
               />

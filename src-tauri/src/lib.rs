@@ -53,6 +53,7 @@ pub fn run() {
             volume::resolve_build_path,
             export::share_file,
             fetch::download_from_source,
+            reader::reader_track_online,
             library::library_record_built,
             library::library_clear_built,
             settings::get_settings,

@@ -14,6 +14,7 @@ import {
   Trash2,
   X,
   PackageCheck,
+  ExternalLink,
 } from "lucide-react";
 
 import { BatchDownloadDialog } from "@/components/BatchDownloadDialog";
@@ -466,6 +467,11 @@ export function SeriesView({
             if (e.target === e.currentTarget) setPicked(new Set());
           }}
         >
+          {/* The same things the discover dialog shows, above the shelf rather
+              than in a dialog: this page is where a series in the library is
+              looked at, and it had nothing to say about the series itself. */}
+          {series && <SeriesDetails series={series} />}
+
           {volumes === null ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="size-3.5 animate-spin" /> Loading volumes…
@@ -1179,4 +1185,103 @@ function sourceLabel(source: string | null | undefined): string {
     default:
       return "the source";
   }
+}
+
+/**
+ * What a series is, above its shelf of volumes.
+ *
+ * The description collapses because a good one runs to a paragraph and the
+ * volumes are what the page is for — the detail should be reachable without
+ * pushing them below the fold.
+ */
+function SeriesDetails({ series }: { series: Series }) {
+  const [expanded, setExpanded] = useState(false);
+  const { ref, url } = useThumbnail(series.cover_path ?? "", 320);
+
+  const subtitle = [series.title_romaji, series.title_native]
+    .filter((t) => t && t !== series.title)
+    .join(" · ");
+
+  return (
+    <div ref={ref as React.Ref<HTMLDivElement>} className={cn("mb-6 flex gap-4", isMobile && "flex-col")}>
+      <div
+        className={cn(
+          "flex items-center justify-center overflow-hidden rounded-lg bg-muted/40",
+          isMobile ? "h-52 w-36 self-start" : "h-52 w-36 shrink-0",
+        )}
+      >
+        {series.cover_path && url ? (
+          <img src={url} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <BookOpen className="size-6 text-muted-foreground" />
+        )}
+      </div>
+
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <div>
+          <h2 className="text-base font-semibold">{series.title}</h2>
+          {subtitle && (
+            <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>
+          )}
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          {[series.author, series.artist !== series.author ? series.artist : null]
+            .filter(Boolean)
+            .join(" · ") || "Unknown author"}
+          {series.year ? ` · ${series.year}` : ""}
+          {series.status ? ` · ${series.status}` : ""}
+        </p>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          {series.content_rating && (
+            <Badge variant={series.content_rating === "safe" ? "outline" : "default"}>
+              {series.content_rating}
+            </Badge>
+          )}
+          {series.site_url && (
+            <a
+              href={series.site_url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            >
+              <ExternalLink className="size-3" />
+              {sourceLabel(series.source)}
+            </a>
+          )}
+        </div>
+
+        {series.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {series.tags.map((tag) => (
+              <Badge key={tag} variant="outline" className="opacity-75">
+                {tag}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        {series.description && (
+          <div>
+            <p
+              className={cn(
+                "whitespace-pre-line text-xs leading-relaxed text-muted-foreground",
+                !expanded && "line-clamp-3",
+              )}
+              data-selectable
+            >
+              {series.description}
+            </p>
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              className="mt-0.5 text-[11px] text-primary hover:underline"
+            >
+              {expanded ? "Show less" : "Show more"}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

@@ -332,17 +332,43 @@ fn history_is_most_recently_opened_first() {
 }
 
 #[test]
-fn history_skips_chapters_whose_pages_have_been_deleted() {
+fn history_keeps_a_deleted_chapter_the_source_can_still_serve() {
     let (_dir, library, id) = readable();
     library.save_progress(id, "1", 2, false).unwrap();
     library.save_progress(id, "2", 2, false).unwrap();
 
     library.delete_chapter(id, "1").unwrap();
 
-    // An entry pointing at pages that no longer exist is a dead end.
+    // Deleting the pages says "I do not want these files", not "I never read
+    // this" — and the chapter is still reachable, because the source that
+    // indexed it will serve it again.
     let history = library.history(10).unwrap();
-    assert_eq!(history.len(), 1);
-    assert_eq!(history[0].chapter, "2");
+    assert_eq!(history.len(), 2);
+    let deleted = history.iter().find(|e| e.chapter == "1").unwrap();
+    assert!(!deleted.downloaded);
+    assert!(deleted.chapter_source_id.is_some());
+}
+
+#[test]
+fn history_drops_a_deleted_chapter_that_can_no_longer_be_opened_at_all() {
+    let (_dir, mut library) = open();
+    let series = library.add_series(ichi()).unwrap();
+
+    // A chapter scraped from a URL: no source id, so nothing to go back to
+    // once the pages are gone.
+    write_chapter(&library.chapter_dir(series.id, "1").unwrap(), 3);
+    library
+        .record_chapter(series.id, "1", 3, Some("https://reader.test/ch-1"))
+        .unwrap();
+    library.save_progress(series.id, "1", 1, false).unwrap();
+    assert_eq!(library.history(10).unwrap().len(), 1);
+
+    library.delete_chapter(series.id, "1").unwrap();
+
+    assert!(
+        library.history(10).unwrap().is_empty(),
+        "an entry that cannot be reopened from anywhere is a dead end"
+    );
 }
 
 #[test]
@@ -556,4 +582,55 @@ fn a_series_with_no_tags_reads_back_as_no_tags_rather_than_one_empty_one() {
     let id = library.add_series(ichi()).unwrap().id;
 
     assert!(library.series(id).unwrap().tags.is_empty());
+}
+
+/* ---------------------------------------------------- history, whatever the source */
+
+#[test]
+fn a_chapter_read_from_its_source_reaches_history_without_being_downloaded() {
+    let dir = TempDir::new().unwrap();
+    let mut library = Library::open(dir.path()).unwrap();
+    let series = library.record_unshelved_series(ichi()).unwrap();
+
+    library
+        .record_streamed_chapter(series.id, "7", Some("chapter-id-7"), 42)
+        .unwrap();
+    library.save_progress(series.id, "7", 3, false).unwrap();
+
+    let history = library.history(20).unwrap();
+    assert_eq!(history.len(), 1, "reading it is what puts it in history");
+
+    let entry = &history[0];
+    assert_eq!(entry.chapter, "7");
+    assert_eq!(entry.last_page, 3);
+    assert_eq!(entry.page_count, 42, "history should know how long it is");
+    assert!(!entry.downloaded, "there are no pages on disk");
+    assert_eq!(entry.chapter_source_id.as_deref(), Some("chapter-id-7"));
+    assert_eq!(entry.series_source_id.as_deref(), ichi().source_id.as_deref());
+}
+
+#[test]
+fn history_does_not_care_which_source_a_chapter_came_from() {
+    let dir = TempDir::new().unwrap();
+    let mut library = Library::open(dir.path()).unwrap();
+    let id = library.add_series(ichi()).unwrap().id;
+    library.sync_layout(id, &layout()).unwrap();
+
+    // One held on disk, one only ever streamed.
+    write_chapter(&library.chapter_dir(id, "1").unwrap(), 2);
+    library.record_chapter(id, "1", 2, None).unwrap();
+    library.save_progress(id, "1", 1, true).unwrap();
+    library
+        .record_streamed_chapter(id, "99", Some("chapter-id-99"), 20)
+        .unwrap();
+    library.save_progress(id, "99", 0, false).unwrap();
+
+    let history = library.history(20).unwrap();
+    let numbers: Vec<_> = history.iter().map(|e| e.chapter.as_str()).collect();
+    assert!(numbers.contains(&"1") && numbers.contains(&"99"), "got {numbers:?}");
+
+    let streamed = history.iter().find(|e| e.chapter == "99").unwrap();
+    let held = history.iter().find(|e| e.chapter == "1").unwrap();
+    assert!(!streamed.downloaded);
+    assert!(held.downloaded);
 }

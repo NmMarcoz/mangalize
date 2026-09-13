@@ -162,6 +162,14 @@ pub struct HistoryEntry {
     pub page_count: u32,
     pub opened_at: i64,
     pub finished: bool,
+    /// Whether the pages are on disk. False for something that was streamed,
+    /// which reopens from the source rather than from the library folder.
+    pub downloaded: bool,
+    /// What the source calls this series and this chapter, when it said. Enough
+    /// to reopen a streamed chapter without going back through search.
+    pub source: Option<String>,
+    pub series_source_id: Option<String>,
+    pub chapter_source_id: Option<String>,
 }
 
 /// What changed when a published layout was merged in.

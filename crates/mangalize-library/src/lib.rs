@@ -200,6 +200,24 @@ impl Library {
         self.series(id)
     }
 
+    /// Refresh what the library can be filtered by.
+    ///
+    /// Separate from `update_series`, which is the user editing their own copy
+    /// of the metadata. These two are the source's to say and nobody's to edit,
+    /// so a sync overwrites them rather than merging.
+    pub fn set_classification(
+        &self,
+        id: SeriesId,
+        tags: &[String],
+        content_rating: Option<&str>,
+    ) -> Result<()> {
+        self.db.execute(
+            "UPDATE series SET tags = ?1, content_rating = ?2 WHERE id = ?3",
+            params![tags.join("\n"), content_rating, id.0],
+        )?;
+        Ok(())
+    }
+
     /// Remove a series from the index, optionally deleting its files.
     ///
     /// Deleting files is opt-in and never the default: the whole point of a
@@ -510,13 +528,21 @@ impl Library {
         id: SeriesId,
         number: &str,
         source_id: Option<&str>,
+        pages: u32,
     ) -> Result<()> {
         self.db.execute(
-            "INSERT INTO chapters (series_id, number, sort_key, source_id)
-             VALUES (?1, ?2, ?3, ?4)
+            // `page_count` only when there are no files: for a downloaded
+            // chapter the count of what is on disk is the truthful one, and a
+            // stream of the same chapter must not overwrite it.
+            "INSERT INTO chapters (series_id, number, sort_key, source_id, page_count)
+             VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT(series_id, number) DO UPDATE SET
-               source_id = COALESCE(excluded.source_id, chapters.source_id)",
-            params![id.0, number, paths::sort_key(number), source_id],
+               source_id = COALESCE(excluded.source_id, chapters.source_id),
+               page_count = CASE
+                 WHEN chapters.folder IS NULL THEN excluded.page_count
+                 ELSE chapters.page_count
+               END",
+            params![id.0, number, paths::sort_key(number), source_id, pages],
         )?;
         Ok(())
     }
@@ -713,11 +739,19 @@ impl Library {
     pub fn history(&self, limit: u32) -> Result<Vec<HistoryEntry>> {
         let series_root = self.root.join("series");
         let mut stmt = self.db.prepare(
+            // The test is whether the chapter can still be opened, not whether
+            // its pages are on disk. Filtering on the files meant a streamed
+            // chapter could never appear no matter what was recorded about it;
+            // filtering on nothing would leave dead ends, which is what the
+            // files test was really guarding against. A chapter the source can
+            // serve is reachable whether or not it was ever downloaded.
             "SELECT s.id, s.slug, s.title, s.cover_path,
-                    c.number, c.last_page, c.page_count, c.opened_at, c.read_at
+                    c.number, c.last_page, c.page_count, c.opened_at, c.read_at,
+                    c.folder, s.source, s.source_id, c.source_id
                FROM chapters c
                JOIN series s ON s.id = c.series_id
-              WHERE c.opened_at IS NOT NULL AND c.folder IS NOT NULL
+              WHERE c.opened_at IS NOT NULL
+                AND (c.folder IS NOT NULL OR c.source_id IS NOT NULL)
               ORDER BY c.opened_at DESC
               LIMIT ?1",
         )?;
@@ -735,6 +769,10 @@ impl Library {
                 page_count: row.get::<_, i64>(6)? as u32,
                 opened_at: row.get(7)?,
                 finished: row.get::<_, Option<i64>>(8)?.is_some(),
+                downloaded: row.get::<_, Option<String>>(9)?.is_some(),
+                source: row.get(10)?,
+                series_source_id: row.get(11)?,
+                chapter_source_id: row.get(12)?,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)

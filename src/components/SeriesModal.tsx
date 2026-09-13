@@ -189,10 +189,12 @@ export function SeriesModal({
         direction: "right-to-left",
         previous: at > 0 ? sibling(at - 1) : null,
         next: at >= 0 ? sibling(at + 1) : null,
+        seriesSourceId: series.id,
+        coverUrl: series.thumbnail_url ?? null,
         librarySeriesId: owned?.id ?? null,
       });
     },
-    [flat, series.source, title, owned, onRead],
+    [flat, series.source, series.id, series.thumbnail_url, title, owned, onRead],
   );
 
   const getChapter = useCallback(

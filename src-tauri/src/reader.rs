@@ -147,6 +147,65 @@ pub async fn reader_online_chapter(
     .await
 }
 
+/// Note that a series is being read from its source, and give back the row to
+/// record progress against.
+///
+/// History is meant to be the same question whatever the source, and it cannot
+/// be if only downloaded chapters have somewhere to record it. So a streamed
+/// series gets a row — but an *unshelved* one: it shows up in history and can be
+/// resumed, while the library grid stays what the user chose to put there.
+/// Adding it properly later finds the same row and shelves it.
+/// What the reader knows about a chapter it is streaming.
+///
+/// A struct rather than seven arguments: they travel together, and the caller
+/// already sends them as one object.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnlineRead {
+    source: String,
+    series_source_id: String,
+    title: String,
+    cover_url: Option<String>,
+    chapter: String,
+    chapter_source_id: String,
+    /// How long the chapter is, so history can say "page 4 of 37".
+    pages: u32,
+}
+
+#[tauri::command]
+pub async fn reader_track_online(app: AppHandle, read: OnlineRead) -> Result<i64, String> {
+    blocking(move || {
+        let mut library = open(&app)?;
+        let series = library.record_unshelved_series(mangalize_library::NewSeries {
+            source: Some(read.source),
+            source_id: Some(read.series_source_id),
+            title: read.title,
+            ..Default::default()
+        })?;
+
+        library.record_streamed_chapter(
+            series.id,
+            &read.chapter,
+            Some(&read.chapter_source_id),
+            read.pages,
+        )?;
+
+        // History is a wall of covers; one without art is hard to pick out of a
+        // list. Fetched once, and a failure here is not worth refusing to read
+        // over.
+        if series.cover_path.is_none() {
+            if let Some(url) = read.cover_url.as_deref() {
+                if let Ok(bytes) = mangalize_meta::download_image(url) {
+                    let _ = library.set_cover(series.id, &bytes);
+                }
+            }
+        }
+
+        Ok(series.id.0)
+    })
+    .await
+}
+
 /// One page fetched from the source, decoded, bounded and cached.
 #[tauri::command]
 pub async fn reader_remote_page(

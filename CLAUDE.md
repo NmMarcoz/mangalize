@@ -112,6 +112,20 @@ A folder the user owns, with a SQLite index beside the files:
 - One `chapters` table holds published *and* downloaded chapters. A row with a
   null `folder` is a chapter we know exists but do not have, which is exactly the
   question the UI asks, so "missing" is a filter and not a join.
+- **`shelved` is what separates the library from history.** Reading something
+  from Explore records the series so history and resuming work the same whatever
+  the source, but `all_series` only returns what the user chose to add. Adding it
+  properly later finds the same row and shelves it; nothing ever demotes one.
+- History filters on *reachability*, not on files: a chapter is in it if it was
+  opened and can still be opened — pages on disk, or a source id to stream from.
+  Filtering on `folder IS NOT NULL` is what kept streamed chapters out entirely.
+- A built volume is recorded on the volume row, so the page can offer to share
+  the file rather than spend a minute writing an identical one. `volumes` checks
+  the file is still there before reporting it, the same way `volumes_missing_covers`
+  does — the output folder is the user's and they may tidy it.
+- `tags` is a newline-separated string, not a join table. The only questions
+  asked of it are "does this series have that tag" and "what tags exist here",
+  and a few hundred short strings answer both instantly.
 - **`sync_layout` never deletes.** Upstream indexes get re-tagged and re-numbered
   constantly; a chapter the user holds outranks whatever the index now says. It
   is counted as `orphaned` and kept. There is a test.

@@ -30,6 +30,12 @@ export interface HistoryEntry {
   page_count: number;
   opened_at: number;
   finished: boolean;
+  /** Whether the pages are on disk. False for something that was streamed. */
+  downloaded: boolean;
+  /** Enough to reopen a streamed chapter without going back through search. */
+  source: string | null;
+  series_source_id: string | null;
+  chapter_source_id: string | null;
 }
 
 /**
@@ -51,12 +57,15 @@ export type ReaderTarget =
       direction: string;
       previous: { id: string; number: string } | null;
       next: { id: string; number: string } | null;
+      /** The source's own id for the series, so a read can be recorded. */
+      seriesSourceId: string;
+      /** Art for the history entry, fetched once if the series has none. */
+      coverUrl: string | null;
       /**
-       * The library entry for this series, when there is one.
+       * The library entry for this series, when one is already known.
        *
-       * Streaming a series you already follow should still count as reading it.
-       * A series that is only being sampled has no chapter row to record
-       * against, so it is not tracked — adding it is what opts in.
+       * Only a shortcut: reading always records against a row, and the backend
+       * finds or makes one. This saves the round trip when the caller knows.
        */
       librarySeriesId: number | null;
     };
@@ -71,6 +80,23 @@ export interface OnlineChapter {
 
 export const readerOnlineChapter = (source: MetaSource, chapterId: string) =>
   invoke<OnlineChapter>("reader_online_chapter", { source, chapterId });
+
+/**
+ * Record that a series is being read from its source, and get the row to save
+ * progress against.
+ *
+ * The series is recorded but not shelved: history and resuming work the same
+ * whatever the source, while the library stays what the user chose to add.
+ */
+export const readerTrackOnline = (args: {
+  source: MetaSource;
+  seriesSourceId: string;
+  title: string;
+  coverUrl: string | null;
+  chapter: string;
+  chapterSourceId: string;
+  pages: number;
+}) => invoke<number>("reader_track_online", { read: args });
 
 export const readerChapter = (id: number, chapter: string) =>
   invoke<ReaderChapter>("reader_chapter", { id, chapter });

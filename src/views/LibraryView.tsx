@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   BookOpen,
@@ -7,10 +7,19 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  SlidersHorizontal,
 } from "lucide-react";
 
 import { AddSeriesDialog } from "@/components/AddSeriesDialog";
 import { RemoveSeriesDialog } from "@/components/RemoveSeriesDialog";
+import {
+  isFiltering,
+  LibraryFilters,
+  matches,
+  noFilter,
+  sectionOf,
+  type LibraryFilter,
+} from "@/components/LibraryFilters";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
@@ -39,6 +48,32 @@ export function LibraryView({
   const [root, setRoot] = useState<string | null>(null);
   const [series, setSeries] = useState<Series[] | null>(null);
   const [adding, setAdding] = useState(false);
+  const [filter, setFilter] = useState<LibraryFilter>(noFilter);
+  const [showFilters, setShowFilters] = useState(false);
+
+  /**
+   * The grid, narrowed and optionally cut into sections.
+   *
+   * One list of `[heading, entries]` either way: ungrouped is a single section
+   * with no heading, so the grid does not need to know which mode it is in.
+   */
+  const sections = useMemo<[string, Series[]][]>(() => {
+    const kept = (series ?? []).filter((s) => matches(s, filter));
+    if (filter.group === "none") return kept.length > 0 ? [["", kept]] : [];
+
+    const buckets = new Map<string, Series[]>();
+    for (const entry of kept) {
+      const label = sectionOf(entry, filter);
+      const bucket = buckets.get(label);
+      if (bucket) bucket.push(entry);
+      else buckets.set(label, [entry]);
+    }
+    // Biggest first: the sections that say most about a library go at the top,
+    // and a tail of one-series groups is not what anyone is looking for.
+    return [...buckets.entries()].sort(
+      (a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]),
+    );
+  }, [series, filter]);
   const [removing, setRemoving] = useState<Series | null>(null);
 
   const refresh = useCallback(async () => {
@@ -98,11 +133,24 @@ export function LibraryView({
             <RefreshCw />
           </Button>
         </Hint>
+        <Button
+          variant={showFilters || isFiltering(filter) ? "default" : "ghost"}
+          size="sm"
+          onClick={() => setShowFilters((open) => !open)}
+        >
+          <SlidersHorizontal />
+          Filters
+        </Button>
+
         <Button onClick={() => setAdding(true)}>
           <Plus />
           Add series
         </Button>
       </header>
+
+      {showFilters && series !== null && (
+        <LibraryFilters filter={filter} onChange={setFilter} series={series} />
+      )}
 
       <main className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-5">
         {series === null ? (
@@ -123,16 +171,41 @@ export function LibraryView({
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
-            {series.map((entry) => (
-              <SeriesCard
-                key={entry.id}
-                series={entry}
-                onOpen={() => onOpenSeries(entry.id)}
-                onRemove={() => setRemoving(entry)}
-              />
-            ))}
-          </div>
+          sections.length === 0 ? (
+            <div className="mx-auto mt-20 max-w-md text-center">
+              <BookOpen className="mx-auto size-8 text-muted-foreground" />
+              <h2 className="mt-3 text-sm font-medium">Nothing matches those filters</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Try clearing a tag, or widening the content rating.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-6">
+              {sections.map(([label, entries]) => (
+                <section key={label} className="flex flex-col gap-3">
+                  {label && (
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xs font-semibold">{label}</h2>
+                      <span className="text-[11px] text-muted-foreground">
+                        {entries.length}
+                      </span>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
+                  )}
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
+                    {entries.map((entry) => (
+                      <SeriesCard
+                        key={entry.id}
+                        series={entry}
+                        onOpen={() => onOpenSeries(entry.id)}
+                        onRemove={() => setRemoving(entry)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )
         )}
       </main>
 

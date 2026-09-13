@@ -464,6 +464,17 @@ fn pull_layout(
         })
         .collect();
 
+    // Tags and content rating come along for free: a library that predates
+    // them, or one whose series were re-tagged upstream, is only ever one sync
+    // away from being filterable. Failing here must not fail the sync — the
+    // layout is what was asked for.
+    if let Source::MangaDex = source {
+        if let Ok(fresh) = mangalize_meta::mangadex::manga(source_id) {
+            let tags: Vec<String> = fresh.tags.iter().map(|t| t.name.clone()).collect();
+            let _ = library.set_classification(id, &tags, fresh.content_rating.as_deref());
+        }
+    }
+
     library.sync_layout(id, &volumes)
 }
 
