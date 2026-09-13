@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
-import { BookOpen, Check, Clock, Loader2, RotateCcw } from "lucide-react";
+import { BookOpen, Check, Clock, Loader2, RotateCcw, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Hint } from "@/components/ui/tooltip";
 import { useThumbnail } from "@/hooks/useThumbnail";
-import { clearReadingProgress, readingHistory, type HistoryEntry } from "@/lib/reader";
+import {
+  clearHistory,
+  clearReadingProgress,
+  readingHistory,
+  type HistoryEntry,
+} from "@/lib/reader";
 import { cn } from "@/lib/utils";
 
 interface HistoryViewProps {
@@ -27,6 +38,7 @@ const LIMIT = 100;
 /** What you were reading, most recent first. */
 export function HistoryView({ onRead, onOpenSeries, onError }: HistoryViewProps) {
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
+  const [clearing, setClearing] = useState(false);
 
   const refresh = useCallback(() => {
     readingHistory(LIMIT)
@@ -38,6 +50,17 @@ export function HistoryView({ onRead, onOpenSeries, onError }: HistoryViewProps)
   }, [onError]);
 
   useEffect(refresh, [refresh]);
+
+  const clearAll = useCallback(async () => {
+    onError(null);
+    try {
+      await clearHistory();
+      setClearing(false);
+      refresh();
+    } catch (e) {
+      onError(String(e));
+    }
+  }, [onError, refresh]);
 
   const forget = useCallback(
     async (entry: HistoryEntry) => {
@@ -55,10 +78,22 @@ export function HistoryView({ onRead, onOpenSeries, onError }: HistoryViewProps)
   return (
     <div className="flex h-full flex-col">
       <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-4 py-2.5">
-        <h1 className="flex-1 text-sm font-semibold">History</h1>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-sm font-semibold">History</h1>
+          <p className="truncate text-[11px] text-muted-foreground">
+            What you read and in what order, whether the pages came off disk or
+            from the source.
+          </p>
+        </div>
         <Button variant="ghost" size="sm" onClick={refresh}>
           Refresh
         </Button>
+        {entries !== null && entries.length > 0 && (
+          <Button variant="ghost" size="sm" onClick={() => setClearing(true)}>
+            <Trash2 />
+            Clear
+          </Button>
+        )}
       </header>
 
       <main className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-5">
@@ -88,6 +123,29 @@ export function HistoryView({ onRead, onOpenSeries, onError }: HistoryViewProps)
           </div>
         )}
       </main>
+
+      {/* Nothing here can be undone and nothing here is a file, so the warning
+          is about what is lost rather than about danger: the reading positions. */}
+      <Dialog open={clearing} onOpenChange={setClearing}>
+        <DialogContent className="max-w-md">
+          <div className="border-b border-border px-4 py-3">
+            <DialogTitle>Clear reading history?</DialogTitle>
+            <DialogDescription>
+              Forgets every chapter you have opened and the page you stopped on.
+              No downloaded pages are deleted and nothing leaves your library.
+            </DialogDescription>
+          </div>
+          <div className="flex items-center justify-end gap-2 px-4 py-3">
+            <Button variant="ghost" onClick={() => setClearing(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void clearAll()}>
+              <Trash2 />
+              Clear history
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

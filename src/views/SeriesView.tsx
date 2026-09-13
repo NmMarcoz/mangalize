@@ -40,6 +40,7 @@ import { useThumbnail } from "@/hooks/useThumbnail";
 import {
   deliverBuilt,
   DELIVER_LABEL,
+  type MetaSource,
   formatBytes,
   type Format,
   type Volume,
@@ -70,6 +71,13 @@ import {
   type Series,
   type VolumeStatus,
 } from "@/lib/library";
+import type { ReaderTarget } from "@/lib/reader";
+import {
+  clearSeriesHistory,
+  resumePoint,
+  seriesHistory,
+  type HistoryEntry,
+} from "@/lib/reader";
 import { isMobile } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
@@ -81,7 +89,14 @@ interface SeriesViewProps {
   /** From settings; what a batch build writes. */
   defaultFormat: string;
   /** Open a downloaded chapter in the reader. */
-  onRead: (chapter: string) => void;
+  /**
+   * Open a chapter, however it can be reached.
+   *
+   * A finished target rather than a chapter number: whether it opens from disk
+   * or streams depends on what is actually there, and this view is the one
+   * holding both the chapter and the series it belongs to.
+   */
+  onRead: (target: ReaderTarget) => void;
   onError: (message: string | null) => void;
 }
 
@@ -117,6 +132,9 @@ export function SeriesView({
     { at: ContextMenuPosition; wanted: string[] } | null
   >(null);
   const [rebuild, setRebuild] = useState<VolumeStatus | null>(null);
+  const [resume, setResume] = useState<ChapterStatus | null>(null);
+  const [read, setRead] = useState<HistoryEntry[]>([]);
+  const [forgetting, setForgetting] = useState(false);
 
   // Volume numbers picked for a batch build, plus the anchor shift-click extends
   // from. Mirrors how the page grid in the editor already behaves.
@@ -135,9 +153,18 @@ export function SeriesView({
 
   const refresh = useCallback(async () => {
     try {
-      const [all, found] = await Promise.all([librarySeries(), libraryVolumes(seriesId)]);
+      const [all, found, next, log] = await Promise.all([
+        librarySeries(),
+        libraryVolumes(seriesId),
+        // Both are reading state rather than library state, and both are
+        // cheap enough to come along rather than needing their own refresh.
+        resumePoint(seriesId).catch(() => null),
+        seriesHistory(seriesId).catch(() => []),
+      ]);
       setSeries(all.find((s) => s.id === seriesId) ?? null);
       setVolumes(found);
+      setResume(next);
+      setRead(log);
       return found;
     } catch (e) {
       onError(String(e));
@@ -405,6 +432,36 @@ export function SeriesView({
     }
   }, [runBuild, onError]);
 
+  /**
+   * How to open a chapter of this series.
+   *
+   * Downloaded pages come off disk. Anything else the source indexed is
+   * streamed, which needs the series' own id — without it the reader would
+   * record a nameless series it could never find again.
+   */
+  const openChapter = useCallback(
+    (chapter: ChapterStatus) => {
+      if (chapter.folder || !chapter.source_id || !series?.source_id) {
+        onRead({ kind: "library", seriesId, chapter: chapter.number });
+        return;
+      }
+      onRead({
+        kind: "online",
+        source: (series.source ?? "mangadex") as MetaSource,
+        chapterId: chapter.source_id,
+        seriesTitle: series.title,
+        chapterNumber: chapter.number,
+        direction: series.direction === "left-to-right" ? "left-to-right" : "right-to-left",
+        previous: null,
+        next: null,
+        seriesSourceId: series.source_id,
+        coverUrl: null,
+        librarySeriesId: seriesId,
+      });
+    },
+    [series, seriesId, onRead],
+  );
+
   const pickedBuildable = order.filter((n) => picked.has(n) && buildable.has(n));
 
   return (
@@ -470,7 +527,15 @@ export function SeriesView({
           {/* The same things the discover dialog shows, above the shelf rather
               than in a dialog: this page is where a series in the library is
               looked at, and it had nothing to say about the series itself. */}
-          {series && <SeriesDetails series={series} />}
+          {series && (
+            <SeriesDetails
+              series={series}
+              resume={resume}
+              readCount={read.length}
+              onResume={() => resume && openChapter(resume)}
+              onForget={() => setForgetting(true)}
+            />
+          )}
 
           {volumes === null ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -522,7 +587,7 @@ export function SeriesView({
               })
             }
             onGet={setFetching}
-            onRead={onRead}
+            onRead={openChapter}
             onFetchDirect={(chapter) => void fetchDirect(chapter)}
             fetchingDirect={fetchingDirect}
             onImport={(chapter) => void importFolder(chapter)}
@@ -625,6 +690,35 @@ export function SeriesView({
           onFinished={() => void refresh()}
         />
       )}
+
+      <Dialog open={forgetting} onOpenChange={setForgetting}>
+        <DialogContent className="max-w-md">
+          <div className="border-b border-border px-4 py-3">
+            <DialogTitle>Forget what you read of this series?</DialogTitle>
+            <DialogDescription>
+              Clears the resume point and every read mark for{" "}
+              {series?.title ?? "this series"}. No downloaded pages are deleted.
+            </DialogDescription>
+          </div>
+          <div className="flex items-center justify-end gap-2 px-4 py-3">
+            <Button variant="ghost" onClick={() => setForgetting(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setForgetting(false);
+                void clearSeriesHistory(seriesId)
+                  .then(() => refresh())
+                  .catch((e) => onError(String(e)));
+              }}
+            >
+              <Trash2 />
+              Forget
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Building again costs a minute or more of re-encoding for a file that
           already exists, so the choice is offered rather than assumed. */}
@@ -925,7 +1019,7 @@ function VolumePanel({
   onClose: () => void;
   onBuild: () => void;
   onGet: (chapter: string) => void;
-  onRead: (chapter: string) => void;
+  onRead: (chapter: ChapterStatus) => void;
   onFetchDirect: (chapter: string) => void;
   /** Chapter numbers currently being pulled from the source. */
   fetchingDirect: ReadonlySet<string>;
@@ -975,7 +1069,7 @@ function VolumePanel({
               chapter={chapter}
               busy={fetchingDirect.has(chapter.number)}
               onGet={() => onGet(chapter.number)}
-              onRead={() => onRead(chapter.number)}
+              onRead={() => onRead(chapter)}
               onFetchDirect={() => onFetchDirect(chapter.number)}
               onImport={() => onImport(chapter.number)}
               onRemove={() => onRemove(chapter.number)}
@@ -1194,7 +1288,20 @@ function sourceLabel(source: string | null | undefined): string {
  * volumes are what the page is for — the detail should be reachable without
  * pushing them below the fold.
  */
-function SeriesDetails({ series }: { series: Series }) {
+function SeriesDetails({
+  series,
+  resume,
+  readCount,
+  onResume,
+  onForget,
+}: {
+  series: Series;
+  /** Where reading left off, when it did. */
+  resume: ChapterStatus | null;
+  readCount: number;
+  onResume: () => void;
+  onForget: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const { ref, url } = useThumbnail(series.cover_path ?? "", 320);
 
@@ -1259,6 +1366,35 @@ function SeriesDetails({ series }: { series: Series }) {
                 {tag}
               </Badge>
             ))}
+          </div>
+        )}
+
+        {/* What this series is to *you*: where to pick it up, and how much of
+            it you have been through. */}
+        {(resume || readCount > 0) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {resume && (
+              <Button size="sm" onClick={onResume}>
+                <BookOpen className="size-3.5" />
+                {resume.opened_at && resume.last_page > 0
+                  ? `Continue chapter ${resume.number}, page ${resume.last_page + 1}`
+                  : `Read chapter ${resume.number}`}
+              </Button>
+            )}
+            {readCount > 0 && (
+              <>
+                <span className="text-[11px] text-muted-foreground">
+                  {readCount} {readCount === 1 ? "chapter" : "chapters"} in your
+                  history
+                </span>
+                <button
+                  onClick={onForget}
+                  className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                >
+                  Forget
+                </button>
+              </>
+            )}
           </div>
         )}
 

@@ -157,15 +157,19 @@ export function ReaderView({ target, onNavigate, onExit }: ReaderViewProps) {
       // the same question however the pages were reached. Failing to record is
       // not worth refusing to read over — it costs the history entry, nothing
       // more.
-      const seriesId = await readerTrackOnline({
-        source: target.source,
-        seriesSourceId: target.seriesSourceId,
-        title: target.seriesTitle,
-        coverUrl: target.coverUrl,
-        chapter: target.chapterNumber,
-        chapterSourceId: target.chapterId,
-        pages: found.pages.length,
-      }).catch(() => target.librarySeriesId);
+      // Without the source's own id there is nothing to record against that
+      // could ever be found again, so the existing library row is used as-is.
+      const seriesId = !target.seriesSourceId
+        ? target.librarySeriesId
+        : await readerTrackOnline({
+            source: target.source,
+            seriesSourceId: target.seriesSourceId,
+            title: target.seriesTitle,
+            coverUrl: target.coverUrl,
+            chapter: target.chapterNumber,
+            chapterSourceId: target.chapterId,
+            pages: found.pages.length,
+          }).catch(() => target.librarySeriesId);
       if (cancelled) return;
 
       setOpen({

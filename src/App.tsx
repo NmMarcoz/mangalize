@@ -285,12 +285,8 @@ export default function App() {
       return (
         <SeriesView
           seriesId={view.id}
-          onRead={(chapter) =>
-            setView({
-              kind: "reader",
-              target: { kind: "library", seriesId: view.id, chapter },
-              back: { kind: "series", id: view.id },
-            })
+          onRead={(target) =>
+            setView({ kind: "reader", target, back: { kind: "series", id: view.id } })
           }
           onBack={() => setView({ kind: "library" })}
           onEditVolume={(built, source) => {

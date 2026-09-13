@@ -306,6 +306,28 @@ pub async fn reading_history(app: AppHandle, limit: u32) -> Result<Vec<HistoryEn
     blocking(move || open(&app)?.history(limit.clamp(1, 200))).await
 }
 
+/// What was read of one series, newest first.
+#[tauri::command]
+pub async fn series_history(
+    app: AppHandle,
+    id: i64,
+    limit: u32,
+) -> Result<Vec<HistoryEntry>, String> {
+    blocking(move || open(&app)?.series_history(SeriesId(id), limit)).await
+}
+
+/// Forget everything that was read. No file is touched.
+#[tauri::command]
+pub async fn clear_history(app: AppHandle) -> Result<(), String> {
+    blocking(move || open(&app)?.clear_history()).await
+}
+
+/// Forget everything that was read of one series.
+#[tauri::command]
+pub async fn clear_series_history(app: AppHandle, id: i64) -> Result<(), String> {
+    blocking(move || open(&app)?.clear_series_history(SeriesId(id))).await
+}
+
 /// The chapter to offer as "continue reading" for a series.
 #[tauri::command]
 pub async fn resume_point(app: AppHandle, id: i64) -> Result<Option<ChapterStatus>, String> {

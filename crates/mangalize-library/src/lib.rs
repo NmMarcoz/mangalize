@@ -732,13 +732,49 @@ impl Library {
         Ok(())
     }
 
+    /// Forget everything that was read.
+    ///
+    /// Only the reading marks: no file is touched and no series leaves the
+    /// shelf. A series that was recorded *because* it was streamed stays behind
+    /// as an unshelved row with nothing to show, which costs a row and keeps
+    /// "clear history" from quietly being "delete things".
+    pub fn clear_history(&self) -> Result<()> {
+        self.db.execute(
+            "UPDATE chapters SET last_page = 0, read_at = NULL, opened_at = NULL
+              WHERE opened_at IS NOT NULL OR read_at IS NOT NULL OR last_page != 0",
+            [],
+        )?;
+        Ok(())
+    }
+
+    /// Forget everything that was read of one series.
+    pub fn clear_series_history(&self, id: SeriesId) -> Result<()> {
+        self.db.execute(
+            "UPDATE chapters SET last_page = 0, read_at = NULL, opened_at = NULL
+              WHERE series_id = ?1",
+            params![id.0],
+        )?;
+        Ok(())
+    }
+
     /// Recently opened chapters, newest first.
     ///
-    /// Only chapters still on disk: an entry pointing at pages that have been
-    /// deleted is a dead end rather than history.
+    /// Every chapter that was opened and can still be opened, whether its pages
+    /// are on disk or the source will serve them again. What was read does not
+    /// depend on how it was reached.
     pub fn history(&self, limit: u32) -> Result<Vec<HistoryEntry>> {
+        self.history_where(None, limit)
+    }
+
+    /// The same, for one series: what was read of it and in what order.
+    pub fn series_history(&self, id: SeriesId, limit: u32) -> Result<Vec<HistoryEntry>> {
+        self.history_where(Some(id), limit)
+    }
+
+    fn history_where(&self, only: Option<SeriesId>, limit: u32) -> Result<Vec<HistoryEntry>> {
         let series_root = self.root.join("series");
-        let mut stmt = self.db.prepare(
+        let scope = if only.is_some() { "AND c.series_id = ?2" } else { "" };
+        let mut stmt = self.db.prepare(&format!(
             // The test is whether the chapter can still be opened, not whether
             // its pages are on disk. Filtering on the files meant a streamed
             // chapter could never appear no matter what was recorded about it;
@@ -752,11 +788,16 @@ impl Library {
                JOIN series s ON s.id = c.series_id
               WHERE c.opened_at IS NOT NULL
                 AND (c.folder IS NOT NULL OR c.source_id IS NOT NULL)
-              ORDER BY c.opened_at DESC
-              LIMIT ?1",
-        )?;
+                {scope}
+              -- opened_at is unix seconds, so chapters opened within the same
+              -- one tie. The rowid break does not mean newest — nothing stored
+              -- knows that at this granularity — but it is stable, which beats
+              -- an order that changes between identical queries.
+              ORDER BY c.opened_at DESC, c.rowid DESC
+              LIMIT ?1"
+        ))?;
 
-        let rows = stmt.query_map(params![limit], |row| {
+        let map = |row: &rusqlite::Row| -> rusqlite::Result<HistoryEntry> {
             let slug: String = row.get(1)?;
             let folder = series_root.join(&slug);
             let cover: Option<String> = row.get(3)?;
@@ -774,8 +815,13 @@ impl Library {
                 series_source_id: row.get(11)?,
                 chapter_source_id: row.get(12)?,
             })
-        })?;
-        Ok(rows.collect::<rusqlite::Result<_>>()?)
+        };
+
+        let rows: rusqlite::Result<Vec<HistoryEntry>> = match only {
+            Some(id) => stmt.query_map(params![limit, id.0], map)?.collect(),
+            None => stmt.query_map(params![limit], map)?.collect(),
+        };
+        Ok(rows?)
     }
 
     /// The chapter to offer as "continue reading" for a series.
@@ -787,8 +833,11 @@ impl Library {
         let unfinished: Option<String> = self
             .db
             .query_row(
+                // Reachable, not necessarily downloaded — the same test
+                // `history` applies. Resuming a series read from its source is
+                // the case "continue reading" exists for just as much.
                 "SELECT number FROM chapters
-                  WHERE series_id = ?1 AND folder IS NOT NULL
+                  WHERE series_id = ?1 AND (folder IS NOT NULL OR source_id IS NOT NULL)
                     AND opened_at IS NOT NULL AND read_at IS NULL
                   ORDER BY opened_at DESC LIMIT 1",
                 params![id.0],
@@ -802,7 +851,9 @@ impl Library {
                 .db
                 .query_row(
                     "SELECT number FROM chapters
-                      WHERE series_id = ?1 AND folder IS NOT NULL AND read_at IS NULL
+                      WHERE series_id = ?1
+                        AND (folder IS NOT NULL OR source_id IS NOT NULL)
+                        AND read_at IS NULL
                       ORDER BY sort_key IS NULL, sort_key, number LIMIT 1",
                     params![id.0],
                     |row| row.get(0),

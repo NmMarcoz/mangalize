@@ -398,10 +398,29 @@ fn with_nothing_unfinished_it_offers_the_next_unread_chapter() {
 #[test]
 fn a_fully_read_series_has_nothing_to_resume() {
     let (_dir, library, id) = readable();
-    for chapter in ["1", "2", "3"] {
+    // Every chapter the library knows of, not just the downloaded ones.
+    for chapter in ["1", "2", "3", "4", "5", "6"] {
         library.save_progress(id, chapter, 4, true).unwrap();
     }
     assert!(library.resume_point(id).unwrap().is_none());
+}
+
+#[test]
+fn finishing_what_is_downloaded_offers_the_next_chapter_from_the_source() {
+    let (_dir, library, id) = readable();
+    // Chapters 1-3 are on disk; 4-6 are known to exist and are hosted.
+    for chapter in ["1", "2", "3"] {
+        library.save_progress(id, chapter, 4, true).unwrap();
+    }
+
+    let next = library.resume_point(id).unwrap().expect("there is more to read");
+
+    assert_eq!(next.number, "4");
+    assert!(!next.downloaded(), "and it has not been downloaded yet");
+    assert!(
+        next.source_id.is_some(),
+        "which is only offered because the source can serve it"
+    );
 }
 
 #[test]
@@ -633,4 +652,104 @@ fn history_does_not_care_which_source_a_chapter_came_from() {
     let held = history.iter().find(|e| e.chapter == "1").unwrap();
     assert!(!streamed.downloaded);
     assert!(held.downloaded);
+}
+
+/* ------------------------------------------------------------ erasing history */
+
+#[test]
+fn clearing_history_forgets_what_was_read_and_keeps_the_files() {
+    let (_dir, library, id) = readable();
+    for chapter in ["1", "2"] {
+        library.save_progress(id, chapter, 3, true).unwrap();
+    }
+    assert_eq!(library.history(20).unwrap().len(), 2);
+
+    library.clear_history().unwrap();
+
+    assert!(library.history(20).unwrap().is_empty());
+    assert!(
+        library.chapter(id, "1").unwrap().downloaded(),
+        "clearing history is not deleting anything"
+    );
+    let chapter = library.chapter(id, "1").unwrap();
+    assert_eq!(chapter.last_page, 0);
+    assert!(chapter.read_at.is_none() && chapter.opened_at.is_none());
+}
+
+#[test]
+fn clearing_one_series_leaves_the_others_alone() {
+    let (dir, mut library) = open();
+    let ichi = library.add_series(ichi()).unwrap().id;
+    let other = library
+        .add_series(NewSeries {
+            source_id: Some("another".into()),
+            title: "Something Else".into(),
+            ..NewSeries::default()
+        })
+        .unwrap()
+        .id;
+    for id in [ichi, other] {
+        write_chapter(&library.chapter_dir(id, "1").unwrap(), 2);
+        library.record_chapter(id, "1", 2, None).unwrap();
+        library.save_progress(id, "1", 1, true).unwrap();
+    }
+    drop(dir);
+
+    library.clear_series_history(ichi).unwrap();
+
+    let left: Vec<_> = library
+        .history(20)
+        .unwrap()
+        .into_iter()
+        .map(|e| e.series_id)
+        .collect();
+    assert_eq!(left, [other], "only the series asked for is forgotten");
+}
+
+#[test]
+fn a_series_history_holds_only_that_series() {
+    let (dir, mut library) = open();
+    let ichi = library.add_series(ichi()).unwrap().id;
+    let other = library
+        .add_series(NewSeries {
+            source_id: Some("another".into()),
+            title: "Something Else".into(),
+            ..NewSeries::default()
+        })
+        .unwrap()
+        .id;
+    for id in [ichi, other] {
+        for chapter in ["1", "2"] {
+            write_chapter(&library.chapter_dir(id, chapter).unwrap(), 2);
+            library.record_chapter(id, chapter, 2, None).unwrap();
+            library.save_progress(id, chapter, 1, false).unwrap();
+        }
+    }
+    drop(dir);
+
+    let history = library.series_history(ichi, 20).unwrap();
+
+    assert_eq!(history.len(), 2);
+    assert!(history.iter().all(|e| e.series_id == ichi));
+    assert_eq!(library.history(20).unwrap().len(), 4, "the whole log is longer");
+}
+
+/// `opened_at` is unix seconds, so this is the coarsest ordering the store can
+/// promise. Two chapters opened a second apart order; two opened within the
+/// same second only order *stably*, which is what the rowid break is for.
+#[test]
+fn history_puts_the_more_recently_opened_chapter_first() {
+    let (_dir, library, id) = readable();
+    library.save_progress(id, "1", 4, true).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    library.save_progress(id, "3", 2, false).unwrap();
+
+    let order: Vec<_> = library
+        .series_history(id, 20)
+        .unwrap()
+        .into_iter()
+        .map(|e| e.chapter)
+        .collect();
+
+    assert_eq!(order, ["3", "1"]);
 }

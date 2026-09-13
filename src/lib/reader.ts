@@ -114,6 +114,17 @@ export const clearReadingProgress = (id: number, chapter: string) =>
 export const readingHistory = (limit: number) =>
   invoke<HistoryEntry[]>("reading_history", { limit });
 
+/** What was read of one series, newest first. */
+export const seriesHistory = (id: number, limit = 50) =>
+  invoke<HistoryEntry[]>("series_history", { id, limit });
+
+/** Forget everything that was read. No file is touched. */
+export const clearHistory = () => invoke<void>("clear_history");
+
+/** Forget everything that was read of one series. */
+export const clearSeriesHistory = (id: number) =>
+  invoke<void>("clear_series_history", { id });
+
 export const resumePoint = (id: number) =>
   invoke<ChapterStatus | null>("resume_point", { id });
 
