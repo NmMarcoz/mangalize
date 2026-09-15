@@ -60,6 +60,8 @@ pub fn run() {
             reader::series_history,
             reader::clear_history,
             reader::clear_series_history,
+            library::library_languages,
+            library::library_set_language,
             library::library_record_built,
             library::library_clear_built,
             settings::get_settings,

@@ -142,6 +142,62 @@ pub async fn library_sync_series(app: AppHandle, id: i64) -> Result<SyncReport, 
     .await
 }
 
+/// Which translations the source has for a series already in the library.
+///
+/// Asked of the source rather than remembered: a series picks up translations
+/// over time, and the list is only ever looked at when someone is about to
+/// choose from it.
+#[tauri::command]
+pub async fn library_languages(app: AppHandle, id: i64) -> Result<Vec<String>, String> {
+    blocking(move || {
+        let library = open(&app)?;
+        let series = library.series(SeriesId(id))?;
+        let (Some(source), Some(source_id)) = (&series.source, &series.source_id) else {
+            return Ok(Vec::new());
+        };
+        match parse_source(source)? {
+            Source::MangaDex => Ok(mangalize_meta::mangadex::manga(source_id)?.available_languages),
+            // Kitsu indexes no chapters, so it offers no translations either.
+            Source::Kitsu => Ok(Vec::new()),
+        }
+    })
+    .await
+}
+
+/// Read the series in a different translation.
+///
+/// The layout is re-pulled straight away, because the chapter numbering is what
+/// changes: translations disagree about where volumes end and which chapters
+/// exist. Downloaded chapters are kept — `sync_layout` never deletes — so this
+/// is a change of what the library is *tracking*, not of what it holds.
+#[tauri::command]
+pub async fn library_set_language(
+    app: AppHandle,
+    id: i64,
+    language: String,
+) -> Result<SyncReport, String> {
+    blocking(move || {
+        let mut library = open(&app)?;
+        let series = library.series(SeriesId(id))?;
+        let (source, source_id) = match (&series.source, &series.source_id) {
+            (Some(source), Some(source_id)) => (parse_source(source)?, source_id.clone()),
+            _ => anyhow::bail!("{} has no source to read from", series.title),
+        };
+
+        library.update_series(
+            series.id,
+            &series.title,
+            &series.author,
+            &series.description,
+            &language,
+            &series.direction,
+        )?;
+
+        pull_layout(&mut library, series.id, source, &source_id, Some(&language))
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn library_remove_series(
     app: AppHandle,

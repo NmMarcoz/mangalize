@@ -296,6 +296,14 @@ export const summariseRuns = (numbers: string[]): string => {
   return runs.join(", ");
 };
 
+/** Which translations the source has for a series in the library. */
+export const libraryLanguages = (id: number) =>
+  invoke<string[]>("library_languages", { id });
+
+/** Read a library series in a different translation, re-pulling its layout. */
+export const librarySetLanguage = (id: number, language: string) =>
+  invoke<SyncReport>("library_set_language", { id, language });
+
 /** Remember where a volume the editor wrote ended up. */
 export const recordBuilt = (
   id: number,

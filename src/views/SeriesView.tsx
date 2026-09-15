@@ -35,9 +35,17 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Hint } from "@/components/ui/tooltip";
 import { useThumbnail } from "@/hooks/useThumbnail";
 import {
+  languageName,
   deliverBuilt,
   DELIVER_LABEL,
   type MetaSource,
@@ -63,6 +71,8 @@ import {
   libraryDownloadCovers,
   librarySeries,
   librarySyncSeries,
+  libraryLanguages,
+  librarySetLanguage,
   libraryVolumes,
   missingChapters,
   summariseRuns,
@@ -135,6 +145,10 @@ export function SeriesView({
   const [resume, setResume] = useState<ChapterStatus | null>(null);
   const [read, setRead] = useState<HistoryEntry[]>([]);
   const [forgetting, setForgetting] = useState(false);
+  // Fetched when the picker is first opened rather than with the page: it is a
+  // network call for something most visits never look at.
+  const [languages, setLanguages] = useState<string[] | null>(null);
+  const [switching, setSwitching] = useState(false);
 
   // Volume numbers picked for a batch build, plus the anchor shift-click extends
   // from. Mirrors how the page grid in the editor already behaves.
@@ -534,6 +548,22 @@ export function SeriesView({
           {series && (
             <SeriesDetails
               series={series}
+              languages={languages}
+              switching={switching}
+              onLoadLanguages={() => {
+                if (languages !== null) return;
+                void libraryLanguages(seriesId)
+                  .then(setLanguages)
+                  .catch(() => setLanguages([]));
+              }}
+              onLanguage={(code) => {
+                setSwitching(true);
+                onError(null);
+                void librarySetLanguage(seriesId, code)
+                  .then(() => refresh())
+                  .catch((e) => onError(String(e)))
+                  .finally(() => setSwitching(false));
+              }}
               resume={resume}
               readCount={read.length}
               onResume={() => resume && openChapter(resume)}
@@ -1297,12 +1327,21 @@ function sourceLabel(source: string | null | undefined): string {
  */
 function SeriesDetails({
   series,
+  languages,
+  switching,
+  onLoadLanguages,
+  onLanguage,
   resume,
   readCount,
   onResume,
   onForget,
 }: {
   series: Series;
+  /** Translations the source has, once asked for. `null` means not yet. */
+  languages: string[] | null;
+  switching: boolean;
+  onLoadLanguages: () => void;
+  onLanguage: (code: string) => void;
   /** Where reading left off, when it did. */
   resume: ChapterStatus | null;
   readCount: number;
@@ -1375,6 +1414,37 @@ function SeriesDetails({
             ))}
           </div>
         )}
+
+        {/* The translation decides which chapters exist and how they are
+            numbered, so it belongs next to the chapter list rather than buried
+            in settings. */}
+        <div className="flex items-center gap-2">
+          <Select
+            value={series.language}
+            onValueChange={onLanguage}
+            disabled={switching}
+            onOpenChange={(isOpen: boolean) => isOpen && onLoadLanguages()}
+          >
+            <SelectTrigger className="h-7 w-44 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(languages && languages.length > 0
+                ? languages
+                : [series.language]
+              ).map((code) => (
+                <SelectItem key={code} value={code}>
+                  {languageName(code)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {switching && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+          <span className="text-[11px] text-muted-foreground">
+            Translation · changing it re-pulls the chapter list, and keeps what
+            you have downloaded.
+          </span>
+        </div>
 
         {/* What this series is to *you*: where to pick it up, and how much of
             it you have been through. */}
