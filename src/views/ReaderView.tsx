@@ -34,11 +34,21 @@ interface ReaderViewProps {
   target: ReaderTarget;
   /** Move to another chapter without leaving the reader. */
   onNavigate: (target: ReaderTarget) => void;
+  /** Leave for the series this chapter belongs to. */
+  onOpenSeries: (seriesId: number) => void;
   onExit: () => void;
 }
 
-/** How many pages either side of the current one to fetch ahead of time. */
-const PRELOAD = 2;
+/**
+ * How many pages to fetch ahead of the one being read, and how many behind.
+ *
+ * Asymmetric because reading is: you move forward far more than back, and a
+ * miss forward is the one that shows as a blank page. Two either side was not
+ * enough when streaming — every turn was a round trip — and fetching the whole
+ * chapter would hammer the source for pages nobody may reach.
+ */
+const PRELOAD_AHEAD = 6;
+const PRELOAD_BEHIND = 2;
 
 /** How long to sit still before writing the reading position. */
 const SAVE_DELAY = 600;
@@ -79,7 +89,12 @@ interface OpenChapter {
  * and a chapter read that way can be downloaded afterwards if it is worth
  * keeping.
  */
-export function ReaderView({ target, onNavigate, onExit }: ReaderViewProps) {
+export function ReaderView({
+  target,
+  onNavigate,
+  onOpenSeries,
+  onExit,
+}: ReaderViewProps) {
   const [open, setOpen] = useState<OpenChapter | null>(null);
   /**
    * Why the chapter could not be shown.
@@ -209,7 +224,14 @@ export function ReaderView({ target, onNavigate, onExit }: ReaderViewProps) {
   // matters far more when streaming, where a miss is a round trip.
   useEffect(() => {
     if (!open) return;
-    for (let offset = -PRELOAD; offset <= PRELOAD; offset += 1) {
+    // Nearest first: the page after this one matters more than the sixth, and
+    // the shared gate in `imagecache` runs these a few at a time.
+    const offsets = [0];
+    for (let i = 1; i <= Math.max(PRELOAD_AHEAD, PRELOAD_BEHIND); i += 1) {
+      if (i <= PRELOAD_AHEAD) offsets.push(i);
+      if (i <= PRELOAD_BEHIND) offsets.push(-i);
+    }
+    for (const offset of offsets) {
       const source = open.pages[page + offset];
       if (source) void loadPage(source, open.online).catch(() => {});
     }
@@ -420,13 +442,19 @@ export function ReaderView({ target, onNavigate, onExit }: ReaderViewProps) {
           <Button variant="ghost" size="icon" onClick={onExit} className="text-white">
             <ArrowLeft />
           </Button>
-          <div className="min-w-0 flex-1">
+          {/* The title is the way to the series: from halfway through a
+              chapter, "what else is there" is a question worth one tap. */}
+          <button
+            className="min-w-0 flex-1 text-left"
+            onClick={() => open.progress && onOpenSeries(open.progress.seriesId)}
+            disabled={!open.progress}
+          >
             <p className="truncate text-sm font-medium">{open.seriesTitle}</p>
             <p className="truncate text-[11px] text-white/60">
               Chapter {open.number}
               {open.title ? ` · ${open.title}` : ""}
             </p>
-          </div>
+          </button>
           {open.online && (
             <Badge variant="outline" className="shrink-0 border-white/30 text-white/70">
               <Cloud className="size-2.5" />

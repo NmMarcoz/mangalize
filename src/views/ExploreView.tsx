@@ -15,10 +15,21 @@ import {
   type BrowseQuery,
   type Tag,
 } from "@/lib/browse";
+import { useRestoredScroll } from "@/hooks/useRestoredScroll";
 import { librarySeries, type Series } from "@/lib/library";
 import type { ReaderTarget } from "@/lib/reader";
 
+/** What a visit to Explore is, so it can be picked up where it was left. */
+export interface BrowseState {
+  query: BrowseQuery;
+  text: string;
+}
+
+export const emptyBrowse = (): BrowseState => ({ query: defaultQuery(), text: "" });
+
 interface ExploreViewProps {
+  browse: BrowseState;
+  onBrowseChange: (update: (current: BrowseState) => BrowseState) => void;
   /** Jump to a series' page in the library. */
   onOpenSeries: (id: number) => void;
   /** Read a chapter straight from the source, without downloading it. */
@@ -38,9 +49,29 @@ interface ExploreViewProps {
  * rating, tags, a readable description, every translation it has — does not fit
  * in a panel narrow enough to leave this grid usable.
  */
-export function ExploreView({ onOpenSeries, onRead, onError }: ExploreViewProps) {
-  const [query, setQuery] = useState<BrowseQuery>(defaultQuery);
-  const [text, setText] = useState("");
+export function ExploreView({
+  browse,
+  onBrowseChange,
+  onOpenSeries,
+  onRead,
+  onError,
+}: ExploreViewProps) {
+  // Held by the app rather than here: leaving for a series unmounts this view,
+  // and coming back to a cleared filter bar and the top of the catalogue is not
+  // "back", it is starting again.
+  const { query, text } = browse;
+  const setQuery = useCallback(
+    (next: BrowseQuery | ((current: BrowseQuery) => BrowseQuery)) =>
+      onBrowseChange((current) => ({
+        ...current,
+        query: typeof next === "function" ? next(current.query) : next,
+      })),
+    [onBrowseChange],
+  );
+  const setText = useCallback(
+    (next: string) => onBrowseChange((current) => ({ ...current, text: next })),
+    [onBrowseChange],
+  );
   const [tags, setTags] = useState<Tag[]>([]);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -52,6 +83,10 @@ export function ExploreView({ onOpenSeries, onRead, onError }: ExploreViewProps)
 
   /** Guards against a slow earlier page landing after a newer one. */
   const request = useRef(0);
+
+  // Restored once the first page of results is on screen; before that there is
+  // nothing tall enough to scroll.
+  const scroll = useRestoredScroll<HTMLElement>("explore", results.length > 0);
 
   const refreshOwned = useCallback(() => {
     librarySeries()
@@ -176,7 +211,11 @@ export function ExploreView({ onOpenSeries, onRead, onError }: ExploreViewProps)
         />
       )}
 
-      <main className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-5">
+      <main
+        ref={scroll.ref}
+        onScroll={scroll.onScroll}
+        className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-5"
+      >
         {results.length === 0 && loading ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="size-3.5 animate-spin" /> Loading…

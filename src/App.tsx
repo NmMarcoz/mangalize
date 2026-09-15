@@ -12,9 +12,9 @@ import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { EditorView } from "@/views/EditorView";
-import { LibraryView } from "@/views/LibraryView";
+import { LibraryView, emptyShelf, type ShelfState } from "@/views/LibraryView";
 import { SeriesView } from "@/views/SeriesView";
-import { ExploreView } from "@/views/ExploreView";
+import { ExploreView, emptyBrowse, type BrowseState } from "@/views/ExploreView";
 import { HistoryView } from "@/views/HistoryView";
 import { ReaderView } from "@/views/ReaderView";
 import type { ReaderTarget } from "@/lib/reader";
@@ -83,6 +83,9 @@ export default function App() {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  // Browsing survives leaving for a series and coming back; see `ExploreView`.
+  const [browse, setBrowse] = useState<BrowseState>(emptyBrowse);
+  const [shelf, setShelf] = useState<ShelfState>(emptyShelf);
 
   const updater = useUpdater();
 
@@ -206,6 +209,7 @@ export default function App() {
         <ReaderView
           target={view.target}
           onNavigate={(target) => setView({ kind: "reader", target, back })}
+          onOpenSeries={(id) => setView({ kind: "series", id })}
           onExit={() => setView(back)}
         />
       );
@@ -246,6 +250,8 @@ export default function App() {
     if (view.kind === "explore") {
       return (
         <ExploreView
+          browse={browse}
+          onBrowseChange={setBrowse}
           onOpenSeries={(id) => setView({ kind: "series", id })}
           onRead={(target) =>
             setView({ kind: "reader", target, back: { kind: "explore" } })
@@ -273,6 +279,8 @@ export default function App() {
     if (view.kind === "library") {
       return (
         <LibraryView
+          shelf={shelf}
+          onShelfChange={setShelf}
           onOpenSeries={(id) => setView({ kind: "series", id })}
           onOpenFolder={() => void pickFolder()}
           onError={setError}

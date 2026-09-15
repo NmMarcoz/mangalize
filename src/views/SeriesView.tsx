@@ -884,7 +884,10 @@ function VolumeCard({
           }}
           disabled={building}
           title={`Build ${volumeLabel(volume)}`}
-          className="absolute right-1.5 top-1.5 rounded-md bg-background/85 p-1.5 text-muted-foreground opacity-0 backdrop-blur-sm transition-opacity hover:text-primary focus-visible:opacity-100 group-hover:opacity-100"
+          className={cn(
+            "absolute right-1.5 top-1.5 rounded-md bg-background/85 p-1.5 text-muted-foreground backdrop-blur-sm transition-opacity hover:text-primary focus-visible:opacity-100",
+            !isMobile && "opacity-0 group-hover:opacity-100",
+          )}
         >
           {building ? (
             <Loader2 className="size-3.5 animate-spin" />

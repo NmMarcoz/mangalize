@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
 import { useThumbnail } from "@/hooks/useThumbnail";
 import { excludeLabel, fileName, type Page } from "@/lib/api";
+import { isMobile } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
 interface PageCardProps {
@@ -96,9 +97,14 @@ function PageCardImpl({
           )}
         </div>
 
-        {/* Hover actions. Kept out of the flow so cards do not reflow. */}
+        {/* Kept out of the flow so cards do not reflow. Revealed on hover on a
+            desktop; always there on a touch screen, which has no hover and so
+            had no way to include or exclude a page at all. */}
         <div
-          className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-gradient-to-t from-black/85 to-transparent p-1.5 opacity-0 transition-opacity group-hover:opacity-100"
+          className={cn(
+            "absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-gradient-to-t from-black/85 to-transparent p-1.5 transition-opacity",
+            !isMobile && "opacity-0 group-hover:opacity-100",
+          )}
           onClick={(e) => e.stopPropagation()}
         >
           <Hint label={excluded ? "Include (X)" : "Exclude (X)"}>

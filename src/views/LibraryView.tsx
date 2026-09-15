@@ -23,6 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
+import { useRestoredScroll } from "@/hooks/useRestoredScroll";
 import { useThumbnail } from "@/hooks/useThumbnail";
 import {
   libraryRoot,
@@ -30,9 +31,20 @@ import {
   setLibraryRoot,
   type Series,
 } from "@/lib/library";
-import { canPickFolders } from "@/lib/platform";
+import { canPickFolders, isMobile } from "@/lib/platform";
+import { cn } from "@/lib/utils";
+
+/** What a visit to the library is, so it survives opening a series. */
+export interface ShelfState {
+  filter: LibraryFilter;
+  showFilters: boolean;
+}
+
+export const emptyShelf = (): ShelfState => ({ filter: noFilter(), showFilters: false });
 
 interface LibraryViewProps {
+  shelf: ShelfState;
+  onShelfChange: (update: (current: ShelfState) => ShelfState) => void;
   onOpenSeries: (id: number) => void;
   /** Escape hatch to the original scan-a-folder path. */
   onOpenFolder: () => void;
@@ -41,6 +53,8 @@ interface LibraryViewProps {
 
 /** The shelf: every series in the library, and the way to add another. */
 export function LibraryView({
+  shelf,
+  onShelfChange,
   onOpenSeries,
   onOpenFolder,
   onError,
@@ -48,8 +62,13 @@ export function LibraryView({
   const [root, setRoot] = useState<string | null>(null);
   const [series, setSeries] = useState<Series[] | null>(null);
   const [adding, setAdding] = useState(false);
-  const [filter, setFilter] = useState<LibraryFilter>(noFilter);
-  const [showFilters, setShowFilters] = useState(false);
+  // Held by the app: opening a series unmounts this view, and a filter you set
+  // two taps ago should still be set when you come back.
+  const { filter, showFilters } = shelf;
+  const setFilter = useCallback(
+    (next: LibraryFilter) => onShelfChange((current) => ({ ...current, filter: next })),
+    [onShelfChange],
+  );
 
   /**
    * The grid, narrowed and optionally cut into sections.
@@ -57,6 +76,8 @@ export function LibraryView({
    * One list of `[heading, entries]` either way: ungrouped is a single section
    * with no heading, so the grid does not need to know which mode it is in.
    */
+  const scroll = useRestoredScroll<HTMLElement>("library", (series?.length ?? 0) > 0);
+
   const sections = useMemo<[string, Series[]][]>(() => {
     const kept = (series ?? []).filter((s) => matches(s, filter));
     if (filter.group === "none") return kept.length > 0 ? [["", kept]] : [];
@@ -136,7 +157,9 @@ export function LibraryView({
         <Button
           variant={showFilters || isFiltering(filter) ? "default" : "ghost"}
           size="sm"
-          onClick={() => setShowFilters((open) => !open)}
+          onClick={() =>
+            onShelfChange((current) => ({ ...current, showFilters: !current.showFilters }))
+          }
         >
           <SlidersHorizontal />
           Filters
@@ -152,7 +175,11 @@ export function LibraryView({
         <LibraryFilters filter={filter} onChange={setFilter} series={series} />
       )}
 
-      <main className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-5">
+      <main
+        ref={scroll.ref}
+        onScroll={scroll.onScroll}
+        className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-5"
+      >
         {series === null ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="size-3.5 animate-spin" /> Opening the library…
@@ -273,7 +300,10 @@ function SeriesCard({
       <button
         onClick={onRemove}
         title={`Remove ${series.title} from the library`}
-        className="absolute right-1.5 top-1.5 rounded-md bg-background/80 p-1.5 text-muted-foreground opacity-0 backdrop-blur-sm transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+        className={cn(
+          "absolute right-1.5 top-1.5 rounded-md bg-background/80 p-1.5 text-muted-foreground backdrop-blur-sm transition-opacity hover:text-destructive focus-visible:opacity-100",
+          !isMobile && "opacity-0 group-hover:opacity-100",
+        )}
       >
         <Trash2 className="size-3.5" />
       </button>

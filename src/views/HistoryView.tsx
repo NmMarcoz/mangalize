@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Hint } from "@/components/ui/tooltip";
 import { useThumbnail } from "@/hooks/useThumbnail";
+import { isMobile } from "@/lib/platform";
 import {
   clearHistory,
   clearReadingProgress,
@@ -209,7 +210,12 @@ function Row({
           variant="ghost"
           size="icon-sm"
           onClick={onForget}
-          className={cn("opacity-0 transition-opacity group-hover:opacity-100")}
+          className={cn(
+            "transition-opacity",
+            // Revealed on hover is the same as absent on a touch screen, which
+            // is what made clearing the whole history look like the only option.
+            !isMobile && "opacity-0 group-hover:opacity-100",
+          )}
         >
           <RotateCcw className="size-3" />
         </Button>
