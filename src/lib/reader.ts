@@ -55,8 +55,20 @@ export type ReaderTarget =
       seriesTitle: string;
       chapterNumber: string;
       direction: string;
-      previous: { id: string; number: string } | null;
-      next: { id: string; number: string } | null;
+      /**
+       * Every chapter of this translation, in reading order.
+       *
+       * The whole list rather than the two neighbours, because moving to the
+       * next chapter has to produce a target that knows *its* neighbours. The
+       * previous shape carried one step in each direction and was rebuilt by
+       * spreading the old target, so the neighbours never moved: reaching the
+       * end of chapter 6 loaded chapter 6 again, forever.
+       *
+       * Empty when whatever opened the reader did not have the list — history
+       * reopening a single entry, say. Navigation is then simply not offered,
+       * which is better than offering a wrong one.
+       */
+      chapters: { id: string; number: string }[];
       /** The source's own id for the series, so a read can be recorded. */
       seriesSourceId: string;
       /** Art for the history entry, fetched once if the series has none. */

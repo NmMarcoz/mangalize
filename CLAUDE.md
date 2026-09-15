@@ -63,6 +63,12 @@ Thresholds are named consts at the top of `sieve.rs` (`HEIGHT_MIN`, `WIDTH_MAX`,
   every chapter came from the same rip.
 - Below `MIN_SAMPLE` readable images, size filtering is skipped entirely rather
   than guessing from a bad sample.
+- **A chapter that comes back mostly off-size is re-judged against its own
+  norm.** Furniture is a minority *within* a chapter — a banner among twenty
+  pages — so "almost all of this chapter is furniture" is never true; it means
+  the chapter was ripped at a different size, which is what early chapters of a
+  long series usually are. Without this the volume-wide norm silently dropped
+  every page of chapter one. There is a test that scans a real fixture.
 - **File size is never an exclusion signal.** A near-blank page compresses to a
   few KB and is still a real page. There is a test asserting this.
 - Extension-rejected files are dropped silently; files that *look* like images

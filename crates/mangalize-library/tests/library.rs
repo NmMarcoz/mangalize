@@ -753,3 +753,20 @@ fn history_puts_the_more_recently_opened_chapter_first() {
 
     assert_eq!(order, ["3", "1"]);
 }
+
+#[test]
+fn adding_a_series_you_only_streamed_puts_it_on_the_shelf() {
+    let dir = TempDir::new().unwrap();
+    let mut library = Library::open(dir.path()).unwrap();
+
+    // Read from Explore first, which records it without shelving.
+    let streamed = library.record_unshelved_series(ichi()).unwrap();
+    assert!(library.all_series().unwrap().is_empty());
+
+    // Then decide to keep it.
+    let added = library.add_series(ichi()).unwrap();
+
+    assert_eq!(added.id, streamed.id, "the same series, not a second row");
+    assert!(added.shelved, "and it is on the shelf now");
+    assert_eq!(library.all_series().unwrap().len(), 1);
+}

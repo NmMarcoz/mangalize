@@ -170,14 +170,6 @@ export function SeriesModal({
   const readChapter = useCallback(
     (chapter: ChapterRef) => {
       if (!chapter.id) return;
-      const at = flat.findIndex((c) => c.number === chapter.number);
-      const sibling = (index: number) => {
-        const found = flat[index];
-        return found?.id && !found.unavailable
-          ? { id: found.id, number: found.number }
-          : null;
-      };
-
       onRead({
         kind: "online",
         source: series.source,
@@ -187,8 +179,11 @@ export function SeriesModal({
         // MangaDex publishes no reading direction, and nearly everything it
         // carries is drawn right to left.
         direction: "right-to-left",
-        previous: at > 0 ? sibling(at - 1) : null,
-        next: at >= 0 ? sibling(at + 1) : null,
+        // Only the ones that can actually be opened, so "next" never lands on
+        // a chapter the source indexes but does not serve.
+        chapters: flat
+          .filter((c) => c.id && !c.unavailable)
+          .map((c) => ({ id: c.id as string, number: c.number })),
         seriesSourceId: series.id,
         coverUrl: series.thumbnail_url ?? null,
         librarySeriesId: owned?.id ?? null,

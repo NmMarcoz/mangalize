@@ -110,6 +110,28 @@ impl Norm {
     }
 }
 
+/// Above this share of a chapter judged off-size, the norm is wrong for that
+/// chapter rather than the chapter being wrong.
+const NORM_MISFIT: f32 = 0.5;
+
+/// Does this norm simply fail to describe these images?
+///
+/// Site furniture is a minority *within* a chapter — a banner or a credits page
+/// among twenty real ones. So a chapter that comes back mostly off-size is not
+/// twenty banners; it is a chapter ripped at a different size from the rest of
+/// the volume, which happens constantly with early chapters.
+pub fn misfits(norm: Norm, sizes: &[(u32, u32)]) -> bool {
+    let readable: Vec<_> = sizes.iter().filter(|(w, h)| *w > 0 && *h > 0).collect();
+    if readable.len() < MIN_SAMPLE {
+        return false;
+    }
+    let off = readable
+        .iter()
+        .filter(|(w, h)| norm.verdict(*w, *h) == Verdict::OffSize)
+        .count();
+    off as f32 / readable.len() as f32 > NORM_MISFIT
+}
+
 /// Judge a whole set of images at once, deriving the norm from the set itself.
 ///
 /// When no norm can be established every image comes back [`Verdict::Single`]:
@@ -191,5 +213,44 @@ mod tests {
                 Verdict::OffSize,
             ]
         );
+    }
+}
+
+#[cfg(test)]
+mod misfit_tests {
+    use super::*;
+
+    /// The shape of a real volume: most chapters at one size, one early chapter
+    /// rescanned at another.
+    #[test]
+    fn a_norm_that_describes_most_pages_does_not_misfit() {
+        let norm = Norm { width: 800, height: 1200 };
+        let chapter = vec![(800, 1200), (800, 1200), (800, 1200), (250, 80)];
+        assert!(
+            !misfits(norm, &chapter),
+            "one banner among real pages is exactly what the norm is for"
+        );
+    }
+
+    #[test]
+    fn a_chapter_ripped_at_another_size_misfits_rather_than_being_furniture() {
+        let norm = Norm { width: 800, height: 1200 };
+        // Half again as wide and tall: a different scan of the same series.
+        let chapter = vec![(1200, 1800), (1200, 1800), (1200, 1800), (1200, 1800)];
+        assert!(misfits(norm, &chapter));
+    }
+
+    #[test]
+    fn too_few_pages_to_judge_never_misfits() {
+        let norm = Norm { width: 800, height: 1200 };
+        // Below MIN_SAMPLE there is nothing to be confident about either way.
+        assert!(!misfits(norm, &[(1200, 1800), (1200, 1800)]));
+    }
+
+    #[test]
+    fn unreadable_images_do_not_count_toward_a_misfit() {
+        let norm = Norm { width: 800, height: 1200 };
+        let chapter = vec![(0, 0), (0, 0), (800, 1200), (800, 1200), (800, 1200)];
+        assert!(!misfits(norm, &chapter));
     }
 }

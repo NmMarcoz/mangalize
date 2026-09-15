@@ -452,14 +452,18 @@ export function SeriesView({
         seriesTitle: series.title,
         chapterNumber: chapter.number,
         direction: series.direction === "left-to-right" ? "left-to-right" : "right-to-left",
-        previous: null,
-        next: null,
+        // The whole series in reading order, so finishing one chapter moves to
+        // the next rather than stopping at whatever was opened.
+        chapters: (volumes ?? [])
+          .flatMap((v) => v.chapters)
+          .filter((c) => c.source_id && !c.unavailable)
+          .map((c) => ({ id: c.source_id as string, number: c.number })),
         seriesSourceId: series.source_id,
         coverUrl: null,
         librarySeriesId: seriesId,
       });
     },
-    [series, seriesId, onRead],
+    [series, seriesId, volumes, onRead],
   );
 
   const pickedBuildable = order.filter((n) => picked.has(n) && buildable.has(n));

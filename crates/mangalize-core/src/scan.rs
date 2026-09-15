@@ -14,7 +14,7 @@ use anyhow::{Context, Result};
 use crate::natsort::{natural_cmp, trailing_number};
 use crate::page::{extension_verdict, probe_dimensions, ExcludeReason, Page, PageKind};
 use crate::project::{Chapter, Metadata, Volume};
-use crate::sieve::Norm;
+use crate::sieve::{misfits, Norm};
 
 /// Scan `root` into a volume.
 ///
@@ -53,11 +53,23 @@ pub fn scan_volume(root: impl AsRef<Path>) -> Result<Volume> {
 
     if let Some(norm) = norm {
         for chapter in &mut chapters {
+            // A chapter ripped at a different size from the rest of the volume
+            // would otherwise be excluded from end to end — which is exactly
+            // what happens to the early chapters of a long series, rescanned
+            // later at a different resolution. When the volume-wide norm does
+            // not describe a chapter, that chapter is measured against itself.
+            let sizes: Vec<(u32, u32)> =
+                chapter.pages.iter().map(|p| (p.width, p.height)).collect();
+            let against = match Norm::from_sizes(sizes.iter().copied()) {
+                Some(local) if misfits(norm, &sizes) => local,
+                _ => norm,
+            };
+
             for page in &mut chapter.pages {
                 if page.excluded.is_some() {
                     continue;
                 }
-                let verdict = norm.verdict(page.width, page.height);
+                let verdict = against.verdict(page.width, page.height);
                 page.kind = verdict.kind();
                 page.excluded = verdict.exclusion(page.width, page.height);
 

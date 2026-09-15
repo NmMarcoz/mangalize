@@ -315,3 +315,50 @@ fn read_entry<R: std::io::Read + std::io::Seek>(
     zip.by_name(name).unwrap().read_to_string(&mut s).unwrap();
     s
 }
+
+/// The failure this guards against, seen in a real library: the early chapters
+/// of a long series are often a different rip from the rest. Judged against a
+/// volume-wide norm drawn from the majority, every page of chapter one came
+/// back off-size and the chapter was excluded from the build entirely.
+#[test]
+fn a_chapter_ripped_at_a_different_size_is_not_mistaken_for_furniture() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().join("Some Series");
+
+    // Chapter 1 scanned larger, the way an early chapter often is.
+    let first = root.join("Chapter 1");
+    std::fs::create_dir_all(&first).unwrap();
+    for i in 1..=5 {
+        write_jpeg(&first.join(format!("{i:03}.jpg")), 1200, 1800);
+    }
+
+    // Chapters 2 and 3 at the size the rest of the series uses, so the
+    // volume-wide norm comes from them.
+    for chapter in 2..=3 {
+        let dir = root.join(format!("Chapter {chapter}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        for i in 1..=6 {
+            write_jpeg(&dir.join(format!("{i:03}.jpg")), 800, 1200);
+        }
+    }
+
+    let volume = scan_volume(&root).unwrap();
+
+    let one = volume
+        .chapters
+        .iter()
+        .find(|c| c.title.contains('1'))
+        .expect("chapter one should be there");
+    let kept = one.included().count();
+    assert_eq!(kept, 5, "every page of chapter one is a real page");
+    assert!(
+        one.pages.iter().all(|p| !matches!(
+            p.excluded,
+            Some(ExcludeReason::OffSize { .. })
+        )),
+        "none of them is furniture"
+    );
+
+    // And the rest of the volume is untouched by the fallback.
+    assert_eq!(volume.included_pages().count(), 5 + 6 + 6);
+}

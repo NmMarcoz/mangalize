@@ -116,6 +116,15 @@ impl Library {
     fn insert_series(&mut self, new: NewSeries, shelved: bool) -> Result<Series> {
         if let (Some(source), Some(source_id)) = (&new.source, &new.source_id) {
             if let Some(existing) = self.find_by_source(source, source_id)? {
+                // Putting something on the shelf that was only recorded by
+                // reading it has to actually shelve it. Handing the row back
+                // unchanged is what made a streamed series impossible to add:
+                // every command downstream worked on it, so the series page and
+                // its downloads behaved normally, and the grid never showed it.
+                if shelved && !existing.shelved {
+                    self.shelve(existing.id)?;
+                    return self.series(existing.id);
+                }
                 return Ok(existing);
             }
         }

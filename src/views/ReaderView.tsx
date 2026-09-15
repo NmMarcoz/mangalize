@@ -148,10 +148,15 @@ export function ReaderView({ target, onNavigate, onExit }: ReaderViewProps) {
         return;
       }
 
-      const sibling = (at: { id: string; number: string } | null): ReaderTarget | null =>
-        at
-          ? { ...target, chapterId: at.id, chapterNumber: at.number, kind: "online" }
+      // Position looked up in the list each time rather than carried along, so
+      // moving to a chapter produces a target that knows its own neighbours.
+      const at = target.chapters.findIndex((c) => c.id === target.chapterId);
+      const sibling = (index: number): ReaderTarget | null => {
+        const found = at < 0 ? undefined : target.chapters[index];
+        return found
+          ? { ...target, chapterId: found.id, chapterNumber: found.number, kind: "online" }
           : null;
+      };
 
       // Recorded whether or not the series is in the library, so history is
       // the same question however the pages were reached. Failing to record is
@@ -180,8 +185,8 @@ export function ReaderView({ target, onNavigate, onExit }: ReaderViewProps) {
         pages: found.pages,
         online: true,
         startPage: 0,
-        previous: sibling(target.previous),
-        next: sibling(target.next),
+        previous: sibling(at - 1),
+        next: sibling(at + 1),
         progress: seriesId ? { seriesId, chapter: target.chapterNumber } : null,
       });
       setPage(0);
