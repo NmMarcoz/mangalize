@@ -13,5 +13,6 @@ mangalize-core = { path = "../mangalize-core" }
 mangalize-meta = { path = "../mangalize-meta" }
 mangalize-library = { path = "../mangalize-library" }
 mangalize-fetch = { path = "../mangalize-fetch" }
+mangalize-extensions = { path = "../mangalize-extensions" }
 anyhow.workspace = true
 clap.workspace = true

@@ -125,6 +125,67 @@ fn a_chapter_the_index_forgot_is_kept_and_counted_as_orphaned() {
     assert!(library.chapter(series.id, "99").unwrap().downloaded());
 }
 
+/// Which volume label a chapter currently falls under, from `volumes()`'s own
+/// grouping — `chapter()` doesn't carry it, only membership does.
+fn volume_of(library: &Library, id: mangalize_library::SeriesId, number: &str) -> Option<String> {
+    library.volumes(id).unwrap().into_iter().find_map(|v| {
+        v.chapters
+            .iter()
+            .any(|c| c.number == number)
+            .then_some(v.number)
+    })
+}
+
+#[test]
+fn a_manually_assigned_chapter_survives_a_sync_that_would_move_it_back() {
+    let (_dir, mut library) = open();
+    let series = library.add_series(ichi()).unwrap();
+    library.sync_layout(series.id, &layout()).unwrap();
+
+    // Chapter "1" is published under volume "1"; move it by hand into "99",
+    // a label the published layout has never used.
+    library
+        .assign_chapters_to_volume(series.id, &["1".to_string()], "99")
+        .unwrap();
+    assert_eq!(volume_of(&library, series.id, "1").as_deref(), Some("99"));
+    assert!(library.chapter(series.id, "1").unwrap().volume_locked);
+
+    // The new label got a real `volumes` row too, sorted numerically among
+    // the published ones rather than tacked on wherever.
+    let numbers: Vec<String> = library.volumes(series.id).unwrap().into_iter().map(|v| v.number).collect();
+    assert_eq!(numbers, vec!["1", "2", "99"]);
+
+    // A sync with the same published layout would ordinarily put chapter 1
+    // straight back into volume "1" -- the lock must keep it in "99" instead.
+    library.sync_layout(series.id, &layout()).unwrap();
+    assert_eq!(volume_of(&library, series.id, "1").as_deref(), Some("99"));
+}
+
+#[test]
+fn unlocking_a_chapter_drops_it_to_unsorted_until_the_next_sync_re_derives_it() {
+    let (_dir, mut library) = open();
+    let series = library.add_series(ichi()).unwrap();
+    library.sync_layout(series.id, &layout()).unwrap();
+
+    library
+        .assign_chapters_to_volume(series.id, &["1".to_string()], "99")
+        .unwrap();
+    library.unlock_chapters(series.id, &["1".to_string()]).unwrap();
+
+    // Unlocking alone (no sync yet) drops it straight to Unsorted rather than
+    // leaving it in "99" unprotected.
+    assert_eq!(
+        volume_of(&library, series.id, "1").as_deref(),
+        Some(mangalize_library::UNSORTED)
+    );
+    assert!(!library.chapter(series.id, "1").unwrap().volume_locked);
+
+    // "Resync with the source": a normal sync re-derives the real volume now
+    // that the lock is gone.
+    library.sync_layout(series.id, &layout()).unwrap();
+    assert_eq!(volume_of(&library, series.id, "1").as_deref(), Some("1"));
+}
+
 #[test]
 fn chapters_no_volume_claims_are_gathered_under_unsorted_and_sort_last() {
     let (_dir, mut library) = open();
@@ -799,4 +860,61 @@ fn shelving_a_streamed_series_fills_in_what_reading_it_never_knew() {
     assert_eq!(added.year, Some(2024));
     assert_eq!(added.tags, ["Action"]);
     assert_eq!(added.content_rating.as_deref(), Some("safe"));
+}
+
+
+#[test]
+fn a_png_cover_is_stored_with_a_matching_extension_so_it_can_be_decoded_later() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut library = mangalize_library::Library::open(dir.path()).unwrap();
+    let series = library
+        .add_series(mangalize_library::model::NewSeries {
+            title: "Test".to_string(),
+            ..Default::default()
+        })
+        .unwrap();
+
+    // A real PNG, not JPEG bytes -- what an extension's own cover often is.
+    let mut png = Vec::new();
+    image::RgbImage::new(4, 4)
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+
+    let path = library.set_cover(series.id, &png).unwrap();
+    assert_eq!(path.extension().unwrap(), "png");
+
+    // A real decode, the same way the thumbnail pipeline would do it -- this
+    // is what actually fails if the extension lies about the content.
+    image::open(&path).expect("a PNG named cover.png must decode as one");
+
+    let reloaded = library.series(series.id).unwrap();
+    assert_eq!(reloaded.cover_path.unwrap(), path);
+}
+
+#[test]
+fn refetching_a_cover_in_a_new_format_does_not_leave_the_old_file_behind() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut library = mangalize_library::Library::open(dir.path()).unwrap();
+    let series = library
+        .add_series(mangalize_library::model::NewSeries {
+            title: "Test".to_string(),
+            ..Default::default()
+        })
+        .unwrap();
+
+    let mut jpg = Vec::new();
+    image::RgbImage::new(4, 4)
+        .write_to(&mut std::io::Cursor::new(&mut jpg), image::ImageFormat::Jpeg)
+        .unwrap();
+    let first = library.set_cover(series.id, &jpg).unwrap();
+    assert!(first.exists());
+
+    let mut png = Vec::new();
+    image::RgbImage::new(4, 4)
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let second = library.set_cover(series.id, &png).unwrap();
+
+    assert!(!first.exists(), "the stale .jpg must not linger once the cover is a .png");
+    assert!(second.exists());
 }

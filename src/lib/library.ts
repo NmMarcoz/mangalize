@@ -44,6 +44,9 @@ export interface ChapterStatus {
   source_id: string | null;
   /** The source indexes the chapter but does not host its images. */
   unavailable: boolean;
+  /** Assigned to its volume by hand rather than by the published layout — a
+   * sync leaves it alone until it's unlocked. */
+  volume_locked: boolean;
   /** Zero-based page the reader was last on. */
   last_page: number;
   /** When the chapter was finished. `null` means it was not. */
@@ -164,8 +167,36 @@ export const librarySeries = () => invoke<Series[]>("library_series");
 export const libraryAddSeries = (series: SeriesMatch, language: string | null = null) =>
   invoke<Series>("library_add_series", { series, language });
 
+/**
+ * Add a series found through a registered source (built in beyond
+ * MangaDex/Kitsu, or a `.lua` extension) rather than the metadata search.
+ * Pulls its layout the same way `libraryAddSeries` does.
+ *
+ * `fallbackTitle` — the title already on hand from wherever this series was
+ * picked — is used to fill in whatever the source's own detail page leaves
+ * blank (or, if that call fails outright, the whole thing) via a MangaDex/
+ * Kitsu title search on the backend. It never changes which source chapters
+ * are downloaded or read from.
+ */
+export const addSeriesFromSource = (source: string, externalId: string, fallbackTitle: string) =>
+  invoke<Series>("add_series_from_source", { source, externalId, fallbackTitle });
+
+/**
+ * Re-pull a series' published layout. Works for either kind of source: the
+ * backend tries MangaDex/Kitsu first and falls back to a registered `Source`.
+ */
 export const librarySyncSeries = (id: number) =>
   invoke<SyncReport>("library_sync_series", { id });
+
+/**
+ * Re-fetch a series' own metadata — title, credits, alternate titles,
+ * description, tags, content rating and (if none is set) a cover — rather
+ * than its chapter layout. Separate from `librarySyncSeries` on purpose:
+ * re-pulling the chapter list and re-fetching the blurb are different costs
+ * and different failure modes.
+ */
+export const libraryRefetchMetadata = (id: number) =>
+  invoke<Series>("library_refetch_metadata", { id });
 
 export const libraryRemoveSeries = (id: number, deleteFiles: boolean) =>
   invoke<void>("library_remove_series", { id, deleteFiles });
@@ -177,6 +208,21 @@ export const libraryUpdateSeries = (
 
 export const libraryVolumes = (id: number) =>
   invoke<VolumeStatus[]>("library_volumes", { id });
+
+/**
+ * Move a batch of chapters into a volume by hand, locked against a future
+ * sync overwriting the choice.
+ */
+export const libraryAssignChaptersToVolume = (id: number, numbers: string[], volume: string) =>
+  invoke<void>("library_assign_chapters_to_volume", { id, numbers, volume });
+
+/**
+ * Undo a manual assignment, dropping the chapters back to Unsorted. Pair
+ * with `librarySyncSeries` for "disable and resync with the source" in one
+ * user-facing action.
+ */
+export const libraryUnlockChapters = (id: number, numbers: string[]) =>
+  invoke<void>("library_unlock_chapters", { id, numbers });
 
 export const libraryDownloadCovers = (id: number) =>
   invoke<number>("library_download_covers", { id });

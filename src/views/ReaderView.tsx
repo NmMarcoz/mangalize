@@ -29,7 +29,7 @@ import {
   type ReaderPrefs,
   type ReaderTarget,
 } from "@/lib/reader";
-import { languageName, type MetaSource } from "@/lib/api";
+import { languageName } from "@/lib/api";
 import { isMobile } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
@@ -85,7 +85,7 @@ interface OpenChapter {
    * downloaded chapter's target says nothing about the source and reading it in
    * another translation means streaming that one.
    */
-  online_source: { source: MetaSource; seriesSourceId: string; language: string } | null;
+  online_source: { source: string; seriesSourceId: string; language: string } | null;
 }
 
 /**
@@ -158,7 +158,7 @@ export function ReaderView({
           online_source:
             found.source && found.series_source_id
               ? {
-                  source: found.source as MetaSource,
+                  source: found.source,
                   seriesSourceId: found.series_source_id,
                   language: found.language,
                 }

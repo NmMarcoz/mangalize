@@ -131,26 +131,43 @@ pub async fn reader_page(
 /// Resolve a chapter's page URLs without downloading anything.
 ///
 /// The image server is chosen per request and its address expires, so this is
-/// called when the chapter is opened rather than cached.
+/// called when the chapter is opened rather than cached. `source` is
+/// free-text: MangaDex/Kitsu are tried first, and anything else is looked up
+/// in the registered-`Source` registry (a `.lua` extension, say) — a
+/// registered source has no "hosted elsewhere" concept, so its pages are
+/// always `Hosted`.
 #[tauri::command]
 pub async fn reader_online_chapter(
-    source: mangalize_meta::Source,
+    app: AppHandle,
+    source: String,
     chapter_id: String,
 ) -> Result<OnlineChapter, String> {
     blocking(move || {
         use mangalize_meta::mangadex::{unhosted_message, ChapterImages};
 
-        Ok(match mangalize_meta::chapter_images(source, &chapter_id)? {
-            ChapterImages::Hosted(pages) => OnlineChapter {
-                pages,
-                external_url: None,
-                message: None,
-            },
-            ChapterImages::External(url) => OnlineChapter {
-                pages: Vec::new(),
-                message: Some(unhosted_message(url.as_deref())),
-                external_url: url,
-            },
+        if let Some(meta_source) = crate::util::parse_meta_source(&source) {
+            return Ok(match mangalize_meta::chapter_images(meta_source, &chapter_id)? {
+                ChapterImages::Hosted(pages) => OnlineChapter {
+                    pages,
+                    external_url: None,
+                    message: None,
+                },
+                ChapterImages::External(url) => OnlineChapter {
+                    pages: Vec::new(),
+                    message: Some(unhosted_message(url.as_deref())),
+                    external_url: url,
+                },
+            });
+        }
+
+        let registry = crate::sources::load_registry(&app)?;
+        let ext_source = registry
+            .get(&source)
+            .ok_or_else(|| anyhow::anyhow!("{source:?} is not a registered source"))?;
+        Ok(OnlineChapter {
+            pages: ext_source.page_list(&chapter_id)?,
+            external_url: None,
+            message: None,
         })
     })
     .await
@@ -182,16 +199,22 @@ pub struct OnlineChapterRef {
 /// chapter 6 in Portuguese".
 #[tauri::command]
 pub async fn reader_online_chapters(
-    source: mangalize_meta::Source,
+    app: AppHandle,
+    source: String,
     series_source_id: String,
     language: Option<String>,
 ) -> Result<Vec<OnlineChapterRef>, String> {
     blocking(move || {
-        let volumes = mangalize_meta::volume_chapters_in(
-            source,
-            &series_source_id,
-            language.as_deref().filter(|l| !l.is_empty()),
-        )?;
+        let language = language.as_deref().filter(|l| !l.is_empty());
+        let volumes = if let Some(meta_source) = crate::util::parse_meta_source(&source) {
+            mangalize_meta::volume_chapters_in(meta_source, &series_source_id, language)?
+        } else {
+            let registry = crate::sources::load_registry(&app)?;
+            let ext_source = registry
+                .get(&source)
+                .ok_or_else(|| anyhow::anyhow!("{source:?} is not a registered source"))?;
+            ext_source.volumes(&series_source_id, language)?
+        };
         Ok(volumes
             .into_iter()
             .flat_map(|v| v.chapters)

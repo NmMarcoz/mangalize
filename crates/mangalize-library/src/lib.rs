@@ -30,8 +30,8 @@ use anyhow::{anyhow, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 
 pub use model::{
-    BuiltVolume, ChapterStatus, HistoryEntry, NewSeries, PublishedChapter, PublishedVolume, Series,
-    SeriesId, SyncReport, VolumeStatus,
+    BuiltVolume, ChapterStatus, FetchedMetadata, HistoryEntry, NewSeries, PublishedChapter,
+    PublishedVolume, Series, SeriesId, SyncReport, VolumeStatus,
 };
 
 /// The name of the index file inside the library folder.
@@ -242,6 +242,30 @@ impl Library {
         self.series(id)
     }
 
+    /// Apply a fresh metadata fetch in one write.
+    ///
+    /// Separate from `update_series`, which edits one field of the user's own
+    /// copy by hand: a refetch always replaces the whole set — title, credits
+    /// and alternate titles together — with whatever the source (or its
+    /// fallback chain) currently says, the same way `set_classification`
+    /// overwrites tags rather than merging them.
+    pub fn set_fetched_metadata(&self, id: SeriesId, fields: &FetchedMetadata) -> Result<Series> {
+        self.db.execute(
+            "UPDATE series SET title = ?1, title_romaji = ?2, title_native = ?3,
+                               author = ?4, artist = ?5, description = ?6 WHERE id = ?7",
+            params![
+                fields.title,
+                fields.title_romaji,
+                fields.title_native,
+                fields.author,
+                fields.artist,
+                fields.description,
+                id.0
+            ],
+        )?;
+        self.series(id)
+    }
+
     /// Refresh what the library can be filtered by.
     ///
     /// Separate from `update_series`, which is the user editing their own copy
@@ -277,11 +301,18 @@ impl Library {
     /// Record a downloaded series cover, already written inside the library.
     pub fn set_cover(&self, id: SeriesId, bytes: &[u8]) -> Result<PathBuf> {
         let folder = self.series(id)?.folder;
-        let path = folder.join("cover.jpg");
+        // A refetch can land a different format than last time (a MangaDex
+        // JPEG replaced by an extension's PNG, say); clear any previous
+        // `cover.*` first so the old file doesn't linger unreferenced.
+        for ext in COVER_EXTENSIONS {
+            let _ = std::fs::remove_file(folder.join(format!("cover.{ext}")));
+        }
+        let filename = format!("cover.{}", image_extension(bytes));
+        let path = folder.join(&filename);
         std::fs::write(&path, bytes).with_context(|| format!("writing {}", path.display()))?;
         self.db.execute(
-            "UPDATE series SET cover_path = 'cover.jpg' WHERE id = ?1",
-            params![id.0],
+            "UPDATE series SET cover_path = ?1 WHERE id = ?2",
+            params![filename, id.0],
         )?;
         Ok(path)
     }
@@ -297,7 +328,11 @@ impl Library {
         std::fs::create_dir_all(&dir)
             .with_context(|| format!("creating {}", dir.display()))?;
 
-        let relative = format!("volumes/{}.jpg", paths::volume_slug(number));
+        let slug = paths::volume_slug(number);
+        for ext in COVER_EXTENSIONS {
+            let _ = std::fs::remove_file(dir.join(format!("{slug}.{ext}")));
+        }
+        let relative = format!("volumes/{slug}.{}", image_extension(bytes));
         let path = folder.join(&relative);
         std::fs::write(&path, bytes).with_context(|| format!("writing {}", path.display()))?;
 
@@ -367,13 +402,17 @@ impl Library {
 
             for chapter in &volume.chapters {
                 // A chapter already on disk keeps its folder and page count; only
-                // its volume tag and title are refreshed.
+                // its volume tag and title are refreshed. A chapter sorted into a
+                // volume by hand (`assign_chapters_to_volume`) keeps that volume
+                // regardless of what this sync says — the same "the user's own
+                // copy outranks the index" rule already applied to a chapter the
+                // published layout stops listing at all (kept, never deleted).
                 tx.execute(
                     "INSERT INTO chapters
                        (series_id, number, sort_key, volume, title, source_id, unavailable)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                      ON CONFLICT(series_id, number) DO UPDATE SET
-                       volume      = excluded.volume,
+                       volume      = CASE WHEN chapters.volume_locked THEN chapters.volume ELSE excluded.volume END,
                        title       = COALESCE(excluded.title, chapters.title),
                        source_id   = COALESCE(excluded.source_id, chapters.source_id),
                        unavailable = excluded.unavailable",
@@ -419,6 +458,54 @@ impl Library {
         Ok(report)
     }
 
+    /// Move a batch of chapters into a volume by hand, and lock them there so
+    /// a later `sync_layout` leaves them alone rather than overwriting the
+    /// choice with whatever the published layout says this time.
+    ///
+    /// A volume label the source has never used (MangaDex simply never
+    /// tagged that number, say) still needs a `volumes` row to sort and build
+    /// correctly, so one is created here if it doesn't already exist — the
+    /// same reasoning `set_volume_cover` already applies when art arrives
+    /// before a sync ever creates the row.
+    pub fn assign_chapters_to_volume(
+        &mut self,
+        id: SeriesId,
+        numbers: &[String],
+        volume: &str,
+    ) -> Result<()> {
+        let tx = self.db.transaction()?;
+        tx.execute(
+            "INSERT INTO volumes (series_id, number, sort_key)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(series_id, number) DO NOTHING",
+            params![id.0, volume, paths::sort_key(volume)],
+        )?;
+        for number in numbers {
+            tx.execute(
+                "UPDATE chapters SET volume = ?1, volume_locked = 1 WHERE series_id = ?2 AND number = ?3",
+                params![volume, id.0, number],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Undo a manual assignment, dropping the chapter straight back to
+    /// "Unsorted". The caller follows this with a normal sync to re-derive
+    /// the real answer, which is what makes it read as "disable and resync"
+    /// in one action rather than two.
+    pub fn unlock_chapters(&mut self, id: SeriesId, numbers: &[String]) -> Result<()> {
+        let tx = self.db.transaction()?;
+        for number in numbers {
+            tx.execute(
+                "UPDATE chapters SET volume = NULL, volume_locked = 0 WHERE series_id = ?1 AND number = ?2",
+                params![id.0, number],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Every volume of a series, with what we hold of each.
     ///
     /// Chapters with no published volume are gathered under an `"Unsorted"`
@@ -457,7 +544,7 @@ impl Library {
 
         let mut stmt = self.db.prepare(
             "SELECT volume, number, title, folder, page_count, source_url, downloaded_at,
-                    source_id, unavailable, last_page, read_at, opened_at
+                    source_id, unavailable, last_page, read_at, opened_at, volume_locked
                FROM chapters WHERE series_id = ?1
               ORDER BY sort_key IS NULL, sort_key, number",
         )?;
@@ -478,6 +565,7 @@ impl Library {
                         last_page: row.get::<_, i64>(9)? as u32,
                         read_at: row.get(10)?,
                         opened_at: row.get(11)?,
+                        volume_locked: row.get(12)?,
                     },
                 ))
             })?
@@ -640,7 +728,7 @@ impl Library {
         self.db
             .query_row(
                 "SELECT number, title, folder, page_count, source_url, downloaded_at,
-                        source_id, unavailable, last_page, read_at, opened_at
+                        source_id, unavailable, last_page, read_at, opened_at, volume_locked
                    FROM chapters WHERE series_id = ?1 AND number = ?2",
                 params![id.0, number],
                 |row| {
@@ -657,6 +745,7 @@ impl Library {
                         last_page: row.get::<_, i64>(8)? as u32,
                         read_at: row.get(9)?,
                         opened_at: row.get(10)?,
+                        volume_locked: row.get(11)?,
                     })
                 },
             )
@@ -960,6 +1049,26 @@ impl Library {
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+}
+
+/// Every extension a cover might be stored under, for clearing a stale one
+/// before writing a fresh format.
+const COVER_EXTENSIONS: [&str; 5] = ["jpg", "png", "webp", "avif", "gif"];
+
+/// The extension raw image bytes should be stored under, trusting the bytes
+/// over whatever the source's URL or `Content-Type` claimed — the same
+/// reasoning `mangalize_fetch::download`'s `extension_for` uses for a
+/// downloaded page. Naming a PNG `cover.jpg` is not cosmetic: the thumbnail
+/// pipeline picks its decoder from the extension, not the content, so it
+/// fails to ever render a cover stored with the wrong one.
+fn image_extension(bytes: &[u8]) -> &'static str {
+    match image::guess_format(bytes) {
+        Ok(image::ImageFormat::Png) => "png",
+        Ok(image::ImageFormat::WebP) => "webp",
+        Ok(image::ImageFormat::Avif) => "avif",
+        Ok(image::ImageFormat::Gif) => "gif",
+        _ => "jpg",
     }
 }
 

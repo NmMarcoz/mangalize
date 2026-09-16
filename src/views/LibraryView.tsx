@@ -10,6 +10,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 
+import { AddFromSourceDialog } from "@/components/AddFromSourceDialog";
 import { AddSeriesDialog } from "@/components/AddSeriesDialog";
 import { RemoveSeriesDialog } from "@/components/RemoveSeriesDialog";
 import {
@@ -62,6 +63,7 @@ export function LibraryView({
   const [root, setRoot] = useState<string | null>(null);
   const [series, setSeries] = useState<Series[] | null>(null);
   const [adding, setAdding] = useState(false);
+  const [addingFromSource, setAddingFromSource] = useState(false);
   // Held by the app: opening a series unmounts this view, and a filter you set
   // two taps ago should still be set when you come back.
   const { filter, showFilters } = shelf;
@@ -169,6 +171,10 @@ export function LibraryView({
           <Plus />
           Add series
         </Button>
+        <Button variant="ghost" onClick={() => setAddingFromSource(true)}>
+          <Plus />
+          Add from source
+        </Button>
       </header>
 
       {showFilters && series !== null && (
@@ -239,6 +245,15 @@ export function LibraryView({
       <AddSeriesDialog
         open={adding}
         onOpenChange={setAdding}
+        onAdded={(added) => {
+          void refresh();
+          onOpenSeries(added.id);
+        }}
+      />
+
+      <AddFromSourceDialog
+        open={addingFromSource}
+        onOpenChange={setAddingFromSource}
         onAdded={(added) => {
           void refresh();
           onOpenSeries(added.id);

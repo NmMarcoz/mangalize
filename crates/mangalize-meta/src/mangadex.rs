@@ -539,6 +539,62 @@ pub fn report_at_home(url: &str, success: bool, cached: bool, bytes: usize, mill
         .send_json(body);
 }
 
+/// Try to give a flat, volume-less chapter list — most non-MangaDex sources
+/// have no volume concept at all — real volume numbers, by finding the same
+/// series here and matching chapters by number. Exact string equality, the
+/// same match the reader already relies on to swap translations without
+/// losing a chapter (`src/views/ReaderView.tsx`'s `c.number === open.number`).
+/// `None` on any failure or when nothing matched, so the caller keeps
+/// whatever "no volume" bucket it already reports rather than being told
+/// zero volumes exist.
+///
+/// Also returns MangaDex's own volume covers, matched to the same manga hit:
+/// once a chapter list borrows MangaDex's volume numbers, a volume-unaware
+/// source's own gallery (if it has one at all) has no way to line art up
+/// with them, so this is the only place covers for those numbers can come
+/// from at all.
+pub fn remap_onto_volumes(
+    title: &str,
+    published: &[VolumeChapters],
+) -> Option<(Vec<VolumeChapters>, Vec<VolumeCover>)> {
+    /// Mirrors `mangalize_library::UNSORTED`. Duplicated rather than imported:
+    /// this crate must never depend on the library crate, and it is one string.
+    const UNSORTED: &str = "Unsorted";
+
+    let hit = search(title, 1).ok()?.into_iter().next()?;
+    let mangadex_volumes = volume_chapters(&hit.id).ok()?;
+
+    let mut volume_of: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+    for volume in &mangadex_volumes {
+        for chapter in &volume.chapters {
+            volume_of.entry(chapter.number.as_str()).or_insert(volume.volume.as_str());
+        }
+    }
+
+    let mut by_volume: std::collections::BTreeMap<String, Vec<ChapterRef>> = std::collections::BTreeMap::new();
+    let mut matched = 0;
+    for chapter in published.iter().flat_map(|v| &v.chapters) {
+        let volume = match volume_of.get(chapter.number.as_str()) {
+            Some(volume) => {
+                matched += 1;
+                volume.to_string()
+            }
+            None => UNSORTED.to_string(),
+        };
+        by_volume.entry(volume).or_default().push(chapter.clone());
+    }
+
+    if matched == 0 {
+        return None;
+    }
+    let remapped = by_volume
+        .into_iter()
+        .map(|(volume, chapters)| VolumeChapters { volume, chapters })
+        .collect();
+    let covers = volume_covers(&hit.id).unwrap_or_default();
+    Some((remapped, covers))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -9,7 +9,9 @@ import {
   Layers,
   Loader2,
   PenLine,
+  Pin,
   RefreshCw,
+  Sparkles,
   Trash2,
   X,
   PackageCheck,
@@ -25,6 +27,7 @@ import {
   type ContextMenuPosition,
 } from "@/components/ContextMenu";
 import { ChapterFetchDialog } from "@/components/ChapterFetchDialog";
+import { OrganizeChaptersPanel } from "@/components/OrganizeChaptersPanel";
 import { RemoveSeriesDialog } from "@/components/RemoveSeriesDialog";
 import { SourceDownloadDialog } from "@/components/SourceDownloadDialog";
 import {
@@ -62,16 +65,20 @@ import {
   downloadedCount,
   importChapter,
   isComplete,
+  libraryAssignChaptersToVolume,
   libraryBuildVolume,
   libraryDeleteChapter,
   libraryDownloadCovers,
+  libraryRefetchMetadata,
   librarySeries,
   librarySyncSeries,
   libraryLanguages,
   librarySetLanguage,
+  libraryUnlockChapters,
   libraryVolumes,
   missingChapters,
   summariseRuns,
+  UNSORTED,
   volumeLabel,
   type ChapterStatus,
   type Series,
@@ -128,9 +135,11 @@ export function SeriesView({
   const [series, setSeries] = useState<Series | null>(null);
   const [volumes, setVolumes] = useState<VolumeStatus[] | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [refetching, setRefetching] = useState(false);
   const [building, setBuilding] = useState<string | null>(null);
   const [fetching, setFetching] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [organizing, setOrganizing] = useState(false);
   const [removing, setRemoving] = useState(false);
   // A "get missing" run, once the user has chosen how to fetch. `wanted` is
   // what will be attempted: the whole series, or just one volume's gap.
@@ -186,6 +195,13 @@ export function SeriesView({
     void refresh();
   }, [refresh]);
 
+  // Leaving the volume that was being organized (or closing the panel
+  // entirely) always leaves organize mode too, rather than carrying it into
+  // whatever is opened next.
+  useEffect(() => {
+    setOrganizing(false);
+  }, [selected]);
+
   /**
    * Pull any volume covers we do not hold yet, then show them.
    *
@@ -218,6 +234,47 @@ export function SeriesView({
       setSyncing(false);
     }
   }, [seriesId, refresh, onError]);
+
+  const refetchMetadata = useCallback(async () => {
+    setRefetching(true);
+    onError(null);
+    try {
+      await libraryRefetchMetadata(seriesId);
+      await refresh();
+    } catch (e) {
+      onError(String(e));
+    } finally {
+      setRefetching(false);
+    }
+  }, [seriesId, refresh, onError]);
+
+  const assignToVolume = useCallback(
+    async (numbers: string[], volume: string) => {
+      onError(null);
+      try {
+        await libraryAssignChaptersToVolume(seriesId, numbers, volume);
+        await refresh();
+      } catch (e) {
+        onError(String(e));
+      }
+    },
+    [seriesId, refresh, onError],
+  );
+
+  /** Undo a manual assignment and re-pull the real volume in one action. */
+  const resetToSource = useCallback(
+    async (numbers: string[]) => {
+      onError(null);
+      try {
+        await libraryUnlockChapters(seriesId, numbers);
+        await librarySyncSeries(seriesId);
+        await refresh();
+      } catch (e) {
+        onError(String(e));
+      }
+    },
+    [seriesId, refresh, onError],
+  );
 
   const edit = useCallback(
     async (number: string) => {
@@ -501,6 +558,16 @@ export function SeriesView({
             {syncing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
           </Button>
         </Hint>
+        <Hint label="Refetch title, credits, description and cover">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => void refetchMetadata()}
+            disabled={refetching || !series?.source}
+          >
+            {refetching ? <Loader2 className="animate-spin" /> : <Sparkles />}
+          </Button>
+        </Hint>
         <Hint label="Remove this series from the library">
           <Button
             variant="ghost"
@@ -606,6 +673,10 @@ export function SeriesView({
             fetchingDirect={fetchingDirect}
             onImport={(chapter) => void importFolder(chapter)}
             onRemove={(chapter) => void removeChapter(chapter)}
+            organizing={organizing}
+            onToggleOrganize={() => setOrganizing((o) => !o)}
+            onAssignToVolume={assignToVolume}
+            onResetToSource={(chapter) => void resetToSource([chapter])}
           />
         )}
       </div>
@@ -947,6 +1018,10 @@ function VolumePanel({
   onRemove,
   onShare,
   onGetMissing,
+  organizing,
+  onToggleOrganize,
+  onAssignToVolume,
+  onResetToSource,
 }: {
   volume: VolumeStatus;
   building: boolean;
@@ -963,9 +1038,15 @@ function VolumePanel({
   onShare: () => void;
   /** Fetch only the chapters this volume is still missing. */
   onGetMissing: (at: ContextMenuPosition) => void;
+  /** Whether this panel is in "sort Unsorted chapters by hand" mode. */
+  organizing: boolean;
+  onToggleOrganize: () => void;
+  onAssignToVolume: (numbers: string[], volume: string) => Promise<void>;
+  onResetToSource: (chapter: string) => void;
 }) {
   const have = downloadedCount(volume);
   const missing = missingChapters(volume);
+  const isUnsorted = volume.number === UNSORTED;
 
   return (
     <aside
@@ -986,69 +1067,90 @@ function VolumePanel({
             {missing.length > 0 && ` · missing ${summariseRuns(missing.map((c) => c.number))}`}
           </p>
         </div>
+        {/* Only where it means something: a real volume's chapters came from
+            the source's own layout, so there's nothing here to sort by hand. */}
+        {isUnsorted && !organizing && (
+          <Hint label="Sort these chapters into volumes by hand">
+            <Button variant="ghost" size="sm" onClick={onToggleOrganize}>
+              <Layers className="size-3.5" />
+              Organize
+            </Button>
+          </Hint>
+        )}
         <Button variant="ghost" size="icon-sm" onClick={onClose}>
           <X className="size-3.5" />
         </Button>
       </div>
 
-      <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
-        {volume.chapters.length === 0 ? (
-          <p className="px-4 py-3 text-[11px] text-muted-foreground">
-            No chapters are listed for this volume.
-          </p>
-        ) : (
-          volume.chapters.map((chapter) => (
-            <ChapterRow
-              key={chapter.number}
-              chapter={chapter}
-              busy={fetchingDirect.has(chapter.number)}
-              onGet={() => onGet(chapter.number)}
-              onRead={() => onRead(chapter)}
-              onFetchDirect={() => onFetchDirect(chapter.number)}
-              onImport={() => onImport(chapter.number)}
-              onRemove={() => onRemove(chapter.number)}
-            />
-          ))
-        )}
-      </div>
+      {organizing ? (
+        <OrganizeChaptersPanel
+          chapters={volume.chapters}
+          onAssign={onAssignToVolume}
+          onDone={onToggleOrganize}
+        />
+      ) : (
+        <>
+          <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
+            {volume.chapters.length === 0 ? (
+              <p className="px-4 py-3 text-[11px] text-muted-foreground">
+                No chapters are listed for this volume.
+              </p>
+            ) : (
+              volume.chapters.map((chapter) => (
+                <ChapterRow
+                  key={chapter.number}
+                  chapter={chapter}
+                  busy={fetchingDirect.has(chapter.number)}
+                  onGet={() => onGet(chapter.number)}
+                  onRead={() => onRead(chapter)}
+                  onFetchDirect={() => onFetchDirect(chapter.number)}
+                  onImport={() => onImport(chapter.number)}
+                  onRemove={() => onRemove(chapter.number)}
+                  onResetToSource={() => onResetToSource(chapter.number)}
+                />
+              ))
+            )}
+          </div>
 
-      <div className="flex flex-col gap-2 border-t border-border p-3">
-        {/* Offered without having to build again: the work is already done, and
-            on a phone this is the only way a volume leaves the app at all. */}
-        {volume.built && (
-          <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-1.5">
-            <PackageCheck className="size-3.5 shrink-0 text-primary" />
-            <p
-              className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground"
-              title={volume.built.path}
-            >
-              Built {formatBytes(volume.built.bytes)}
-            </p>
-            <Button variant="outline" size="sm" onClick={onShare}>
-              {DELIVER_LABEL}
+          <div className="flex flex-col gap-2 border-t border-border p-3">
+            {/* Offered without having to build again: the work is already done, and
+                on a phone this is the only way a volume leaves the app at all. */}
+            {volume.built && (
+              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-1.5">
+                <PackageCheck className="size-3.5 shrink-0 text-primary" />
+                <p
+                  className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground"
+                  title={volume.built.path}
+                >
+                  Built {formatBytes(volume.built.bytes)}
+                </p>
+                <Button variant="outline" size="sm" onClick={onShare}>
+                  {DELIVER_LABEL}
+                </Button>
+              </div>
+            )}
+
+            {missing.length > 0 && (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  onGetMissing({ x: r.left, y: r.bottom + 4 });
+                }}
+              >
+                <Layers />
+                Get {missing.length} missing in this volume
+              </Button>
+            )}
+
+            <Button className="w-full" onClick={onBuild} disabled={have === 0 || building}>
+              {building ? <Loader2 className="animate-spin" /> : <PenLine />}
+              {volume.built ? "Build again" : "Build this volume"}
             </Button>
           </div>
-        )}
-
-        {missing.length > 0 && (
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={(e) => {
-              const r = e.currentTarget.getBoundingClientRect();
-              onGetMissing({ x: r.left, y: r.bottom + 4 });
-            }}
-          >
-            <Layers />
-            Get {missing.length} missing in this volume
-          </Button>
-        )}
-
-        <Button className="w-full" onClick={onBuild} disabled={have === 0 || building}>
-          {building ? <Loader2 className="animate-spin" /> : <PenLine />}
-          {volume.built ? "Build again" : "Build this volume"}
-        </Button>
-      </div>
+        </>
+      )}
     </aside>
   );
 }
@@ -1061,6 +1163,7 @@ function ChapterRow({
   onFetchDirect,
   onImport,
   onRemove,
+  onResetToSource,
 }: {
   chapter: ChapterStatus;
   busy: boolean;
@@ -1069,6 +1172,8 @@ function ChapterRow({
   onFetchDirect: () => void;
   onImport: () => void;
   onRemove: () => void;
+  /** Undo a manual volume assignment and re-pull the real one. */
+  onResetToSource: () => void;
 }) {
   const have = chapter.folder !== null;
   const direct = canFetchDirectly(chapter);
@@ -1187,6 +1292,17 @@ function ChapterRow({
             </Hint>
           )}
         </>
+      )}
+
+      {/* Sorted into this volume by hand (`OrganizeChaptersPanel`), so a sync
+          will leave it here rather than re-deriving it — offered as a way
+          back for whoever changes their mind or fixed it wrong. */}
+      {chapter.volume_locked && (
+        <Hint label="Undo: drop to Unsorted and re-pull the real volume from the source">
+          <Button variant="ghost" size="icon-sm" onClick={onResetToSource}>
+            <Pin className="size-3" />
+          </Button>
+        </Hint>
       )}
     </div>
   );

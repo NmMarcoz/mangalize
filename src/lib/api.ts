@@ -174,6 +174,70 @@ export const saveCover = (url: string) => invoke<string>("save_cover", { url });
 export const sourceLabel = (source: MetaSource) =>
   source === "mangadex" ? "MangaDex" : "Kitsu";
 
+/**
+ * A registered `Source` beyond the MangaDex/Kitsu pair: built in, or a
+ * `.lua` extension under `<library>/extensions/`. Mirrors
+ * `mangalize_extensions::SourceInfo`.
+ */
+export interface SourceInfo {
+  /** Stable and namespaced, e.g. `mangalize.mangadex` or `user.mangataro` —
+   * this is the exact string stored in a `Series`' `source` column. */
+  id: string;
+  name: string;
+  lang: string;
+  base_url: string;
+}
+
+/** One row of a registered source's catalogue. Mirrors `MangaSummary`. */
+export interface SourceManga {
+  id: string;
+  title: string;
+  cover_url: string | null;
+}
+
+/** A page of a registered source's catalogue. Mirrors `MangasPage`. */
+export interface SourceMangaPage {
+  manga: SourceManga[];
+  has_next_page: boolean;
+}
+
+/** Everything a registered source can offer about one series. Mirrors `MangaDetails`. */
+export interface SourceMangaDetails {
+  title: string;
+  title_romaji: string | null;
+  title_native: string | null;
+  author: string | null;
+  artist: string | null;
+  description: string | null;
+  tags: string[];
+  content_rating: string | null;
+  available_languages: string[];
+  cover_url: string | null;
+}
+
+/** Every registered source, for an Add-from-source or Explore picker. */
+export const listSources = () => invoke<SourceInfo[]>("list_sources");
+
+/** Search one registered source's own catalogue. */
+export const searchSource = (source: string, query: string, page: number) =>
+  invoke<SourceMangaPage>("search_source", { source, query, page });
+
+/** A registered source's most-popular listing, for Explore. */
+export const popularSource = (source: string, page: number) =>
+  invoke<SourceMangaPage>("popular_source", { source, page });
+
+/** A registered source's latest-updates listing, for Explore. */
+export const latestSource = (source: string, page: number) =>
+  invoke<SourceMangaPage>("latest_source", { source, page });
+
+/** A registered source's detail page for one series. */
+export const mangaDetailsSource = (source: string, externalId: string) =>
+  invoke<SourceMangaDetails>("manga_details_source", { source, externalId });
+
+/** A registered source's chapter list for one series, for reading online without adding it. */
+export const volumesSource = (source: string, externalId: string) =>
+  invoke<VolumeChapters[]>("volumes_source", { source, externalId });
+
 export const scanFolder = (path: string) => invoke<Volume>("scan", { path });
 
 export const buildVolume = (volume: Volume, out: string, format: Format) =>

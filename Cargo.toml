@@ -5,6 +5,7 @@ members = [
     "crates/mangalize-meta",
     "crates/mangalize-library",
     "crates/mangalize-fetch",
+    "crates/mangalize-extensions",
     "crates/mangalize-send",
     "crates/mangalize-cli",
     "src-tauri",
@@ -31,6 +32,11 @@ ureq = { version = "2", features = ["json"] }
 # `bundled` compiles SQLite itself, so the library file behaves identically on
 # every machine regardless of what the OS happens to ship.
 rusqlite = { version = "0.37", features = ["bundled"] }
+# `vendored` compiles Lua 5.4 from its bundled C source via the `cc` crate --
+# same mechanism as rusqlite's `bundled` above, already proven to cross-compile
+# for Android in this project's pipeline.
+mlua = { version = "0.12", features = ["lua54", "vendored"] }
+scraper = "0.27"
 
 # Image encoding in the test fixtures is unusably slow when `image` is built
 # unoptimised. Our own crates stay debuggable.

@@ -18,7 +18,7 @@ use rusqlite::Connection;
 pub const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Bump this and add a step whenever the schema changes.
-const CURRENT: i64 = 4;
+const CURRENT: i64 = 5;
 
 pub fn migrate(db: &Connection) -> Result<()> {
     // IMMEDIATE rather than SQLite's deferred default. Two commands opening a
@@ -79,6 +79,9 @@ fn steps(db: &Connection) -> Result<()> {
     }
     if version < 4 {
         db.execute_batch(V4)?;
+    }
+    if version < 5 {
+        db.execute_batch(V5)?;
     }
 
     db.execute(
@@ -206,6 +209,22 @@ ALTER TABLE series ADD COLUMN shelved INTEGER NOT NULL DEFAULT 1;
 CREATE INDEX series_by_shelved ON series (shelved);
 "#;
 
+/// A chapter the user has sorted into a volume by hand.
+///
+/// `sync_layout` otherwise overwrites `chapters.volume` unconditionally on
+/// every sync, since the published layout is normally the more authoritative
+/// answer. A source with no real volume concept of its own (a flat scraped
+/// chapter list, remapped onto MangaDex's own — often incomplete — volume
+/// numbers) leaves real gaps a user may know how to fill better than the
+/// index does, and a manual fix that a later sync silently erased would not
+/// be worth having. This is the same "the user's own copy outranks the
+/// index" rule `sync_layout` already applies to a chapter the published
+/// layout no longer lists at all (kept as orphaned, never deleted) — just
+/// applied to which volume a held chapter belongs to, not whether it's held.
+const V5: &str = r#"
+ALTER TABLE chapters ADD COLUMN volume_locked INTEGER NOT NULL DEFAULT 0;
+"#;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -234,6 +253,12 @@ mod tests {
             if start >= 3 {
                 db.execute_batch(V3).unwrap();
             }
+            if start >= 4 {
+                db.execute_batch(V4).unwrap();
+            }
+            if start >= 5 {
+                db.execute_batch(V5).unwrap();
+            }
             db.execute(
                 "INSERT INTO meta (key, value) VALUES ('schema_version', ?1)",
                 [start.to_string()],
@@ -244,7 +269,7 @@ mod tests {
 
             // Every column the current code reads must exist afterwards.
             db.query_row(
-                "SELECT number, source_id, unavailable, last_page, read_at, opened_at
+                "SELECT number, source_id, unavailable, last_page, read_at, opened_at, volume_locked
                    FROM chapters LIMIT 1",
                 [],
                 |_| Ok(()),
@@ -285,15 +310,16 @@ mod tests {
         migrate(&db).unwrap();
 
         // The row survives, and the new columns are queryable.
-        let (number, source_id): (String, Option<String>) = db
+        let (number, source_id, volume_locked): (String, Option<String>, bool) = db
             .query_row(
-                "SELECT number, source_id FROM chapters WHERE series_id = 1",
+                "SELECT number, source_id, volume_locked FROM chapters WHERE series_id = 1",
                 [],
-                |row| Ok((row.get(0)?, row.get(1)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
             .unwrap();
         assert_eq!(number, "7");
         assert_eq!(source_id, None);
+        assert!(!volume_locked, "a pre-existing chapter must not come back locked");
     }
 
     #[test]

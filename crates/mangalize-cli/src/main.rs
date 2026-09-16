@@ -2,6 +2,7 @@
 //! app will, which makes it the fastest way to verify a scan against real data.
 
 mod library;
+mod sources;
 
 use std::path::PathBuf;
 
@@ -35,6 +36,12 @@ enum Command {
     Library {
         #[command(subcommand)]
         command: library::LibraryCommand,
+    },
+    /// Inspect or exercise a manga source, built-in or a script under
+    /// development.
+    Sources {
+        #[command(subcommand)]
+        command: sources::SourcesCommand,
     },
     /// Look up series metadata online.
     Lookup {
@@ -109,6 +116,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Library { command } => library::run(cli.library, command),
+        Command::Sources { command } => sources::run(command),
         Command::Scan { folder, verbose } => scan(folder, verbose),
         Command::Lookup { query, detail } => lookup(&query, detail),
         Command::Build {

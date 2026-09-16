@@ -15,6 +15,8 @@ export interface Settings {
   compression: string;
   /** Whether the first-run screen has been answered. */
   welcomed: boolean;
+  /** The version this install last showed a "what's new" panel for. */
+  last_seen_version: string | null;
 }
 
 export const getSettings = () => invoke<Settings>("get_settings");

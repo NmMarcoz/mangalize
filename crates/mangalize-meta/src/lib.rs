@@ -5,13 +5,24 @@
 //!
 //! [MangaDex] is the primary source because it is the only free, key-less API
 //! that publishes *per-volume* cover art and a volume-to-chapter map, which is
-//! what this app actually needs. [Kitsu] is the fallback for when MangaDex is
-//! unreachable. AniList would otherwise be the obvious choice, but its public
-//! API has been disabled by its operators.
+//! what a `Source`'s downloadable chapters actually need. [Kitsu] is the
+//! fallback for when MangaDex has nothing.
+//!
+//! [AniList] and [Jikan] (an unofficial MyAnimeList API) join in as further
+//! metadata-only fallbacks — see [`anilist`] and [`jikan`] for why neither is
+//! a `Source`. AniList's own GraphQL endpoint is live, contrary to this
+//! module's own former note that it was "disabled by its operators"; what
+//! actually happened is a drop to 30 requests/minute unauthenticated, after
+//! years of scraper abuse, which rules it out as a primary source but not as
+//! an occasional one.
 //!
 //! [MangaDex]: https://api.mangadex.org/docs/
 //! [Kitsu]: https://kitsu.docs.apiary.io/
+//! [AniList]: https://docs.anilist.co/
+//! [Jikan]: https://docs.api.jikan.moe/
 
+pub mod anilist;
+pub mod jikan;
 pub mod kitsu;
 pub mod mangadex;
 
@@ -95,6 +106,38 @@ pub struct VolumeCover {
     pub url: String,
     /// Downscaled, for the picker.
     pub thumbnail_url: String,
+}
+
+/// Series metadata good only for filling gaps — no id, no chapters, no way to
+/// fetch a page. What [`anilist`] and [`jikan`] can offer: title variants,
+/// credits, a description, tags and a cover, never a chapter or volume
+/// structure, which is why neither is registered as a `Source` the way
+/// MangaDex and Kitsu are.
+#[derive(Debug, Clone, Default)]
+pub struct MetadataHint {
+    pub title_romaji: Option<String>,
+    pub title_native: Option<String>,
+    pub author: Option<String>,
+    pub artist: Option<String>,
+    pub description: Option<String>,
+    pub tags: Vec<String>,
+    pub content_rating: Option<String>,
+    pub cover_url: Option<String>,
+}
+
+impl From<SeriesMatch> for MetadataHint {
+    fn from(hit: SeriesMatch) -> Self {
+        MetadataHint {
+            title_romaji: hit.title_romaji,
+            title_native: hit.title_native,
+            author: hit.author,
+            artist: hit.artist,
+            description: hit.description,
+            tags: hit.tags.into_iter().map(|t| t.name).collect(),
+            content_rating: hit.content_rating,
+            cover_url: hit.thumbnail_url,
+        }
+    }
 }
 
 /// How to order a browse.

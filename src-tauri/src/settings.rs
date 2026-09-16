@@ -70,6 +70,14 @@ pub struct Settings {
     /// Separate from `output_root` being set, because "decide later" is a valid
     /// answer that must not re-prompt on every launch.
     pub welcomed: bool,
+    /// The version this install last showed a "what's new" panel for.
+    ///
+    /// `None` covers two different things on purpose: a genuinely fresh
+    /// install, and an existing one updating from before this field existed.
+    /// The frontend tells them apart using `welcomed` — a fresh install has
+    /// not been welcomed yet and is about to see the first-run screen, which
+    /// a changelog on top of would only be noise for.
+    pub last_seen_version: Option<String>,
 }
 
 /// The on-disk shape. Every field optional so an older file still loads.
@@ -83,6 +91,7 @@ struct Stored {
     compression: Option<String>,
     delivery: Option<DeliveryConfig>,
     welcomed: Option<bool>,
+    last_seen_version: Option<String>,
 }
 
 pub fn load(app: &AppHandle) -> Result<Settings> {
@@ -114,6 +123,7 @@ pub fn load(app: &AppHandle) -> Result<Settings> {
         compression: stored.compression.unwrap_or_else(|| "kindle".into()),
         delivery: stored.delivery.unwrap_or_default(),
         welcomed: stored.welcomed.unwrap_or(false),
+        last_seen_version: stored.last_seen_version,
     })
 }
 
@@ -130,6 +140,7 @@ pub fn save(app: &AppHandle, next: &Settings) -> Result<()> {
             compression: Some(next.compression.clone()),
             delivery: Some(next.delivery.clone()),
             welcomed: Some(next.welcomed),
+            last_seen_version: next.last_seen_version.clone(),
         },
     )
 }

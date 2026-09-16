@@ -9,7 +9,7 @@ mangalize-core = { path = "../mangalize-core" }
 anyhow.workspace = true
 serde.workspace = true
 rusqlite = { workspace = true }
+image.workspace = true
 
 [dev-dependencies]
 tempfile = "3"
-image.workspace = true

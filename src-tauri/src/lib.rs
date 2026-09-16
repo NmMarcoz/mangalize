@@ -6,6 +6,8 @@
 //!
 //! - [`volume`] — scan a folder, preview it, export it (`mangalize-core`)
 //! - [`meta`] — online series lookup (`mangalize-meta`)
+//! - [`sources`] — registered `Source`s beyond MangaDex/Kitsu: built-in and
+//!   `.lua` extensions (`mangalize-extensions`)
 //! - [`library`] — the stored collection (`mangalize-library`)
 //! - [`fetch`] — pulling a chapter's images off a URL (`mangalize-fetch`)
 //! - [`harvest`] — rendering a page to see what images it really loads
@@ -26,6 +28,7 @@ mod meta;
 mod reader;
 mod send;
 mod settings;
+mod sources;
 mod tasks;
 mod thumbs;
 mod util;
@@ -66,6 +69,7 @@ pub fn run() {
             reader::clear_series_history,
             library::library_languages,
             library::library_set_language,
+            library::library_refetch_metadata,
             library::library_record_built,
             library::library_clear_built,
             settings::get_settings,
@@ -81,6 +85,13 @@ pub fn run() {
             meta::series_statistics,
             meta::similar_series,
             meta::save_cover,
+            sources::list_sources,
+            sources::search_source,
+            sources::popular_source,
+            sources::latest_source,
+            sources::manga_details_source,
+            sources::volumes_source,
+            sources::add_series_from_source,
             library::library_root,
             library::set_library_root,
             library::library_series,
@@ -89,6 +100,8 @@ pub fn run() {
             library::library_remove_series,
             library::library_update_series,
             library::library_volumes,
+            library::library_assign_chapters_to_volume,
+            library::library_unlock_chapters,
             library::library_download_covers,
             library::library_build_volume,
             library::library_delete_chapter,

@@ -136,7 +136,9 @@ pub async fn download_chapter(
     .await
 }
 
-/// Download a chapter straight from the metadata source.
+/// Download a chapter straight from the source that indexed it — MangaDex,
+/// or a registered `Source` (built-in beyond the metadata pair, or a `.lua`
+/// extension).
 ///
 /// Much better than reading a page when the source will do it: no rendering, no
 /// guessing which `<img>` is a page, and the order is the publisher's own. Only
@@ -152,21 +154,16 @@ pub async fn download_chapter_from_source(
         let series_id = SeriesId(id);
         let series = library.series(series_id)?;
         let stored = library.chapter(series_id, &chapter)?;
-
-        let source = match series.source.as_deref() {
-            Some("mangadex") => mangalize_meta::Source::MangaDex,
-            Some("kitsu") => mangalize_meta::Source::Kitsu,
-            _ => anyhow::bail!("{} has no metadata source to download from", series.title),
-        };
         let Some(chapter_id) = stored.source_id else {
             anyhow::bail!(
                 "no source id for chapter {chapter} — refresh the series layout first"
             );
         };
 
-        // The image server is handed out per request and expires, so this is
+        // The image server is handed out per request and expires (MangaDex)
+        // or is fetched fresh from the site (an extension), so this is
         // resolved immediately before downloading rather than stored.
-        let pages = mangalize_meta::chapter_pages(source, &chapter_id)?;
+        let (pages, referer) = ChapterSource::resolve(&app, series.source.as_deref())?.page_list(&chapter_id)?;
 
         let dest = library.chapter_dir(series_id, &chapter)?;
         if dest.exists() {
@@ -176,7 +173,7 @@ pub async fn download_chapter_from_source(
         let written = mangalize_fetch::download_pages(
             &pages,
             &dest,
-            None,
+            referer.as_deref(),
             &mut emit(&app, "downloading"),
         )?;
 
@@ -297,11 +294,7 @@ pub async fn download_from_source(
         let series = library.series(series_id)?;
         let total = chapters.len();
 
-        let source = match series.source.as_deref() {
-            Some("mangadex") => mangalize_meta::Source::MangaDex,
-            Some("kitsu") => mangalize_meta::Source::Kitsu,
-            _ => anyhow::bail!("{} has no metadata source to download from", series.title),
-        };
+        let source = ChapterSource::resolve(&app, series.source.as_deref())?;
 
         let mut downloaded = Vec::new();
         let mut failed = Vec::new();
@@ -332,7 +325,7 @@ pub async fn download_from_source(
             report("reading", 0, 0);
             progress.step(format!("chapter {number}"), index as u32, total as u32);
 
-            match one_from_source(&app, &library, series_id, &series, source, number, &report) {
+            match one_from_source(&app, &library, series_id, &series, &source, number, &report) {
                 Ok(()) => downloaded.push(number.clone()),
                 Err(e) => failed.push(BatchFailure {
                     number: number.clone(),
@@ -353,12 +346,48 @@ fn summarise(downloaded: &[String], failed: &[BatchFailure]) -> String {
     }
 }
 
+/// Where a batch's page images come from: MangaDex/Kitsu, or a registered
+/// `Source`. Resolved once before the loop rather than per chapter — a
+/// registered source means loading every `.lua` extension, which fifty
+/// chapters have no reason to repeat fifty times.
+enum ChapterSource {
+    Meta(mangalize_meta::Source),
+    Registered(std::sync::Arc<dyn mangalize_extensions::Source>),
+}
+
+impl ChapterSource {
+    fn resolve(app: &AppHandle, source: Option<&str>) -> anyhow::Result<Self> {
+        let Some(name) = source else {
+            anyhow::bail!("this series has no source to download from");
+        };
+        if let Some(meta_source) = crate::util::parse_meta_source(name) {
+            return Ok(Self::Meta(meta_source));
+        }
+        let registry = crate::sources::load_registry(app)?;
+        let source = registry
+            .get(name)
+            .ok_or_else(|| anyhow::anyhow!("{name:?} is not a registered source"))?;
+        Ok(Self::Registered(source))
+    }
+
+    /// Handed out per request and possibly expiring, so resolved immediately
+    /// before each chapter's download rather than cached across the batch.
+    fn page_list(&self, chapter_id: &str) -> anyhow::Result<(Vec<String>, Option<String>)> {
+        match self {
+            Self::Meta(source) => Ok((mangalize_meta::chapter_pages(*source, chapter_id)?, None)),
+            Self::Registered(source) => {
+                Ok((source.page_list(chapter_id)?, Some(source.info().base_url.clone())))
+            }
+        }
+    }
+}
+
 fn one_from_source(
     app: &AppHandle,
     library: &Library,
     series_id: SeriesId,
     series: &mangalize_library::Series,
-    source: mangalize_meta::Source,
+    source: &ChapterSource,
     number: &str,
     report: &dyn Fn(&'static str, usize, usize),
 ) -> anyhow::Result<()> {
@@ -367,8 +396,7 @@ fn one_from_source(
         anyhow::bail!("no source id for chapter {number} — refresh the series layout first");
     };
 
-    // Handed out per request and expiring, so resolved immediately before use.
-    let pages = mangalize_meta::chapter_pages(source, &chapter_id)?;
+    let (pages, referer) = source.page_list(&chapter_id)?;
     report("downloading", 0, pages.len());
 
     let dest = library.chapter_dir(series_id, number)?;
@@ -377,7 +405,7 @@ fn one_from_source(
     }
 
     let written =
-        mangalize_fetch::download_pages(&pages, &dest, None, &mut emit(app, "downloading"))?;
+        mangalize_fetch::download_pages(&pages, &dest, referer.as_deref(), &mut emit(app, "downloading"))?;
     library.record_chapter(
         series_id,
         number,

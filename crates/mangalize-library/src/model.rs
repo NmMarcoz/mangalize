@@ -67,6 +67,20 @@ pub struct NewSeries {
     pub content_rating: Option<String>,
 }
 
+/// Freshly fetched series metadata, written all at once by a refetch — title,
+/// credits and alternate titles together, since a refetch always replaces
+/// every one of them, unlike `update_series`'s caller, which edits one field
+/// by hand.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct FetchedMetadata {
+    pub title: String,
+    pub title_romaji: Option<String>,
+    pub title_native: Option<String>,
+    pub author: String,
+    pub artist: String,
+    pub description: String,
+}
+
 /// A volume of a series as published, plus what we hold of it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VolumeStatus {
@@ -113,6 +127,10 @@ pub struct ChapterStatus {
     pub source_id: Option<String>,
     /// The source indexes it but cannot serve the images, so a URL is needed.
     pub unavailable: bool,
+    /// Assigned to its volume by hand rather than by the published layout —
+    /// see `Library::assign_chapters_to_volume`. A sync leaves it alone until
+    /// `Library::unlock_chapters` clears this.
+    pub volume_locked: bool,
     /// Zero-based page the reader was last on.
     pub last_page: u32,
     /// When the chapter was finished. `None` means it was not.

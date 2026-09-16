@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { MetaSource } from "@/lib/api";
 import { createImageCache } from "@/lib/imagecache";
 import type { ChapterStatus } from "@/lib/library";
 
@@ -55,7 +54,8 @@ export type ReaderTarget =
   | { kind: "library"; seriesId: number; chapter: string }
   | {
       kind: "online";
-      source: MetaSource;
+      /** `"mangadex" | "kitsu"`, or a registered `Source`'s own id. */
+      source: string;
       /** The source's own chapter id. */
       chapterId: string;
       seriesTitle: string;
@@ -98,7 +98,7 @@ export interface OnlineChapter {
   message: string | null;
 }
 
-export const readerOnlineChapter = (source: MetaSource, chapterId: string) =>
+export const readerOnlineChapter = (source: string, chapterId: string) =>
   invoke<OnlineChapter>("reader_online_chapter", { source, chapterId });
 
 /**
@@ -109,7 +109,7 @@ export const readerOnlineChapter = (source: MetaSource, chapterId: string) =>
  * whatever the source, while the library stays what the user chose to add.
  */
 export const readerTrackOnline = (args: {
-  source: MetaSource;
+  source: string;
   seriesSourceId: string;
   title: string;
   coverUrl: string | null;
@@ -125,12 +125,12 @@ export const readerTrackOnline = (args: {
  * Takes the source's own id rather than a library row, because the reader may
  * be showing something that was never added.
  */
-export const seriesTranslations = (source: MetaSource, seriesSourceId: string) =>
+export const seriesTranslations = (source: string, seriesSourceId: string) =>
   invoke<string[]>("series_translations", { source, seriesSourceId });
 
 /** Every chapter of a series in one translation, in reading order. */
 export const readerOnlineChapters = (
-  source: MetaSource,
+  source: string,
   seriesSourceId: string,
   language: string | null,
 ) =>

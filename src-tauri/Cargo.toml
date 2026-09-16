@@ -16,6 +16,7 @@ mangalize-core = { path = "../crates/mangalize-core" }
 mangalize-meta = { path = "../crates/mangalize-meta" }
 mangalize-library = { path = "../crates/mangalize-library" }
 mangalize-fetch = { path = "../crates/mangalize-fetch" }
+mangalize-extensions = { path = "../crates/mangalize-extensions" }
 mangalize-send = { path = "../crates/mangalize-send" }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"

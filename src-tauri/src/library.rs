@@ -117,24 +117,99 @@ pub async fn library_add_series(
 }
 
 /// Re-pull the published layout for a series.
+///
+/// One Refresh button covers both kinds of source: a `mangalize_meta::Source`
+/// (MangaDex/Kitsu) is tried first, and anything else falls back to the
+/// registered-`Source` path (`sources::pull_layout`) — a `.lua` extension, or
+/// a built-in beyond the metadata pair — so the frontend never has to know
+/// which kind of source a series carries before asking to sync it.
 #[tauri::command]
 pub async fn library_sync_series(app: AppHandle, id: i64) -> Result<SyncReport, String> {
     blocking(move || {
         let mut library = open(&app)?;
         let series = library.series(SeriesId(id))?;
         let (source, source_id) = match (&series.source, &series.source_id) {
-            (Some(source), Some(source_id)) => (parse_source(source)?, source_id.clone()),
+            (Some(source), Some(source_id)) => (source.clone(), source_id.clone()),
             _ => anyhow::bail!("{} was added by hand; there is no source to sync from", series.title),
         };
-        // Whatever translation the series was added in; syncing must not
-        // silently widen it back to every language.
-        let language = series.language.clone();
-        pull_layout(
-            &mut library,
+
+        match parse_source(&source) {
+            Ok(meta_source) => {
+                // Whatever translation the series was added in; syncing must
+                // not silently widen it back to every language.
+                let language = series.language.clone();
+                pull_layout(&mut library, series.id, meta_source, &source_id, Some(language.as_str()))
+            }
+            Err(_) => {
+                let registry = crate::sources::load_registry(&app)?;
+                let ext_source = registry
+                    .get(&source)
+                    .ok_or_else(|| anyhow::anyhow!("{source:?} is not a registered source"))?;
+                crate::sources::pull_layout(&mut library, series.id, ext_source.as_ref(), &source_id, &series.title)
+            }
+        }
+    })
+    .await
+}
+
+/// Re-fetch a series' own metadata — title, credits, alternate titles,
+/// description, tags, content rating and (if none is set yet) a cover —
+/// rather than its chapter layout.
+///
+/// Its own action rather than folded into `library_sync_series`: re-pulling
+/// the chapter list and re-fetching the blurb are different costs and
+/// different failure modes, and asking for one should not mean waiting on,
+/// or risking, the other. Runs the same fallback chain adding a series does
+/// (`MangaDetails::best_effort`) — the source's own listing first for an
+/// extension, MangaDex falling back to Kitsu for the metadata pair, then
+/// AniList, then Jikan for whatever is still blank.
+#[tauri::command]
+pub async fn library_refetch_metadata(app: AppHandle, id: i64) -> Result<Series, String> {
+    blocking(move || {
+        let library = open(&app)?;
+        let series = library.series(SeriesId(id))?;
+        let (source, source_id) = match (&series.source, &series.source_id) {
+            (Some(source), Some(source_id)) => (source.clone(), source_id.clone()),
+            _ => anyhow::bail!("{} was added by hand; there is no source to refetch from", series.title),
+        };
+
+        let details = if parse_source(&source).is_ok() {
+            // MangaDex/Kitsu are themselves the metadata pair, so there is no
+            // source page of their own to try first — just the same
+            // search-then-AniList-then-Jikan chain `best_effort` runs after it.
+            let mut details = mangalize_extensions::MangaDetails::default();
+            details.fill_from_metadata_search(&series.title);
+            details
+        } else {
+            let registry = crate::sources::load_registry(&app)?;
+            let ext_source = registry
+                .get(&source)
+                .ok_or_else(|| anyhow::anyhow!("{source:?} is not a registered source"))?;
+            mangalize_extensions::MangaDetails::best_effort(ext_source.as_ref(), &source_id, &series.title)
+        };
+
+        library.set_classification(series.id, &details.tags, details.content_rating.as_deref())?;
+
+        // Only when there is none already: a refetch improving the blurb must
+        // not silently replace a cover the user picked by hand.
+        if series.cover_path.is_none() {
+            if let Some(url) = &details.cover_url {
+                if let Ok(bytes) = mangalize_meta::download_image(url) {
+                    let _ = library.set_cover(series.id, &bytes);
+                }
+            }
+        }
+
+        library.set_fetched_metadata(
             series.id,
-            source,
-            &source_id,
-            Some(language.as_str()),
+            &mangalize_library::FetchedMetadata {
+                title: if details.title.is_empty() { series.title.clone() } else { details.title },
+                title_romaji: details.title_romaji,
+                title_native: details.title_native,
+                author: details.author.unwrap_or_default(),
+                artist: details.artist.unwrap_or_default(),
+                description: details.description.unwrap_or_default(),
+            },
         )
     })
     .await
@@ -144,7 +219,9 @@ pub async fn library_sync_series(app: AppHandle, id: i64) -> Result<SyncReport, 
 ///
 /// Asked of the source rather than remembered: a series picks up translations
 /// over time, and the list is only ever looked at when someone is about to
-/// choose from it.
+/// choose from it. A registered `Source` (built-in beyond MangaDex/Kitsu, or a
+/// `.lua` extension) has no notion of this at all today, so it answers empty
+/// rather than erroring — same as Kitsu, which indexes no chapters either.
 #[tauri::command]
 pub async fn library_languages(app: AppHandle, id: i64) -> Result<Vec<String>, String> {
     blocking(move || {
@@ -153,10 +230,9 @@ pub async fn library_languages(app: AppHandle, id: i64) -> Result<Vec<String>, S
         let (Some(source), Some(source_id)) = (&series.source, &series.source_id) else {
             return Ok(Vec::new());
         };
-        match parse_source(source)? {
-            Source::MangaDex => Ok(mangalize_meta::mangadex::manga(source_id)?.available_languages),
-            // Kitsu indexes no chapters, so it offers no translations either.
-            Source::Kitsu => Ok(Vec::new()),
+        match parse_source(source) {
+            Ok(Source::MangaDex) => Ok(mangalize_meta::mangadex::manga(source_id)?.available_languages),
+            Ok(Source::Kitsu) | Err(_) => Ok(Vec::new()),
         }
     })
     .await
@@ -224,6 +300,25 @@ pub async fn library_update_series(
 #[tauri::command]
 pub async fn library_volumes(app: AppHandle, id: i64) -> Result<Vec<VolumeStatus>, String> {
     blocking(move || open(&app)?.volumes(SeriesId(id))).await
+}
+
+/// Move a batch of chapters into a volume by hand, locked against a future
+/// sync overwriting the choice — see `Library::assign_chapters_to_volume`.
+#[tauri::command]
+pub async fn library_assign_chapters_to_volume(
+    app: AppHandle,
+    id: i64,
+    numbers: Vec<String>,
+    volume: String,
+) -> Result<(), String> {
+    blocking(move || open(&app)?.assign_chapters_to_volume(SeriesId(id), &numbers, &volume)).await
+}
+
+/// Undo a manual assignment. The frontend follows this with
+/// `library_sync_series` so it reads as one "disable and resync" action.
+#[tauri::command]
+pub async fn library_unlock_chapters(app: AppHandle, id: i64, numbers: Vec<String>) -> Result<(), String> {
+    blocking(move || open(&app)?.unlock_chapters(SeriesId(id), &numbers)).await
 }
 
 /// Download any published volume covers we do not already hold.
@@ -553,9 +648,5 @@ fn source_name(source: Source) -> &'static str {
 }
 
 fn parse_source(name: &str) -> Result<Source> {
-    match name {
-        "mangadex" => Ok(Source::MangaDex),
-        "kitsu" => Ok(Source::Kitsu),
-        other => anyhow::bail!("unknown metadata source {other:?}"),
-    }
+    crate::util::parse_meta_source(name).ok_or_else(|| anyhow::anyhow!("unknown metadata source {name:?}"))
 }

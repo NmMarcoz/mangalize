@@ -216,14 +216,21 @@ fn extension_for(format: image::ImageFormat) -> &'static str {
     }
 }
 
-/// A GET carrying the headers image hosts expect.
-fn request(target: &str, referer: Option<&str>) -> ureq::Request {
-    let mut request = ureq::get(target)
+/// A request carrying this crate's User-Agent and, when known, the referring
+/// page's `Referer`/`Origin` — many hosts 403 a request that does not look
+/// like it came from the page. `accept` is the caller's own `Accept` header,
+/// since an image fetch and a source plugin's HTML/JSON fetch want different
+/// ones. `method` exists because a source script's catalogue API is sometimes
+/// POST-only (a WordPress REST route, say) — everything else about the
+/// request is identical either way. Public so `mangalize-extensions`' scripted-
+/// source host functions build requests the same way instead of reimplementing
+/// this a third time.
+pub fn build_request(method: &str, target: &str, referer: Option<&str>, accept: &str) -> ureq::Request {
+    let mut request = ureq::request(method, target)
         .set("User-Agent", USER_AGENT)
-        .set("Accept", "image/avif,image/webp,image/*,*/*;q=0.8")
+        .set("Accept", accept)
         .timeout(TIMEOUT);
 
-    // Many hosts 403 a request that does not look like it came from the page.
     if let Some(referer) = referer {
         request = request.set("Referer", referer);
         if let Some(origin) = url::origin_of(referer) {
@@ -231,6 +238,11 @@ fn request(target: &str, referer: Option<&str>) -> ureq::Request {
         }
     }
     request
+}
+
+/// A GET carrying the headers image hosts expect.
+fn request(target: &str, referer: Option<&str>) -> ureq::Request {
+    build_request("GET", target, referer, "image/avif,image/webp,image/*,*/*;q=0.8")
 }
 
 /// Total size from a `Content-Range: bytes 0-63/1048576` reply.

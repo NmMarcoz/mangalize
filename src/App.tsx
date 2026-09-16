@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { onBackButtonPress } from "@tauri-apps/api/app";
+import { getVersion, onBackButtonPress } from "@tauri-apps/api/app";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { exit } from "@tauri-apps/plugin-process";
@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Sidebar, type Section } from "@/components/Sidebar";
 import { TaskPanel, useTasks } from "@/components/TaskPanel";
 import { UpdateBanner } from "@/components/UpdateBanner";
+import { WhatsNewDialog } from "@/components/WhatsNewDialog";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -24,7 +25,8 @@ import { SettingsView } from "@/views/SettingsView";
 import { WelcomeView } from "@/views/WelcomeView";
 import { useUpdater } from "@/hooks/useUpdater";
 import { scanFolder, type MetaSource, type Volume } from "@/lib/api";
-import { getSettings, type Settings } from "@/lib/settings";
+import { unseenChangelog, type ChangelogEntry } from "@/lib/changelog";
+import { getSettings, setSettings as saveSettings, type Settings } from "@/lib/settings";
 import { isMobile } from "@/lib/platform";
 import { recordBuilt } from "@/lib/library";
 import { clearThumbnails } from "@/lib/thumbs";
@@ -84,6 +86,7 @@ export default function App() {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [whatsNew, setWhatsNew] = useState<ChangelogEntry[]>([]);
   // Browsing survives leaving for a series and coming back; see `ExploreView`.
   const [browse, setBrowse] = useState<BrowseState>(emptyBrowse);
   const [shelf, setShelf] = useState<ShelfState>(emptyShelf);
@@ -98,6 +101,33 @@ export default function App() {
       .then(setSettings)
       .catch((e) => setError(String(e)));
   }, []);
+
+  // Checked once per launch, against whichever version this install last
+  // showed the panel for. A fresh install skips it entirely — `welcomed`
+  // being false means the first-run screen is about to show instead, and a
+  // changelog on top of that would only be noise for someone who has never
+  // seen the app before.
+  const checkedChangelog = useRef(false);
+  useEffect(() => {
+    if (!settings || checkedChangelog.current || !settings.welcomed) return;
+    checkedChangelog.current = true;
+    void getVersion().then((version) => {
+      if (version !== settings.last_seen_version) {
+        setWhatsNew(unseenChangelog(settings.last_seen_version));
+      }
+    });
+  }, [settings]);
+
+  const dismissWhatsNew = useCallback(async () => {
+    setWhatsNew([]);
+    if (!settings) return;
+    try {
+      const version = await getVersion();
+      setSettings(await saveSettings({ ...settings, last_seen_version: version }));
+    } catch {
+      // Not worth surfacing: worst case the panel shows again next launch.
+    }
+  }, [settings]);
 
   // Android's back button, which otherwise closes the app from any screen —
   // the same dead end the reader used to be, with no way out but relaunching.
@@ -425,6 +455,12 @@ export default function App() {
           onInstall={updater.install}
           onRestart={updater.restart}
           onDismiss={updater.dismiss}
+        />
+
+        <WhatsNewDialog
+          open={whatsNew.length > 0}
+          entries={whatsNew}
+          onClose={() => void dismissWhatsNew()}
         />
 
         {dragging && (
