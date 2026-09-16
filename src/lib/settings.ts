@@ -58,13 +58,13 @@ export interface BuildBatchProgress {
 
 /** Build several stored volumes. `outDir` overrides the configured folder. */
 export const buildLibraryVolumes = (args: {
+  /** Mail each volume once written, as one job. */
+  deliver?: boolean;
   id: number;
   volumes: string[];
   format: Format;
   outDir: string | null;
-}) => invoke<BuildBatchReport>("build_library_volumes", args);
-
-export const cancelBuild = () => invoke<void>("cancel_build");
+}) => invoke<number>("build_library_volumes", args);
 
 /**
  * What each compression preset does, in the terms that matter: how big the

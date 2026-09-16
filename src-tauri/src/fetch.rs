@@ -5,16 +5,15 @@
 //! look broken.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::time::Duration;
 
 use mangalize_fetch::{BatchItem, BatchPlan, Candidate, Extraction};
 use mangalize_library::{ChapterStatus, Library, SeriesId};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::settings;
+use crate::tasks;
 use crate::util::blocking;
 
 /// Emitted while a batch of URLs is being measured or downloaded.
@@ -237,14 +236,6 @@ pub async fn import_chapter(
 
 /// Lets a running batch be stopped from the UI.
 ///
-/// A batch is the one operation here long enough that the user will change their
-/// mind halfway through, and abandoning the command future would not stop the
-/// blocking work already on the pool.
-#[derive(Default)]
-pub struct BatchControl {
-    cancelled: Arc<AtomicBool>,
-}
-
 /// How long to wait between chapters.
 ///
 /// The images all come from one host, usually a small one. Downloading fifty
@@ -269,13 +260,6 @@ pub struct BatchFailure {
     error: String,
 }
 
-#[derive(Serialize)]
-pub struct BatchReport {
-    downloaded: Vec<String>,
-    failed: Vec<BatchFailure>,
-    cancelled: bool,
-}
-
 /// Fetch missing chapters straight from the metadata source.
 ///
 /// The other batch path exists because most sites are only reachable by pasting
@@ -286,17 +270,28 @@ pub struct BatchReport {
 /// Bounded the same way `download_batch` is: the caller passes the chapters it
 /// wants, this never looks for more, and a chapter that fails is recorded while
 /// the run carries on. One dead chapter must not cost the other forty.
+/// Queued rather than awaited. A run of forty chapters takes minutes, and the
+/// caller used to have to sit in a dialog for all of it.
 #[tauri::command]
 pub async fn download_from_source(
     app: AppHandle,
-    control: State<'_, BatchControl>,
     id: i64,
     chapters: Vec<String>,
-) -> Result<BatchReport, String> {
-    let cancelled = control.cancelled.clone();
-    cancelled.store(false, Ordering::Relaxed);
+) -> Result<u64, String> {
+    let title = {
+        let library = Library::open(settings::library_root(&app).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+        library
+            .series(SeriesId(id))
+            .map(|s| s.title)
+            .unwrap_or_else(|_| "a series".into())
+    };
+    let label = format!("{title} · {} chapters", chapters.len());
 
-    blocking(move || {
+    // The task owns its own handle; `enqueue` keeps the one it was given.
+    let inside = app.clone();
+    Ok(tasks::enqueue(&app, "download", &label, move |progress| {
+        let app = inside;
         let library = Library::open(settings::library_root(&app)?)?;
         let series_id = SeriesId(id);
         let series = library.series(series_id)?;
@@ -312,8 +307,8 @@ pub async fn download_from_source(
         let mut failed = Vec::new();
 
         for (index, number) in chapters.iter().enumerate() {
-            if cancelled.load(Ordering::Relaxed) {
-                return Ok(BatchReport { downloaded, failed, cancelled: true });
+            if progress.cancelled() {
+                break;
             }
             // The images all come from one volunteer network; the pause is the
             // same courtesy the URL batch extends to a small site.
@@ -335,6 +330,7 @@ pub async fn download_from_source(
                 );
             };
             report("reading", 0, 0);
+            progress.step(format!("chapter {number}"), index as u32, total as u32);
 
             match one_from_source(&app, &library, series_id, &series, source, number, &report) {
                 Ok(()) => downloaded.push(number.clone()),
@@ -345,9 +341,16 @@ pub async fn download_from_source(
             }
         }
 
-        Ok(BatchReport { downloaded, failed, cancelled: false })
-    })
-    .await
+        Ok(Some(summarise(&downloaded, &failed)))
+    }))
+}
+
+/// What a finished run has to show for itself, kept on the task.
+fn summarise(downloaded: &[String], failed: &[BatchFailure]) -> String {
+    match (downloaded.len(), failed.len()) {
+        (got, 0) => format!("{got} downloaded"),
+        (got, bad) => format!("{got} downloaded, {bad} failed"),
+    }
 }
 
 fn one_from_source(
@@ -394,12 +397,6 @@ pub async fn plan_batch(
     blocking(move || mangalize_fetch::plan_batch(&url, &wanted, &mut emit(&app, "checking"))).await
 }
 
-/// Stop the batch currently running, if any.
-#[tauri::command]
-pub fn cancel_batch(control: State<BatchControl>) {
-    control.cancelled.store(true, Ordering::Relaxed);
-}
-
 /// Download a whole planned batch into the library.
 ///
 /// Chapters are taken one at a time and a failure is recorded against that
@@ -409,14 +406,22 @@ pub fn cancel_batch(control: State<BatchControl>) {
 #[tauri::command]
 pub async fn download_batch(
     app: AppHandle,
-    control: State<'_, BatchControl>,
     id: i64,
     items: Vec<BatchItem>,
-) -> Result<BatchReport, String> {
-    let cancelled = control.cancelled.clone();
-    cancelled.store(false, Ordering::Relaxed);
+) -> Result<u64, String> {
+    let title = {
+        let library = Library::open(settings::library_root(&app).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+        library
+            .series(SeriesId(id))
+            .map(|s| s.title)
+            .unwrap_or_else(|_| "a series".into())
+    };
+    let label = format!("{title} · {} chapters", items.len());
 
-    blocking(move || {
+    let inside = app.clone();
+    Ok(tasks::enqueue(&app, "download", &label, move |progress| {
+        let app = inside;
         let library = Library::open(settings::library_root(&app)?)?;
         let series = SeriesId(id);
         let total = items.len();
@@ -425,9 +430,10 @@ pub async fn download_batch(
         let mut failed = Vec::new();
 
         for (index, item) in items.iter().enumerate() {
-            if cancelled.load(Ordering::Relaxed) {
-                return Ok(BatchReport { downloaded, failed, cancelled: true });
+            if progress.cancelled() {
+                break;
             }
+            progress.step(format!("chapter {}", item.number), index as u32, total as u32);
             if index > 0 {
                 std::thread::sleep(BETWEEN_CHAPTERS);
             }
@@ -456,9 +462,8 @@ pub async fn download_batch(
             }
         }
 
-        Ok(BatchReport { downloaded, failed, cancelled: false })
-    })
-    .await
+        Ok(Some(summarise(&downloaded, &failed)))
+    }))
 }
 
 /// One chapter of a batch: find its pages, save them, record it.

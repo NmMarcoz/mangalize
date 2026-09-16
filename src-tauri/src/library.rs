@@ -8,12 +8,10 @@ use mangalize_core::project::Volume;
 use mangalize_library::model::{NewSeries, PublishedChapter, PublishedVolume};
 use mangalize_library::{ChapterStatus, Library, Series, SeriesId, SyncReport, VolumeStatus};
 use mangalize_meta::{SeriesMatch, Source};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 use mangalize_core::writers;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter};
 
 use crate::settings;
 use crate::util::blocking;
@@ -284,12 +282,6 @@ pub async fn library_delete_chapter(
 
 /* ------------------------------------------------------------ batch building */
 
-/// Lets a running batch build be stopped from the UI.
-#[derive(Default)]
-pub struct BuildControl {
-    cancelled: Arc<AtomicBool>,
-}
-
 #[derive(Clone, Serialize)]
 struct BuildBatchProgress {
     volume: String,
@@ -311,21 +303,9 @@ pub struct BuiltVolume {
 }
 
 #[derive(Serialize)]
-pub struct BuildBatchReport {
-    built: Vec<BuiltVolume>,
-    failed: Vec<BuildFailure>,
-    cancelled: bool,
-}
-
-#[derive(Serialize)]
 pub struct BuildFailure {
     volume: String,
     error: String,
-}
-
-#[tauri::command]
-pub fn cancel_build(control: State<BuildControl>) {
-    control.cancelled.store(true, Ordering::Relaxed);
 }
 
 /// Build several stored volumes in one go.
@@ -342,16 +322,26 @@ pub fn cancel_build(control: State<BuildControl>) {
 #[tauri::command]
 pub async fn build_library_volumes(
     app: AppHandle,
-    control: State<'_, BuildControl>,
     id: i64,
     volumes: Vec<String>,
     format: Format,
     out_dir: Option<String>,
-) -> Result<BuildBatchReport, String> {
-    let cancelled = control.cancelled.clone();
-    cancelled.store(false, Ordering::Relaxed);
+    // Mail each volume to the configured device once it is written. One job
+    // rather than something the user has to come back and finish by hand.
+    deliver: bool,
+) -> Result<u64, String> {
+    let title = {
+        let settings = settings::load(&app).map_err(|e| e.to_string())?;
+        open_at(&settings.library_root)
+            .and_then(|l| l.series(SeriesId(id)))
+            .map(|s| s.title)
+            .unwrap_or_else(|_| "a series".into())
+    };
+    let label = format!("{title} · {} volumes", volumes.len());
 
-    blocking(move || {
+    let inside = app.clone();
+    Ok(crate::tasks::enqueue(&app, "build", &label, move |progress| {
+        let app = inside;
         let settings = settings::load(&app)?;
         let root = match out_dir.map(std::path::PathBuf::from).or_else(|| settings.output_root.clone()) {
             Some(root) => root,
@@ -373,9 +363,10 @@ pub async fn build_library_volumes(
         let mut failed = Vec::new();
 
         for (index, number) in volumes.iter().enumerate() {
-            if cancelled.load(Ordering::Relaxed) {
-                return Ok(BuildBatchReport { built, failed, cancelled: true });
+            if progress.cancelled() {
+                break;
             }
+            progress.step(format!("volume {number}"), index as u32, total as u32);
 
             match build_one(
                 &library,
@@ -403,9 +394,29 @@ pub async fn build_library_volumes(
             }
         }
 
-        Ok(BuildBatchReport { built, failed, cancelled: false })
-    })
-    .await
+        let mut summary = match (built.len(), failed.len()) {
+            (made, 0) => format!("{made} built"),
+            (made, bad) => format!("{made} built, {bad} failed"),
+        };
+
+        if deliver && !built.is_empty() && !progress.cancelled() {
+            progress.step("sending", total as u32, total as u32);
+            let paths: Vec<String> = built.iter().map(|b| b.path.clone()).collect();
+            match crate::send::deliver_all(&app, &paths) {
+                Ok(report) => {
+                    summary.push_str(&format!(", {} sent", report.sent.len()));
+                    if !report.failed.is_empty() {
+                        summary.push_str(&format!(", {} not sent", report.failed.len()));
+                    }
+                }
+                // The volumes are written either way; a mail failure must not
+                // present the build as having failed.
+                Err(e) => summary.push_str(&format!(", not sent: {e:#}")),
+            }
+        }
+
+        Ok(Some(summary))
+    }))
 }
 
 /// Remember a volume the editor wrote.

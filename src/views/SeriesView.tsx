@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   ArrowLeft,
@@ -53,12 +52,8 @@ import {
   type Format,
   type Volume,
 } from "@/lib/api";
-import { sendFiles } from "@/lib/send";
 import {
   buildLibraryVolumes,
-  cancelBuild,
-  type BuildBatchProgress,
-  type BuildBatchReport,
 } from "@/lib/settings";
 import {
   canFetchDirectly,
@@ -108,6 +103,8 @@ interface SeriesViewProps {
    */
   onRead: (target: ReaderTarget) => void;
   onError: (message: string | null) => void;
+  /** The queue changed; the app should show it. */
+  onTasksChanged: () => void;
 }
 
 /**
@@ -125,6 +122,7 @@ export function SeriesView({
   defaultFormat,
   onRead,
   onError,
+  onTasksChanged,
 }: SeriesViewProps) {
   const [series, setSeries] = useState<Series | null>(null);
   const [volumes, setVolumes] = useState<VolumeStatus[] | null>(null);
@@ -155,9 +153,6 @@ export function SeriesView({
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [anchor, setAnchor] = useState<string | null>(null);
   const [menu, setMenu] = useState<ContextMenuPosition | null>(null);
-  const [buildProgress, setBuildProgress] = useState<BuildBatchProgress | null>(null);
-  const [buildReport, setBuildReport] = useState<BuildBatchReport | null>(null);
-  const [sending, setSending] = useState(false);
   // A set, not one chapter. Downloads are started one tap at a time but run
   // together, so a single value made the previous chapter's spinner stop the
   // moment the next was tapped, and the first one to finish stopped all of them.
@@ -371,80 +366,63 @@ export function SeriesView({
 
   /* ------------------------------------------------------- batch building */
 
-  useEffect(() => {
-    const pending = listen<BuildBatchProgress>("build-batch-progress", (e) => {
-      setBuildProgress(e.payload);
-    });
-    return () => {
-      void pending.then((fn) => fn());
-    };
-  }, []);
-
+  /**
+   * Queue a build of the selected volumes.
+   *
+   * Writing a volume is a minute of re-encoding per volume, so it goes on the
+   * queue like a download does. The selection is cleared once it is handed
+   * over: leaving it ticked invites building the same thing twice.
+   */
   const runBuild = useCallback(
-    async (askWhere: boolean): Promise<BuildBatchReport | null> => {
+    async (askWhere: boolean): Promise<boolean> => {
       const chosen = order.filter((n) => picked.has(n) && buildable.has(n));
-      if (chosen.length === 0) return null;
+      if (chosen.length === 0) return false;
 
       let outDir: string | null = null;
       if (askWhere) {
         const folder = await openDialog({ directory: true, multiple: false });
-        if (typeof folder !== "string") return null;
+        if (typeof folder !== "string") return false;
         outDir = folder;
       }
 
       onError(null);
-      setBuildReport(null);
-      setBuildProgress({
-        volume: chosen[0],
-        index: 1,
-        total: chosen.length,
-        done: 0,
-        pages: 0,
-      });
       try {
-        const report = await buildLibraryVolumes({
+        await buildLibraryVolumes({
           id: seriesId,
           volumes: chosen,
           format: defaultFormat as Format,
           outDir,
         });
-        setBuildReport(report);
-        return report;
+        setPicked(new Set());
+        onTasksChanged();
+        return true;
       } catch (e) {
         onError(String(e));
-        return null;
-      } finally {
-        setBuildProgress(null);
+        return false;
       }
     },
-    [order, picked, buildable, seriesId, defaultFormat, onError],
+    [order, picked, buildable, seriesId, defaultFormat, onError, onTasksChanged],
   );
 
-  /**
-   * Build the selection, then mail each volume to the device.
-   *
-   * Built to the configured folder first rather than to a temporary file: a
-   * volume worth sending is worth keeping, and the send is the part most likely
-   * to fail.
-   */
+  /** Build the selection and mail each volume, as one queued job. */
   const runBuildAndSend = useCallback(async () => {
-    const built = await runBuild(false);
-    if (!built || built.built.length === 0) return;
-
-    setSending(true);
+    const chosen = order.filter((n) => picked.has(n) && buildable.has(n));
+    if (chosen.length === 0) return;
+    onError(null);
     try {
-      const result = await sendFiles(built.built.map((b) => b.path));
-      if (result.failed.length > 0) {
-        onError(
-          `Sent ${result.sent.length}, failed ${result.failed.length}: ${result.failed[0].error}`,
-        );
-      }
+      await buildLibraryVolumes({
+        id: seriesId,
+        volumes: chosen,
+        format: defaultFormat as Format,
+        outDir: null,
+        deliver: true,
+      });
+      setPicked(new Set());
+      onTasksChanged();
     } catch (e) {
       onError(String(e));
-    } finally {
-      setSending(false);
     }
-  }, [runBuild, onError]);
+  }, [order, picked, buildable, seriesId, defaultFormat, onError, onTasksChanged]);
 
   /**
    * How to open a chapter of this series.
@@ -658,7 +636,7 @@ export function SeriesView({
               setMenu(null);
               void runBuildAndSend();
             }}
-            disabled={pickedBuildable.length === 0 || sending}
+            disabled={pickedBuildable.length === 0}
           >
             Build and send to Kindle
           </ContextMenuItem>
@@ -690,16 +668,6 @@ export function SeriesView({
         </ContextMenu>
       )}
 
-      {(buildProgress || buildReport || sending) && (
-        <BuildStatus
-          progress={buildProgress}
-          sending={sending}
-          report={buildReport}
-          onDismiss={() => setBuildReport(null)}
-          onError={onError}
-        />
-      )}
-
       <RemoveSeriesDialog
         series={removing ? series : null}
         onOpenChange={setRemoving}
@@ -711,7 +679,7 @@ export function SeriesView({
         onOpenChange={(next) => !next && setBatching(null)}
         seriesId={seriesId}
         missing={batching ?? []}
-        onFinished={() => void refresh()}
+        onStarted={() => void refresh()}
       />
 
       {fromSource && (
@@ -721,7 +689,7 @@ export function SeriesView({
           seriesId={seriesId}
           sourceName={sourceLabel(series?.source)}
           chapters={fromSource}
-          onFinished={() => void refresh()}
+          onStarted={() => void refresh()}
         />
       )}
 
@@ -962,79 +930,6 @@ function VolumeArt({ volume, dimmed }: { volume: VolumeStatus; dimmed: boolean }
 }
 
 /** Progress while a batch builds, then what it produced. */
-function BuildStatus({
-  progress,
-  sending,
-  report,
-  onDismiss,
-  onError,
-}: {
-  progress: BuildBatchProgress | null;
-  sending: boolean;
-  report: BuildBatchReport | null;
-  onDismiss: () => void;
-  onError: (message: string) => void;
-}) {
-  return (
-    <div className="absolute bottom-4 left-1/2 z-40 flex w-[min(34rem,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 shadow-lg">
-      {sending ? (
-        <>
-          <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
-          <p className="min-w-0 flex-1 text-xs font-medium">Sending to your Kindle…</p>
-        </>
-      ) : progress ? (
-        <>
-          <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium">
-              Building volume {progress.volume} ({progress.index}/{progress.total})
-            </p>
-            <p className="text-[11px] text-muted-foreground">
-              {progress.pages > 0
-                ? `${progress.done}/${progress.pages} pages`
-                : "assembling…"}
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => void cancelBuild()}>
-            Stop
-          </Button>
-        </>
-      ) : report ? (
-        <>
-          <Check className="size-4 shrink-0 text-primary" />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium">
-              {report.cancelled ? "Stopped. " : ""}
-              {report.built.length} built
-              {report.failed.length > 0 && `, ${report.failed.length} failed`}
-            </p>
-            <p className="truncate text-[11px] text-muted-foreground">
-              {report.failed.length > 0
-                ? report.failed.map((f) => `v${f.volume}: ${f.error}`).join(" · ")
-                : report.built
-                    .map((b) => `v${b.volume} ${formatBytes(b.bytes)}`)
-                    .join(" · ")}
-            </p>
-          </div>
-          {report.built[0] && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                void deliverBuilt(report.built[0].path).catch((e) => onError(String(e)))
-              }
-            >
-              {DELIVER_LABEL}
-            </Button>
-          )}
-          <Button variant="ghost" size="icon-sm" onClick={onDismiss}>
-            <X className="size-3" />
-          </Button>
-        </>
-      ) : null}
-    </div>
-  );
-}
 
 /** The selected volume's chapters. */
 function VolumePanel({

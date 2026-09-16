@@ -26,6 +26,7 @@ mod meta;
 mod reader;
 mod send;
 mod settings;
+mod tasks;
 mod thumbs;
 mod util;
 mod volume;
@@ -33,8 +34,7 @@ mod volume;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
-        .manage(fetch::BatchControl::default())
-        .manage(library::BuildControl::default())
+        .manage(tasks::Queue::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
@@ -53,6 +53,9 @@ pub fn run() {
             volume::suggest_filename,
             volume::resolve_build_path,
             export::share_file,
+            tasks::tasks_list,
+            tasks::task_cancel,
+            tasks::tasks_clear_finished,
             update::android_update_check,
             update::android_update_install,
             fetch::download_from_source,
@@ -88,7 +91,6 @@ pub fn run() {
             library::library_build_volume,
             library::library_delete_chapter,
             library::build_library_volumes,
-            library::cancel_build,
             fetch::extract_chapter,
             fetch::measure_images,
             fetch::preview_image,
@@ -97,7 +99,6 @@ pub fn run() {
             fetch::download_chapter_from_source,
             fetch::plan_batch,
             fetch::download_batch,
-            fetch::cancel_batch,
             send::send_config,
             send::save_send_config,
             send::send_test_email,

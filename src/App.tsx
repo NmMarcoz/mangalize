@@ -3,10 +3,11 @@ import { onBackButtonPress } from "@tauri-apps/api/app";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { exit } from "@tauri-apps/plugin-process";
-import { AlertTriangle, X } from "lucide-react";
+import { AlertTriangle, ListChecks, Loader2, X } from "lucide-react";
 
 import { EmptyState } from "@/components/EmptyState";
 import { Sidebar, type Section } from "@/components/Sidebar";
+import { TaskPanel, useTasks } from "@/components/TaskPanel";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -86,6 +87,8 @@ export default function App() {
   // Browsing survives leaving for a series and coming back; see `ExploreView`.
   const [browse, setBrowse] = useState<BrowseState>(emptyBrowse);
   const [shelf, setShelf] = useState<ShelfState>(emptyShelf);
+  const [showTasks, setShowTasks] = useState(false);
+  const { tasks, active } = useTasks();
 
   const updater = useUpdater();
 
@@ -303,6 +306,7 @@ export default function App() {
           }}
           defaultFormat={settings.default_format}
           onError={setError}
+          onTasksChanged={() => setShowTasks(true)}
         />
       );
     }
@@ -385,6 +389,31 @@ export default function App() {
         >
           {body()}
         </div>
+
+        {/* Reachable from every screen, because the queue outlives all of them.
+            Hidden in the reader, which is the one place that gives up its
+            chrome on purpose. */}
+        {chrome && (tasks.length > 0 || active > 0) && (
+          <button
+            onClick={() => setShowTasks((open) => !open)}
+            title="Tasks"
+            className={cn(
+              "absolute right-3 top-3 z-40 flex items-center gap-1.5 rounded-full border border-border bg-card/95 px-2.5 py-1 text-[11px] shadow-lg backdrop-blur",
+              active > 0 ? "text-foreground" : "text-muted-foreground",
+            )}
+          >
+            {active > 0 ? (
+              <Loader2 className="size-3 animate-spin text-primary" />
+            ) : (
+              <ListChecks className="size-3" />
+            )}
+            {active > 0 ? `${active} running` : "Tasks"}
+          </button>
+        )}
+
+        {chrome && showTasks && (
+          <TaskPanel tasks={tasks} onClose={() => setShowTasks(false)} />
+        )}
 
         <UpdateBanner
           state={updater.state}

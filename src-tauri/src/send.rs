@@ -38,8 +38,8 @@ struct SendProgress {
 
 #[derive(Serialize)]
 pub struct SendReport {
-    sent: Vec<String>,
-    failed: Vec<SendFailure>,
+    pub sent: Vec<String>,
+    pub failed: Vec<SendFailure>,
 }
 
 #[derive(Serialize)]
@@ -160,17 +160,28 @@ pub async fn send_test_email(app: AppHandle) -> Result<(), String> {
 /// the attachment limit on the second volume.
 #[tauri::command]
 pub async fn send_files(app: AppHandle, paths: Vec<String>) -> Result<SendReport, String> {
-    blocking(move || {
-        #[cfg(not(desktop))]
-        bail!("{UNAVAILABLE}");
+    blocking(move || deliver_all(&app, &paths)).await
+}
 
-        #[cfg(desktop)]
-        {
+/// Mail a set of built volumes to the configured device.
+///
+/// Split out of the command because a queued build finishes by doing exactly
+/// this, and "build then send" should be one job rather than something the user
+/// has to come back and finish by hand.
+pub fn deliver_all(app: &AppHandle, paths: &[String]) -> anyhow::Result<SendReport> {
+    #[cfg(not(desktop))]
+    {
+        let _ = (app, paths);
+        bail!("{UNAVAILABLE}");
+    }
+
+    #[cfg(desktop)]
+    {
         if paths.is_empty() {
             bail!("nothing to send");
         }
 
-        let config = settings::load(&app)?.delivery;
+        let config = settings::load(app)?.delivery;
         let to = config.kindle_email.trim().to_string();
         if to.is_empty() {
             bail!("no device address set — add one under Send");
@@ -203,9 +214,7 @@ pub async fn send_files(app: AppHandle, paths: Vec<String>) -> Result<SendReport
         }
 
         Ok(SendReport { sent, failed })
-        }
-    })
-    .await
+    }
 }
 
 fn deliver(

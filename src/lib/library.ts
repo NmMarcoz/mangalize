@@ -229,9 +229,7 @@ export const planBatch = (url: string, wanted: string[]) =>
   invoke<BatchPlan>("plan_batch", { url, wanted });
 
 export const downloadBatch = (id: number, items: BatchItem[]) =>
-  invoke<BatchReport>("download_batch", { id, items });
-
-export const cancelBatch = () => invoke<void>("cancel_batch");
+  invoke<number>("download_batch", { id, items });
 
 /**
  * Fetch missing chapters straight from the metadata source.
@@ -241,7 +239,7 @@ export const cancelBatch = () => invoke<void>("cancel_batch");
  * nothing to infer, so this takes the chapter numbers directly.
  */
 export const downloadFromSource = (id: number, chapters: string[]) =>
-  invoke<BatchReport>("download_from_source", { id, chapters });
+  invoke<number>("download_from_source", { id, chapters });
 
 /* ------------------------------------------------------------------ helpers */
 

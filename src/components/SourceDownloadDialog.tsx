@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { Check, Download, Loader2 } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -9,13 +8,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Progress } from "@/components/ui/progress";
-import {
-  cancelBatch,
-  downloadFromSource,
-  type BatchProgress,
-  type BatchReport,
-} from "@/lib/library";
+import { downloadFromSource } from "@/lib/library";
 
 interface SourceDownloadDialogProps {
   open: boolean;
@@ -25,7 +18,8 @@ interface SourceDownloadDialogProps {
   sourceName: string;
   /** The chapter numbers to fetch, in order. */
   chapters: string[];
-  onFinished: (report: BatchReport) => void;
+  /** Told once the run is on the queue, so the caller can point at it. */
+  onStarted: () => void;
 }
 
 /**
@@ -43,45 +37,34 @@ export function SourceDownloadDialog({
   seriesId,
   sourceName,
   chapters,
-  onFinished,
+  onStarted,
 }: SourceDownloadDialogProps) {
-  const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState<BatchProgress | null>(null);
-  const [report, setReport] = useState<BatchReport | null>(null);
+  const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setRunning(false);
-    setProgress(null);
-    setReport(null);
+    setStarting(false);
     setError(null);
   }, [open]);
 
-  useEffect(() => {
-    const pending = listen<BatchProgress>("batch-progress", (e) => setProgress(e.payload));
-    return () => {
-      void pending.then((fn) => fn());
-    };
-  }, []);
-
+  // Handed to the queue rather than run here. A run of forty chapters is
+  // minutes of work, and this dialog used to be where you spent them.
   const run = useCallback(async () => {
-    setRunning(true);
+    setStarting(true);
     setError(null);
     try {
-      const done = await downloadFromSource(seriesId, chapters);
-      setReport(done);
-      onFinished(done);
+      await downloadFromSource(seriesId, chapters);
+      onStarted();
+      onOpenChange(false);
     } catch (e) {
       setError(String(e));
-    } finally {
-      setRunning(false);
-      setProgress(null);
+      setStarting(false);
     }
-  }, [seriesId, chapters, onFinished]);
+  }, [seriesId, chapters, onStarted, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !running && onOpenChange(next)}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <div className="border-b border-border px-4 py-3">
           <DialogTitle>Get {chapters.length} from {sourceName}</DialogTitle>
@@ -92,47 +75,12 @@ export function SourceDownloadDialog({
         </div>
 
         <div className="min-h-0 flex-1 px-4 py-3">
-          {report ? (
-            <div className="flex flex-col gap-2">
-              <p className="flex items-center gap-2 text-xs">
-                <Check className="size-3.5 text-primary" />
-                {report.downloaded.length} downloaded
-                {report.cancelled && " · stopped"}
-              </p>
-              {report.failed.length > 0 && (
-                <div className="scrollbar-thin max-h-40 overflow-y-auto rounded-md border border-amber-500/40 bg-amber-500/5 p-2">
-                  {report.failed.map((f) => (
-                    <p key={f.number} className="text-[11px] text-muted-foreground">
-                      <span className="font-medium text-foreground">{f.number}</span>{" "}
-                      {f.error}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : running ? (
-            <div className="flex flex-col gap-2">
-              <Progress
-                value={
-                  progress ? (progress.index / Math.max(1, progress.total)) * 100 : 0
-                }
-              />
-              <p className="font-mono text-[11px] text-muted-foreground">
-                {progress
-                  ? `${progress.stage} ${progress.chapter} · ${progress.index}/${progress.total}` +
-                    (progress.page_total > 0
-                      ? ` · ${progress.done}/${progress.page_total} pages`
-                      : "")
-                  : "starting…"}
-              </p>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {chapters.length === 1
-                ? `Chapter ${chapters[0]}.`
-                : `Chapters ${chapters[0]} to ${chapters[chapters.length - 1]}.`}
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground">
+            {chapters.length === 1
+              ? `Chapter ${chapters[0]}.`
+              : `Chapters ${chapters[0]} to ${chapters[chapters.length - 1]}.`}{" "}
+            This runs in the background — you can close this and carry on reading.
+          </p>
 
           {error && (
             <p className="mt-2 text-xs text-destructive" data-selectable>
@@ -142,21 +90,13 @@ export function SourceDownloadDialog({
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
-          {running ? (
-            <Button variant="outline" onClick={() => void cancelBatch()}>
-              Stop
-            </Button>
-          ) : (
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>
-              {report ? "Close" : "Cancel"}
-            </Button>
-          )}
-          {!report && (
-            <Button onClick={() => void run()} disabled={running || chapters.length === 0}>
-              {running ? <Loader2 className="animate-spin" /> : <Download />}
-              Download
-            </Button>
-          )}
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => void run()} disabled={starting || chapters.length === 0}>
+            {starting ? <Loader2 className="animate-spin" /> : <Download />}
+            Download
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

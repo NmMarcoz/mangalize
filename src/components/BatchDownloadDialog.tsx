@@ -6,7 +6,6 @@ import {
   Download,
   Loader2,
   Search,
-  X,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +20,6 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
-  cancelBatch,
   downloadBatch,
   planBatch,
   summariseRuns,
@@ -36,7 +34,8 @@ interface BatchDownloadDialogProps {
   seriesId: number;
   /** The chapter numbers currently missing, in order. */
   missing: string[];
-  onFinished: (report: BatchReport) => void;
+  /** Told once the run is on the queue. */
+  onStarted: () => void;
 }
 
 type Stage = "idle" | "planning" | "ready" | "running" | "done";
@@ -54,7 +53,7 @@ export function BatchDownloadDialog({
   onOpenChange,
   seriesId,
   missing,
-  onFinished,
+  onStarted,
 }: BatchDownloadDialogProps) {
   const [url, setUrl] = useState("");
   const [stage, setStage] = useState<Stage>("idle");
@@ -96,22 +95,22 @@ export function BatchDownloadDialog({
     }
   }, [url, missing]);
 
+  // The plan is still confirmed here — a constructed URL can be wrong, and that
+  // is worth seeing before anything downloads. Only the downloading itself
+  // moved to the queue.
   const run = useCallback(async () => {
     if (!plan || plan.items.length === 0) return;
     setStage("running");
     setError(null);
     try {
-      const result = await downloadBatch(seriesId, plan.items);
-      setReport(result);
-      setStage("done");
-      onFinished(result);
+      await downloadBatch(seriesId, plan.items);
+      onStarted();
+      onOpenChange(false);
     } catch (e) {
       setError(String(e));
       setStage("ready");
-    } finally {
-      setProgress(null);
     }
-  }, [plan, seriesId, onFinished]);
+  }, [plan, seriesId, onStarted, onOpenChange]);
 
   const running = stage === "running";
   const busy = running || stage === "planning";
@@ -273,16 +272,9 @@ export function BatchDownloadDialog({
           )}
 
           <div className="ml-auto flex gap-2">
-            {running ? (
-              <Button variant="outline" onClick={() => void cancelBatch()}>
-                <X />
-                Stop after this chapter
-              </Button>
-            ) : (
-              <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-                {stage === "done" ? "Close" : "Cancel"}
-              </Button>
-            )}
+            <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
+              Cancel
+            </Button>
 
             {stage !== "done" && (
               <Button

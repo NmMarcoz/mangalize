@@ -182,6 +182,30 @@ Batches take chapters one at a time with a pause between them
 usually a small one. A per-chapter failure is recorded and the run continues —
 one dead page in chapter 30 must not cost the user chapters 31 to 50.
 
+## Background work (`src-tauri/src/tasks.rs`)
+
+Downloading a run of chapters or writing a volume takes minutes. Those used to
+run inside the dialog that started them: closing it was not an option and the
+app was unusable meanwhile. They are queued now — the caller gets a task id and
+returns, and the work carries on while the user reads.
+
+- **One worker, not a pool.** Everything queued talks to a single host, which is
+  what `BETWEEN_CHAPTERS` is being polite about; four at once would undo it. It
+  also makes the queue a queue rather than a heap, which is what makes it worth
+  showing.
+- **Cancellation is per task.** Stopping the download you just started must not
+  stop the one you queued ten minutes ago. The old global `BatchControl` and
+  `BuildControl` flags are gone; two cancel mechanisms is one too many.
+- A job is handed a `Progress` and nothing else: it can say what it is doing and
+  ask whether to stop, and cannot reach the queue or the other tasks.
+- A job that returns tidily *because* it was cancelled is reported as cancelled,
+  not done. It stopped early, and saying otherwise would be a lie.
+- Build-and-send is one task: the send happens at the end of the build rather
+  than being something the user comes back to finish. A mail failure is recorded
+  in the summary and does not turn a successful build into a failed one.
+- The frontend keeps the list in `useTasks`, above every screen, because the
+  queue outlives all of them.
+
 ## The harvest window (`src-tauri/src/harvest.rs`)
 
 For pages that build themselves in JavaScript, the app opens the URL in a real
