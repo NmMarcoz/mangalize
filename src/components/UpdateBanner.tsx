@@ -1,10 +1,11 @@
 import { Download, Loader2, RefreshCw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { isAndroid } from "@/lib/platform";
+import { isAndroid, isMobile } from "@/lib/platform";
 import { Progress } from "@/components/ui/progress";
 import type { UpdateState } from "@/hooks/useUpdater";
 import { formatBytes } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 interface UpdateBannerProps {
   state: UpdateState;
@@ -37,7 +38,15 @@ export function UpdateBanner({
   if (!showing) return null;
 
   return (
-    <div className="absolute bottom-4 left-1/2 z-50 flex w-[min(32rem,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 shadow-lg">
+    <div
+      className={cn(
+        "absolute left-1/2 z-50 flex w-[min(32rem,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 shadow-lg",
+        // A phone's navigation lives at the bottom of the window, and this was
+        // landing on top of it — the tabs stopped responding while an update
+        // was on offer, which reads as the app being broken.
+        isMobile ? "bottom-20" : "bottom-4",
+      )}
+    >
       {state.stage === "installed" ? (
         <>
           <RefreshCw className="size-4 shrink-0 text-primary" />

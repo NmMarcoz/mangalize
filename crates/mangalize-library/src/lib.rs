@@ -106,6 +106,33 @@ impl Library {
         self.insert_series(new, false)
     }
 
+    /// Replace what the source knows about a series, leaving the user's own
+    /// choices — language, direction, and the folder — alone.
+    fn fill_from_source(&self, id: SeriesId, new: &NewSeries) -> Result<()> {
+        self.db.execute(
+            "UPDATE series SET title = ?1, title_romaji = ?2, title_native = ?3,
+                               author = ?4, artist = ?5, description = ?6,
+                               year = ?7, status = ?8, site_url = ?9,
+                               tags = ?10, content_rating = ?11
+              WHERE id = ?12",
+            params![
+                new.title,
+                new.title_romaji,
+                new.title_native,
+                new.author,
+                new.artist,
+                new.description,
+                new.year,
+                new.status,
+                new.site_url,
+                new.tags.join("\n"),
+                new.content_rating,
+                id.0,
+            ],
+        )?;
+        Ok(())
+    }
+
     /// Put a series that was only recorded onto the shelf.
     pub fn shelve(&self, id: SeriesId) -> Result<()> {
         self.db
@@ -122,7 +149,13 @@ impl Library {
                 // every command downstream worked on it, so the series page and
                 // its downloads behaved normally, and the grid never showed it.
                 if shelved && !existing.shelved {
+                    // Reading something only ever recorded its title, because
+                    // that is all the reader had. Shelving it is the first time
+                    // the full metadata is to hand, so fill it in — otherwise a
+                    // series you streamed before adding sits in the library
+                    // reading "Unknown author" with no tags to filter by.
                     self.shelve(existing.id)?;
+                    self.fill_from_source(existing.id, &new)?;
                     return self.series(existing.id);
                 }
                 return Ok(existing);

@@ -770,3 +770,33 @@ fn adding_a_series_you_only_streamed_puts_it_on_the_shelf() {
     assert!(added.shelved, "and it is on the shelf now");
     assert_eq!(library.all_series().unwrap().len(), 1);
 }
+
+#[test]
+fn shelving_a_streamed_series_fills_in_what_reading_it_never_knew() {
+    let dir = TempDir::new().unwrap();
+    let mut library = Library::open(dir.path()).unwrap();
+
+    // The reader has a title and nothing else.
+    library
+        .record_unshelved_series(NewSeries {
+            source: Some("mangadex".into()),
+            source_id: Some("dea77c2d".into()),
+            title: "Ichi the Witch".into(),
+            ..NewSeries::default()
+        })
+        .unwrap();
+
+    // Adding it properly is the first time the rest is to hand.
+    let added = library
+        .add_series(NewSeries {
+            tags: vec!["Action".into()],
+            content_rating: Some("safe".into()),
+            ..ichi()
+        })
+        .unwrap();
+
+    assert_eq!(added.author, "Nishi Osamu");
+    assert_eq!(added.year, Some(2024));
+    assert_eq!(added.tags, ["Action"]);
+    assert_eq!(added.content_rating.as_deref(), Some("safe"));
+}

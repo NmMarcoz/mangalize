@@ -403,7 +403,13 @@ export default function App() {
         )}
 
         {error && (
-          <div className="absolute bottom-4 left-1/2 z-50 flex max-w-xl -translate-x-1/2 items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive shadow-lg">
+          <div
+            className={cn(
+              "absolute left-1/2 z-50 flex max-w-xl -translate-x-1/2 items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive shadow-lg",
+              // Clear of the tab bar, for the same reason the update banner is.
+              isMobile ? "bottom-20" : "bottom-4",
+            )}
+          >
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
             <span className="flex-1" data-selectable>
               {error}
