@@ -18,6 +18,10 @@ export interface ReaderChapter {
   last_page: number;
   previous: string | null;
   next: string | null;
+  /** Enough to read the same chapter in another translation, by streaming it. */
+  source: string | null;
+  series_source_id: string | null;
+  language: string;
 }
 
 /** Mirrors `mangalize_library::model::HistoryEntry`. */

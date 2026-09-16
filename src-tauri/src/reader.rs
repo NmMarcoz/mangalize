@@ -49,6 +49,12 @@ pub struct ReaderChapter {
     /// Adjacent chapters that are downloaded, for moving between them.
     pub previous: Option<String>,
     pub next: Option<String>,
+    /// Where this series came from, when it came from anywhere. Enough to read
+    /// the same chapter in another translation, which means streaming it — the
+    /// pages on disk are in one language and cannot be swapped.
+    pub source: Option<String>,
+    pub series_source_id: Option<String>,
+    pub language: String,
 }
 
 fn open(app: &AppHandle) -> anyhow::Result<Library> {
@@ -82,8 +88,8 @@ pub async fn reader_chapter(
 
         Ok(ReaderChapter {
             series_id: id,
-            series_title: series.title,
-            direction: series.direction,
+            series_title: series.title.clone(),
+            direction: series.direction.clone(),
             // A position past the end would open on a blank screen; a chapter
             // can shrink if it is re-downloaded from a shorter rip.
             last_page: stored.last_page.min(pages.len().saturating_sub(1) as u32),
@@ -92,6 +98,9 @@ pub async fn reader_chapter(
             title: stored.title,
             previous: at.and_then(|i| i.checked_sub(1)).and_then(|i| order.get(i).cloned()),
             next: at.and_then(|i| order.get(i + 1).cloned()),
+            source: series.source,
+            series_source_id: series.source_id,
+            language: series.language,
         })
     })
     .await

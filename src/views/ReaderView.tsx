@@ -29,7 +29,7 @@ import {
   type ReaderPrefs,
   type ReaderTarget,
 } from "@/lib/reader";
-import { languageName } from "@/lib/api";
+import { languageName, type MetaSource } from "@/lib/api";
 import { isMobile } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
@@ -78,6 +78,14 @@ interface OpenChapter {
   next: ReaderTarget | null;
   /** Where to record progress. Absent for a series not in the library. */
   progress: { seriesId: number; chapter: string } | null;
+  /**
+   * How to reach this series at its source, when it has one.
+   *
+   * Carried on the open chapter rather than taken from the target, because a
+   * downloaded chapter's target says nothing about the source and reading it in
+   * another translation means streaming that one.
+   */
+  online_source: { source: MetaSource; seriesSourceId: string; language: string } | null;
 }
 
 /**
@@ -147,6 +155,14 @@ export function ReaderView({
             ? { kind: "library", seriesId: target.seriesId, chapter: found.next }
             : null,
           progress: { seriesId: target.seriesId, chapter: found.number },
+          online_source:
+            found.source && found.series_source_id
+              ? {
+                  source: found.source as MetaSource,
+                  seriesSourceId: found.series_source_id,
+                  language: found.language,
+                }
+              : null,
         });
         setPage(found.last_page);
         return;
@@ -226,6 +242,13 @@ export function ReaderView({
         previous: sibling(at - 1),
         next: sibling(at + 1),
         progress: seriesId ? { seriesId, chapter: target.chapterNumber } : null,
+        online_source: target.seriesSourceId
+          ? {
+              source: target.source,
+              seriesSourceId: target.seriesSourceId,
+              language: target.language,
+            }
+          : null,
       });
       setPage(Math.min(keepPage.current ?? 0, found.pages.length - 1));
       keepPage.current = null;
@@ -396,35 +419,42 @@ export function ReaderView({
    */
   const swapTranslation = useCallback(
     async (code: string) => {
-      if (target.kind !== "online" || !target.seriesSourceId || code === target.language) {
-        return;
-      }
+      const from = open?.online_source;
+      if (!open || !from || code === from.language) return;
+
       setSwitching(true);
       try {
-        const ordered = await readerOnlineChapters(target.source, target.seriesSourceId, code);
-        const found = ordered.find((c) => c.number === target.chapterNumber);
+        const ordered = await readerOnlineChapters(from.source, from.seriesSourceId, code);
+        const found = ordered.find((c) => c.number === open.number);
         if (!found) {
           setFailure({
-            message: `There is no chapter ${target.chapterNumber} in ${languageName(code)}.`,
+            message: `There is no chapter ${open.number} in ${languageName(code)}.`,
             externalUrl: null,
           });
           return;
         }
-        // The page survives because the reader reopens on `startPage`, and the
-        // target it is handed carries the page we are on right now.
+
+        // Always a stream, even from a downloaded chapter: the pages on disk
+        // are in one language and cannot be swapped for another's.
         keepPage.current = page;
         onNavigate({
-          ...target,
+          kind: "online",
+          source: from.source,
+          chapterId: found.id,
+          seriesTitle: open.seriesTitle,
+          chapterNumber: found.number,
+          direction: open.direction,
           language: code,
           chapters: ordered,
-          chapterId: found.id,
-          chapterNumber: found.number,
+          seriesSourceId: from.seriesSourceId,
+          coverUrl: null,
+          librarySeriesId: open.progress?.seriesId ?? null,
         });
       } finally {
         setSwitching(false);
       }
     },
-    [target, page, onNavigate],
+    [open, page, onNavigate],
   );
 
   const patchPrefs = useCallback((patch: Partial<ReaderPrefs>) => {
@@ -545,8 +575,9 @@ export function ReaderView({
             className="text-white"
             onClick={() => {
               setShowSettings((v) => !v);
-              if (target.kind === "online" && target.seriesSourceId && !translations.length) {
-                void seriesTranslations(target.source, target.seriesSourceId)
+              const from = open.online_source;
+              if (from && !translations.length) {
+                void seriesTranslations(from.source, from.seriesSourceId)
                   .then(setTranslations)
                   .catch(() => {});
               }
@@ -653,8 +684,8 @@ export function ReaderView({
         <ReaderSettings
           prefs={prefs}
           seriesDirection={open.direction}
-          translations={target.kind === "online" ? translations : []}
-          language={target.kind === "online" ? target.language : ""}
+          translations={open.online_source ? translations : []}
+          language={open.online_source?.language ?? ""}
           switching={switching}
           onLanguage={(code) => void swapTranslation(code)}
           onChange={patchPrefs}
