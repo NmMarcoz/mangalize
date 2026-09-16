@@ -236,6 +236,10 @@ export default function App() {
                       seriesTitle: entry.series_title,
                       chapterNumber: entry.chapter,
                       direction: "right-to-left",
+                      // Back to the translation it was read in, not a default.
+                      language: entry.language,
+                      // Left for the reader to fetch: it needs the list anyway,
+                      // and this is the one entry point that has never had it.
                       chapters: [],
                       seriesSourceId: entry.series_source_id,
                       coverUrl: null,

@@ -99,3 +99,22 @@ pub async fn save_cover(app: AppHandle, url: String) -> Result<String, String> {
     })
     .await
 }
+
+/// Which translations the source has for a series.
+///
+/// By the source's own id, so the reader can ask about something that was never
+/// added to the library.
+#[tauri::command]
+pub async fn series_translations(
+    source: mangalize_meta::Source,
+    series_source_id: String,
+) -> Result<Vec<String>, String> {
+    crate::util::blocking(move || match source {
+        mangalize_meta::Source::MangaDex => {
+            Ok(mangalize_meta::mangadex::manga(&series_source_id)?.available_languages)
+        }
+        // Kitsu indexes no chapters, so it offers no translations either.
+        mangalize_meta::Source::Kitsu => Ok(Vec::new()),
+    })
+    .await
+}

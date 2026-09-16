@@ -96,6 +96,14 @@ Thresholds are named consts at the top of `sieve.rs` (`HEIGHT_MIN`, `WIDTH_MAX`,
   shapes are deep, optional and mostly discarded.
 - MangaDex's canonical `title` is in whatever language the uploader chose, so the
   English name usually lives in `altTitles` — see `localized()`.
+- **Chapter ids are per-language; chapter numbers are not.** That is what makes
+  switching translation in the reader possible at all: the same chapter is found
+  in another language by matching its *number*, and the page is carried across
+  and clamped, because another group's rip of the same chapter can be shorter.
+- A streamed series records which translation it was read in, so history and
+  "continue reading" come back to that one rather than to a default. Only for a
+  series that is not on the shelf — one the user added has a language they chose,
+  and reading must not quietly change it.
 - Query `/aggregate` **without** `translatedLanguage`. Filtering gives a sparse,
   misleading volume map. (Also in the README; it is the one trap worth repeating.)
 - `volume_sort_key` keeps "10" after "2" and unparseable labels last.

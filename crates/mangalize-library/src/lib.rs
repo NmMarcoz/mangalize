@@ -825,7 +825,7 @@ impl Library {
             // serve is reachable whether or not it was ever downloaded.
             "SELECT s.id, s.slug, s.title, s.cover_path,
                     c.number, c.last_page, c.page_count, c.opened_at, c.read_at,
-                    c.folder, s.source, s.source_id, c.source_id
+                    c.folder, s.source, s.source_id, c.source_id, s.language
                FROM chapters c
                JOIN series s ON s.id = c.series_id
               WHERE c.opened_at IS NOT NULL
@@ -856,6 +856,7 @@ impl Library {
                 source: row.get(10)?,
                 series_source_id: row.get(11)?,
                 chapter_source_id: row.get(12)?,
+                language: row.get(13)?,
             })
         };
 

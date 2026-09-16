@@ -36,6 +36,8 @@ export interface HistoryEntry {
   source: string | null;
   series_source_id: string | null;
   chapter_source_id: string | null;
+  /** The translation it was read in, so reopening comes back to the same one. */
+  language: string;
 }
 
 /**
@@ -55,6 +57,8 @@ export type ReaderTarget =
       seriesTitle: string;
       chapterNumber: string;
       direction: string;
+      /** Which translation this is, so it can be swapped and come back to. */
+      language: string;
       /**
        * Every chapter of this translation, in reading order.
        *
@@ -108,7 +112,29 @@ export const readerTrackOnline = (args: {
   chapter: string;
   chapterSourceId: string;
   pages: number;
+  language: string | null;
 }) => invoke<number>("reader_track_online", { read: args });
+
+/**
+ * Which translations the source has for a series.
+ *
+ * Takes the source's own id rather than a library row, because the reader may
+ * be showing something that was never added.
+ */
+export const seriesTranslations = (source: MetaSource, seriesSourceId: string) =>
+  invoke<string[]>("series_translations", { source, seriesSourceId });
+
+/** Every chapter of a series in one translation, in reading order. */
+export const readerOnlineChapters = (
+  source: MetaSource,
+  seriesSourceId: string,
+  language: string | null,
+) =>
+  invoke<{ id: string; number: string }[]>("reader_online_chapters", {
+    source,
+    seriesSourceId,
+    language,
+  });
 
 export const readerChapter = (id: number, chapter: string) =>
   invoke<ReaderChapter>("reader_chapter", { id, chapter });

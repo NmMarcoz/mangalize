@@ -20,6 +20,8 @@ import {
   loadPrefs,
   readerChapter,
   readerOnlineChapter,
+  readerOnlineChapters,
+  seriesTranslations,
   readerTrackOnline,
   savePrefs,
   saveReadingProgress,
@@ -27,6 +29,7 @@ import {
   type ReaderPrefs,
   type ReaderTarget,
 } from "@/lib/reader";
+import { languageName } from "@/lib/api";
 import { isMobile } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
@@ -163,13 +166,32 @@ export function ReaderView({
         return;
       }
 
+      // History reopening a single entry has no list, and the reader needs one
+      // to move on from here. Fetched rather than demanded of every caller,
+      // because this is the one that has never been able to supply it.
+      let ordered = target.chapters;
+      if (ordered.length === 0 && target.seriesSourceId) {
+        ordered = await readerOnlineChapters(
+          target.source,
+          target.seriesSourceId,
+          target.language || null,
+        ).catch(() => []);
+        if (cancelled) return;
+      }
+
       // Position looked up in the list each time rather than carried along, so
       // moving to a chapter produces a target that knows its own neighbours.
-      const at = target.chapters.findIndex((c) => c.id === target.chapterId);
+      const at = ordered.findIndex((c) => c.id === target.chapterId);
       const sibling = (index: number): ReaderTarget | null => {
-        const found = at < 0 ? undefined : target.chapters[index];
+        const found = at < 0 ? undefined : ordered[index];
         return found
-          ? { ...target, chapterId: found.id, chapterNumber: found.number, kind: "online" }
+          ? {
+              ...target,
+              chapters: ordered,
+              chapterId: found.id,
+              chapterNumber: found.number,
+              kind: "online",
+            }
           : null;
       };
 
@@ -189,6 +211,7 @@ export function ReaderView({
             chapter: target.chapterNumber,
             chapterSourceId: target.chapterId,
             pages: found.pages.length,
+            language: target.language || null,
           }).catch(() => target.librarySeriesId);
       if (cancelled) return;
 
@@ -199,12 +222,13 @@ export function ReaderView({
         direction: target.direction,
         pages: found.pages,
         online: true,
-        startPage: 0,
+        startPage: Math.min(keepPage.current ?? 0, found.pages.length - 1),
         previous: sibling(at - 1),
         next: sibling(at + 1),
         progress: seriesId ? { seriesId, chapter: target.chapterNumber } : null,
       });
-      setPage(0);
+      setPage(Math.min(keepPage.current ?? 0, found.pages.length - 1));
+      keepPage.current = null;
     };
 
     run().catch((e) => {
@@ -349,8 +373,59 @@ export function ReaderView({
 
   // Where a touch started, and whether the gesture that just ended was a swipe
   // rather than a tap. Refs because neither ever needs to paint anything.
+  /** Translations the source has, fetched when the settings panel is opened. */
+  const [translations, setTranslations] = useState<string[]>([]);
+  const [switching, setSwitching] = useState(false);
+  /**
+   * The page to land on after a translation swap.
+   *
+   * A ref, not state: it is consumed by the load that follows and must not
+   * survive into the next chapter the reader opens normally.
+   */
+  const keepPage = useRef<number | null>(null);
+
   const swipe = useRef<{ x: number; y: number } | null>(null);
   const swiped = useRef(false);
+
+  /**
+   * Read this same chapter in another translation.
+   *
+   * Matched by chapter *number*, because that is the only thing the two
+   * translations agree on — the ids are per-language. The page is kept and
+   * clamped: a different group's rip of the same chapter can be shorter.
+   */
+  const swapTranslation = useCallback(
+    async (code: string) => {
+      if (target.kind !== "online" || !target.seriesSourceId || code === target.language) {
+        return;
+      }
+      setSwitching(true);
+      try {
+        const ordered = await readerOnlineChapters(target.source, target.seriesSourceId, code);
+        const found = ordered.find((c) => c.number === target.chapterNumber);
+        if (!found) {
+          setFailure({
+            message: `There is no chapter ${target.chapterNumber} in ${languageName(code)}.`,
+            externalUrl: null,
+          });
+          return;
+        }
+        // The page survives because the reader reopens on `startPage`, and the
+        // target it is handed carries the page we are on right now.
+        keepPage.current = page;
+        onNavigate({
+          ...target,
+          language: code,
+          chapters: ordered,
+          chapterId: found.id,
+          chapterNumber: found.number,
+        });
+      } finally {
+        setSwitching(false);
+      }
+    },
+    [target, page, onNavigate],
+  );
 
   const patchPrefs = useCallback((patch: Partial<ReaderPrefs>) => {
     setPrefs((current) => {
@@ -468,7 +543,14 @@ export function ReaderView({
             variant="ghost"
             size="icon"
             className="text-white"
-            onClick={() => setShowSettings((v) => !v)}
+            onClick={() => {
+              setShowSettings((v) => !v);
+              if (target.kind === "online" && target.seriesSourceId && !translations.length) {
+                void seriesTranslations(target.source, target.seriesSourceId)
+                  .then(setTranslations)
+                  .catch(() => {});
+              }
+            }}
           >
             <Settings2 />
           </Button>
@@ -571,6 +653,10 @@ export function ReaderView({
         <ReaderSettings
           prefs={prefs}
           seriesDirection={open.direction}
+          translations={target.kind === "online" ? translations : []}
+          language={target.kind === "online" ? target.language : ""}
+          switching={switching}
+          onLanguage={(code) => void swapTranslation(code)}
           onChange={patchPrefs}
           onClose={() => setShowSettings(false)}
         />

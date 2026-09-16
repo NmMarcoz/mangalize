@@ -14,6 +14,7 @@ import {
   X,
   PackageCheck,
   ExternalLink,
+  Cloud,
 } from "lucide-react";
 
 import { BatchDownloadDialog } from "@/components/BatchDownloadDialog";
@@ -444,6 +445,7 @@ export function SeriesView({
         seriesTitle: series.title,
         chapterNumber: chapter.number,
         direction: series.direction === "left-to-right" ? "left-to-right" : "right-to-left",
+        language: series.language,
         // The whole series in reading order, so finishing one chapter moves to
         // the next rather than stopping at whatever was opened.
         chapters: (volumes ?? [])
@@ -1137,6 +1139,16 @@ function ChapterRow({
               <FolderInput className="size-3" />
             </Button>
           </Hint>
+          {/* A chapter you do not hold is still readable when the source serves
+              it. That is what streaming is for, and the library had no way in. */}
+          {direct && (
+            <Hint label="Read from the source without downloading it">
+              <Button variant="ghost" size="sm" onClick={onRead} disabled={busy}>
+                <Cloud className="size-3" />
+                Read
+              </Button>
+            </Hint>
+          )}
           {direct ? (
             <>
               <Hint label="Paste a URL from somewhere else instead">

@@ -179,6 +179,7 @@ export function SeriesModal({
         // MangaDex publishes no reading direction, and nearly everything it
         // carries is drawn right to left.
         direction: "right-to-left",
+        language: language ?? "",
         // Only the ones that can actually be opened, so "next" never lands on
         // a chapter the source indexes but does not serve.
         chapters: flat

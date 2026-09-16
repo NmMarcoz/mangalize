@@ -1,11 +1,17 @@
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { languageName } from "@/lib/api";
 import { FITS, MODES, type ReaderPrefs } from "@/lib/reader";
 import { cn } from "@/lib/utils";
 
 interface ReaderSettingsProps {
+  /** Every translation the source has, or empty when there is nothing to pick. */
+  translations: string[];
+  language: string;
+  switching: boolean;
+  onLanguage: (code: string) => void;
   prefs: ReaderPrefs;
   /** What the series itself says, shown as the "Auto" option. */
   seriesDirection: string;
@@ -23,6 +29,10 @@ interface ReaderSettingsProps {
 export function ReaderSettings({
   prefs,
   seriesDirection,
+  translations,
+  language,
+  switching,
+  onLanguage,
   onChange,
   onClose,
 }: ReaderSettingsProps) {
@@ -37,6 +47,32 @@ export function ReaderSettings({
           <X className="size-3.5" />
         </Button>
       </div>
+
+      {/* Only when there is a choice. Swapping keeps the chapter and the page
+          and changes nothing but which images are fetched. */}
+      {translations.length > 1 && (
+        <section className="flex flex-col gap-1.5">
+          <Label className="text-white/70">Translation</Label>
+          <div className="flex items-center gap-2">
+            <select
+              value={language}
+              disabled={switching}
+              onChange={(e) => onLanguage(e.target.value)}
+              className="min-w-0 flex-1 rounded-md border border-white/15 bg-white/5 px-2 py-1.5 text-xs text-white disabled:opacity-50"
+            >
+              {translations.map((code) => (
+                <option key={code} value={code} className="bg-neutral-900">
+                  {languageName(code)}
+                </option>
+              ))}
+            </select>
+            {switching && <Loader2 className="size-3.5 animate-spin text-white/60" />}
+          </div>
+          <p className="text-[11px] text-white/45">
+            Keeps you on this chapter and page.
+          </p>
+        </section>
+      )}
 
       <section className="flex flex-col gap-1.5">
         <Label className="text-white/70">Layout</Label>

@@ -170,6 +170,9 @@ pub struct HistoryEntry {
     pub source: Option<String>,
     pub series_source_id: Option<String>,
     pub chapter_source_id: Option<String>,
+    /// The translation this series is read in. Reopening from history has to
+    /// come back to the one it was started in, not to a default.
+    pub language: String,
 }
 
 /// What changed when a published layout was merged in.

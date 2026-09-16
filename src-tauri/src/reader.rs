@@ -155,6 +155,49 @@ pub async fn reader_online_chapter(
 /// series gets a row — but an *unshelved* one: it shows up in history and can be
 /// resumed, while the library grid stays what the user chose to put there.
 /// Adding it properly later finds the same row and shelves it.
+/// One chapter of a translation, as the reader needs it: an id to open and a
+/// number to match against.
+#[derive(Serialize)]
+pub struct OnlineChapterRef {
+    pub id: String,
+    pub number: String,
+}
+
+/// Every chapter of a series in one translation, in reading order.
+///
+/// The reader needs this for two things that look different and are the same
+/// question. Moving to the next chapter needs to know what comes next, and
+/// history reopening a streamed chapter has to rebuild that list from nothing.
+/// Switching translation is the third: the chapter *numbers* line up across
+/// languages even though the ids do not, so the same list answers "where is
+/// chapter 6 in Portuguese".
+#[tauri::command]
+pub async fn reader_online_chapters(
+    source: mangalize_meta::Source,
+    series_source_id: String,
+    language: Option<String>,
+) -> Result<Vec<OnlineChapterRef>, String> {
+    blocking(move || {
+        let volumes = mangalize_meta::volume_chapters_in(
+            source,
+            &series_source_id,
+            language.as_deref().filter(|l| !l.is_empty()),
+        )?;
+        Ok(volumes
+            .into_iter()
+            .flat_map(|v| v.chapters)
+            .filter(|c| !c.unavailable)
+            .filter_map(|c| {
+                c.id.map(|id| OnlineChapterRef {
+                    id,
+                    number: c.number,
+                })
+            })
+            .collect())
+    })
+    .await
+}
+
 /// What the reader knows about a chapter it is streaming.
 ///
 /// A struct rather than seven arguments: they travel together, and the caller
@@ -170,6 +213,9 @@ pub struct OnlineRead {
     chapter_source_id: String,
     /// How long the chapter is, so history can say "page 4 of 37".
     pages: u32,
+    /// Which translation is being read. Recorded so that coming back to this
+    /// series later opens the language it was started in rather than a default.
+    language: Option<String>,
 }
 
 #[tauri::command]
@@ -182,6 +228,23 @@ pub async fn reader_track_online(app: AppHandle, read: OnlineRead) -> Result<i64
             title: read.title,
             ..Default::default()
         })?;
+
+        // Only for a series that is not on the shelf: one the user added has a
+        // language they chose, and reading it must not quietly change that.
+        if !series.shelved {
+            if let Some(language) = read.language.as_deref().filter(|l| !l.is_empty()) {
+                if language != series.language {
+                    library.update_series(
+                        series.id,
+                        &series.title,
+                        &series.author,
+                        &series.description,
+                        language,
+                        &series.direction,
+                    )?;
+                }
+            }
+        }
 
         library.record_streamed_chapter(
             series.id,
