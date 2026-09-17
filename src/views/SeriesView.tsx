@@ -47,6 +47,8 @@ import {
 } from "@/components/ui/select";
 import { Hint } from "@/components/ui/tooltip";
 import { useThumbnail } from "@/hooks/useThumbnail";
+import { useT } from "@/lib/i18n";
+import type { Translator } from "@/lib/i18n/types";
 import {
   languageName,
   deliverBuilt,
@@ -132,6 +134,7 @@ export function SeriesView({
   onError,
   onTasksChanged,
 }: SeriesViewProps) {
+  const t = useT();
   const [series, setSeries] = useState<Series | null>(null);
   const [volumes, setVolumes] = useState<VolumeStatus[] | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -529,9 +532,11 @@ export function SeriesView({
           <h1 className="truncate text-sm font-semibold">{series?.title ?? "…"}</h1>
           <p className="truncate text-[11px] text-muted-foreground">
             {series
-              ? `${series.author || "Unknown author"} · ${series.have_chapters}/${
-                  series.known_chapters || "?"
-                } chapters`
+              ? t("seriesView.headerSubtitle", {
+                  author: series.author || t("seriesView.unknownAuthor"),
+                  have: series.have_chapters,
+                  known: series.known_chapters || "?",
+                })
               : ""}
           </p>
         </div>
@@ -545,20 +550,20 @@ export function SeriesView({
           disabled={missing.length === 0}
           title={
             missing.length === 0
-              ? "Nothing is missing"
-              : `Find and download the ${missing.length} missing chapters`
+              ? t("seriesView.nothingMissing")
+              : t("seriesView.findMissingHint", { count: missing.length })
           }
         >
           <Layers />
-          Get {missing.length > 0 ? missing.length : ""} missing
+          {t("seriesView.getMissing", { count: missing.length > 0 ? missing.length : "" })}
         </Button>
 
-        <Hint label="Re-pull the published volume layout">
+        <Hint label={t("seriesView.rePullHint")}>
           <Button variant="ghost" size="icon" onClick={() => void sync()} disabled={syncing}>
             {syncing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
           </Button>
         </Hint>
-        <Hint label="Refetch title, credits, description and cover">
+        <Hint label={t("seriesView.refetchHint")}>
           <Button
             variant="ghost"
             size="icon"
@@ -568,7 +573,7 @@ export function SeriesView({
             {refetching ? <Loader2 className="animate-spin" /> : <Sparkles />}
           </Button>
         </Hint>
-        <Hint label="Remove this series from the library">
+        <Hint label={t("seriesView.removeSeriesHint")}>
           <Button
             variant="ghost"
             size="icon"
@@ -620,15 +625,14 @@ export function SeriesView({
 
           {volumes === null ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="size-3.5 animate-spin" /> Loading volumes…
+              <Loader2 className="size-3.5 animate-spin" /> {t("seriesView.loadingVolumes")}
             </div>
           ) : volumes.length === 0 ? (
             <div className="mx-auto mt-16 max-w-md text-center">
               <BookOpen className="mx-auto size-8 text-muted-foreground" />
-              <h2 className="mt-3 text-sm font-medium">No volume layout yet</h2>
+              <h2 className="mt-3 text-sm font-medium">{t("seriesView.noVolumeLayoutTitle")}</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Nothing published a volume-to-chapter map for this series, or the
-                sync has not run. Try refreshing.
+                {t("seriesView.noVolumeLayoutDescription")}
               </p>
             </div>
           ) : (
@@ -691,7 +695,9 @@ export function SeriesView({
             disabled={pickedBuildable.length === 0}
             hint={defaultFormat.toUpperCase()}
           >
-            Build {pickedBuildable.length > 1 ? `${pickedBuildable.length} volumes` : "volume"}
+            {pickedBuildable.length > 1
+              ? t("seriesView.buildVolumesCount", { count: pickedBuildable.length })
+              : t("seriesView.buildVolume")}
           </ContextMenuItem>
 
           <ContextMenuItem
@@ -701,7 +707,7 @@ export function SeriesView({
             }}
             disabled={pickedBuildable.length === 0}
           >
-            Build as…
+            {t("seriesView.buildAs")}
           </ContextMenuItem>
 
           <ContextMenuItem
@@ -711,12 +717,12 @@ export function SeriesView({
             }}
             disabled={pickedBuildable.length === 0}
           >
-            Build and send to Kindle
+            {t("seriesView.buildAndSend")}
           </ContextMenuItem>
 
           {pickedBuildable.length < picked.size && (
             <ContextMenuItem onSelect={() => {}} disabled>
-              {picked.size - pickedBuildable.length} not downloaded yet
+              {t("seriesView.notDownloadedYet", { count: picked.size - pickedBuildable.length })}
             </ContextMenuItem>
           )}
 
@@ -728,7 +734,7 @@ export function SeriesView({
               setMenu(null);
             }}
           >
-            Select all built
+            {t("seriesView.selectAllBuilt")}
           </ContextMenuItem>
           <ContextMenuItem
             onSelect={() => {
@@ -736,7 +742,7 @@ export function SeriesView({
               setMenu(null);
             }}
           >
-            Clear selection
+            {t("seriesView.clearSelection")}
           </ContextMenuItem>
         </ContextMenu>
       )}
@@ -760,7 +766,7 @@ export function SeriesView({
           open
           onOpenChange={(next) => !next && setFromSource(null)}
           seriesId={seriesId}
-          sourceName={sourceLabel(series?.source)}
+          sourceName={sourceLabel(series?.source, t)}
           chapters={fromSource}
           onStarted={() => void refresh()}
         />
@@ -769,15 +775,16 @@ export function SeriesView({
       <Dialog open={forgetting} onOpenChange={setForgetting}>
         <DialogContent className="max-w-md">
           <div className="border-b border-border px-4 py-3">
-            <DialogTitle>Forget what you read of this series?</DialogTitle>
+            <DialogTitle>{t("seriesView.forgetTitle")}</DialogTitle>
             <DialogDescription>
-              Clears the resume point and every read mark for{" "}
-              {series?.title ?? "this series"}. No downloaded pages are deleted.
+              {t("seriesView.forgetDescription", {
+                title: series?.title ?? t("seriesView.thisSeries"),
+              })}
             </DialogDescription>
           </div>
           <div className="flex items-center justify-end gap-2 px-4 py-3">
             <Button variant="ghost" onClick={() => setForgetting(false)}>
-              Cancel
+              {t("seriesView.cancel")}
             </Button>
             <Button
               variant="destructive"
@@ -789,7 +796,7 @@ export function SeriesView({
               }}
             >
               <Trash2 />
-              Forget
+              {t("seriesView.forget")}
             </Button>
           </div>
         </DialogContent>
@@ -800,7 +807,9 @@ export function SeriesView({
       <Dialog open={rebuild !== null} onOpenChange={(next) => !next && setRebuild(null)}>
         <DialogContent className="max-w-md">
           <div className="border-b border-border px-4 py-3">
-            <DialogTitle>{rebuild && volumeLabel(rebuild)} is already built</DialogTitle>
+            <DialogTitle>
+              {t("seriesView.alreadyBuilt", { label: rebuild ? volumeLabel(rebuild) : "" })}
+            </DialogTitle>
             <DialogDescription>
               {rebuild?.built && (
                 <span className="break-all">{rebuild.built.path}</span>
@@ -809,7 +818,7 @@ export function SeriesView({
           </div>
           <div className="flex items-center justify-end gap-2 px-4 py-3">
             <Button variant="ghost" onClick={() => setRebuild(null)}>
-              Cancel
+              {t("seriesView.cancel")}
             </Button>
             <Button
               variant="outline"
@@ -820,7 +829,7 @@ export function SeriesView({
               }}
             >
               <PenLine />
-              Build again
+              {t("seriesView.buildAgain")}
             </Button>
             <Button
               onClick={() => {
@@ -844,16 +853,16 @@ export function SeriesView({
         <ContextMenu at={routing.at} onClose={() => setRouting(null)}>
           <ContextMenuItem
             disabled={!series?.source || routing.wanted.length === 0}
-            hint={series?.source ? undefined : "no metadata source"}
+            hint={series?.source ? undefined : t("seriesView.noMetadataSource")}
             onSelect={() => setFromSource(routing.wanted)}
           >
-            From {sourceLabel(series?.source)}
+            {t("seriesView.fromSource", { source: sourceLabel(series?.source, t) })}
           </ContextMenuItem>
           <ContextMenuItem
             disabled={routing.wanted.length === 0}
             onSelect={() => setBatching(routing.wanted)}
           >
-            From a chapter URL…
+            {t("seriesView.fromChapterUrl")}
           </ContextMenuItem>
         </ContextMenu>
       )}
@@ -894,6 +903,7 @@ function VolumeCard({
   onContextMenu: (event: React.MouseEvent) => void;
   onEdit: () => void;
 }) {
+  const t = useT();
   const have = downloadedCount(volume);
   const complete = isComplete(volume);
   const total = volume.chapters.length;
@@ -919,7 +929,7 @@ function VolumeCard({
             {complete ? (
               <Badge>
                 <Check className="size-2.5" />
-                complete
+                {t("seriesView.complete")}
               </Badge>
             ) : (
               <Badge variant="outline">
@@ -930,7 +940,7 @@ function VolumeCard({
             {volume.built && (
               <Badge variant="outline" title={volume.built.path}>
                 <PackageCheck className="size-2.5" />
-                built
+                {t("seriesView.built")}
               </Badge>
             )}
           </div>
@@ -954,7 +964,7 @@ function VolumeCard({
             onEdit();
           }}
           disabled={building}
-          title={`Build ${volumeLabel(volume)}`}
+          title={t("seriesView.buildTitleFor", { label: volumeLabel(volume) })}
           className={cn(
             "absolute right-1.5 top-1.5 rounded-md bg-background/85 p-1.5 text-muted-foreground backdrop-blur-sm transition-opacity hover:text-primary focus-visible:opacity-100",
             !isMobile && "opacity-0 group-hover:opacity-100",
@@ -1044,6 +1054,7 @@ function VolumePanel({
   onAssignToVolume: (numbers: string[], volume: string) => Promise<void>;
   onResetToSource: (chapter: string) => void;
 }) {
+  const t = useT();
   const have = downloadedCount(volume);
   const missing = missingChapters(volume);
   const isUnsorted = volume.number === UNSORTED;
@@ -1063,17 +1074,20 @@ function VolumePanel({
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-medium">{volumeLabel(volume)}</h2>
           <p className="truncate text-[11px] text-muted-foreground">
-            {have}/{volume.chapters.length} chapters
-            {missing.length > 0 && ` · missing ${summariseRuns(missing.map((c) => c.number))}`}
+            {t("seriesView.volumeChaptersSummary", { have, total: volume.chapters.length })}
+            {missing.length > 0 &&
+              t("seriesView.missingSummary", {
+                summary: summariseRuns(missing.map((c) => c.number)),
+              })}
           </p>
         </div>
         {/* Only where it means something: a real volume's chapters came from
             the source's own layout, so there's nothing here to sort by hand. */}
         {isUnsorted && !organizing && (
-          <Hint label="Sort these chapters into volumes by hand">
+          <Hint label={t("seriesView.organizeHint")}>
             <Button variant="ghost" size="sm" onClick={onToggleOrganize}>
               <Layers className="size-3.5" />
-              Organize
+              {t("seriesView.organize")}
             </Button>
           </Hint>
         )}
@@ -1093,7 +1107,7 @@ function VolumePanel({
           <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
             {volume.chapters.length === 0 ? (
               <p className="px-4 py-3 text-[11px] text-muted-foreground">
-                No chapters are listed for this volume.
+                {t("seriesView.noChaptersListed")}
               </p>
             ) : (
               volume.chapters.map((chapter) => (
@@ -1122,7 +1136,7 @@ function VolumePanel({
                   className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground"
                   title={volume.built.path}
                 >
-                  Built {formatBytes(volume.built.bytes)}
+                  {t("seriesView.builtSize", { size: formatBytes(volume.built.bytes) })}
                 </p>
                 <Button variant="outline" size="sm" onClick={onShare}>
                   {DELIVER_LABEL}
@@ -1140,13 +1154,13 @@ function VolumePanel({
                 }}
               >
                 <Layers />
-                Get {missing.length} missing in this volume
+                {t("seriesView.getMissingInVolume", { count: missing.length })}
               </Button>
             )}
 
             <Button className="w-full" onClick={onBuild} disabled={have === 0 || building}>
               {building ? <Loader2 className="animate-spin" /> : <PenLine />}
-              {volume.built ? "Build again" : "Build this volume"}
+              {volume.built ? t("seriesView.buildAgain") : t("seriesView.buildThisVolume")}
             </Button>
           </div>
         </>
@@ -1175,6 +1189,7 @@ function ChapterRow({
   /** Undo a manual volume assignment and re-pull the real one. */
   onResetToSource: () => void;
 }) {
+  const t = useT();
   const have = chapter.folder !== null;
   const direct = canFetchDirectly(chapter);
 
@@ -1195,51 +1210,51 @@ function ChapterRow({
       </span>
 
       <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-        {have ? `${chapter.page_count} pages` : "missing"}
-        {have && chapter.read_at && " · read"}
+        {have ? t("seriesView.pagesCount", { count: chapter.page_count }) : t("seriesView.missingLabel")}
+        {have && chapter.read_at && t("seriesView.readSuffix")}
         {have && !chapter.read_at && chapter.last_page > 0 &&
-          ` · page ${chapter.last_page + 1}`}
+          t("seriesView.pageSuffix", { page: chapter.last_page + 1 })}
         {chapter.title ? ` · ${chapter.title}` : ""}
         {have && chapterSource(chapter) && ` · ${chapterSource(chapter)}`}
         {!have && chapter.unavailable && (
           // Not an error: the source indexes the chapter but the publisher
           // hosts it. Saying so stops this looking like a broken download.
-          <span className="ml-1.5 text-amber-500/80">· not hosted by the source</span>
+          <span className="ml-1.5 text-amber-500/80">· {t("seriesView.notHostedBySource")}</span>
         )}
       </span>
 
       {have ? (
         <>
-          <Hint label="Delete these pages and mark the chapter missing again">
+          <Hint label={t("seriesView.deleteChapterHint")}>
             <Button variant="ghost" size="icon-sm" onClick={onRemove}>
               <Trash2 className="size-3" />
             </Button>
           </Hint>
-          <Hint label="Replace with a different rip">
+          <Hint label={t("seriesView.replaceHint")}>
             <Button variant="ghost" size="sm" onClick={onGet}>
-              Replace
+              {t("seriesView.replace")}
             </Button>
           </Hint>
           <Hint
             label={
               chapter.last_page > 0 && !chapter.read_at
-                ? `Resume on page ${chapter.last_page + 1}`
-                : "Read this chapter"
+                ? t("seriesView.resumeOnPage", { page: chapter.last_page + 1 })
+                : t("seriesView.readThisChapter")
             }
           >
             <Button variant="outline" size="sm" onClick={onRead}>
               <BookOpen className="size-3" />
               {chapter.read_at
-                ? "Re-read"
+                ? t("seriesView.reRead")
                 : chapter.last_page > 0
-                  ? "Resume"
-                  : "Read"}
+                  ? t("seriesView.resume")
+                  : t("seriesView.read")}
             </Button>
           </Hint>
         </>
       ) : (
         <>
-          <Hint label="Import a folder you already have">
+          <Hint label={t("seriesView.importFolderHint")}>
             <Button variant="ghost" size="icon-sm" onClick={onImport} disabled={busy}>
               <FolderInput className="size-3" />
             </Button>
@@ -1247,21 +1262,21 @@ function ChapterRow({
           {/* A chapter you do not hold is still readable when the source serves
               it. That is what streaming is for, and the library had no way in. */}
           {direct && (
-            <Hint label="Read from the source without downloading it">
+            <Hint label={t("seriesView.readFromSourceHint")}>
               <Button variant="ghost" size="sm" onClick={onRead} disabled={busy}>
                 <Cloud className="size-3" />
-                Read
+                {t("seriesView.read")}
               </Button>
             </Hint>
           )}
           {direct ? (
             <>
-              <Hint label="Paste a URL from somewhere else instead">
+              <Hint label={t("seriesView.pasteUrlHint")}>
                 <Button variant="ghost" size="sm" onClick={onGet} disabled={busy}>
-                  URL
+                  {t("seriesView.url")}
                 </Button>
               </Hint>
-              <Hint label="Download straight from the metadata source">
+              <Hint label={t("seriesView.downloadDirectHint")}>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1273,7 +1288,7 @@ function ChapterRow({
                   ) : (
                     <Download className="size-3" />
                   )}
-                  Get
+                  {t("seriesView.get")}
                 </Button>
               </Hint>
             </>
@@ -1281,13 +1296,13 @@ function ChapterRow({
             <Hint
               label={
                 chapter.unavailable
-                  ? "The source does not host this one — paste the publisher's page"
-                  : "Paste the page holding this chapter's images"
+                  ? t("seriesView.notHostedHint")
+                  : t("seriesView.pastePageHint")
               }
             >
               <Button variant="outline" size="sm" onClick={onGet} disabled={busy}>
                 <Download className="size-3" />
-                Get
+                {t("seriesView.get")}
               </Button>
             </Hint>
           )}
@@ -1298,7 +1313,7 @@ function ChapterRow({
           will leave it here rather than re-deriving it — offered as a way
           back for whoever changes their mind or fixed it wrong. */}
       {chapter.volume_locked && (
-        <Hint label="Undo: drop to Unsorted and re-pull the real volume from the source">
+        <Hint label={t("seriesView.undoAssignmentHint")}>
           <Button variant="ghost" size="icon-sm" onClick={onResetToSource}>
             <Pin className="size-3" />
           </Button>
@@ -1326,18 +1341,19 @@ function chapterSource(chapter: ChapterStatus): string | null {
       return null;
     }
   }
+  // A proper noun — not translated.
   return chapter.source_id ? "MangaDex" : null;
 }
 
 /** How to name where a series' chapters come from. */
-function sourceLabel(source: string | null | undefined): string {
+function sourceLabel(source: string | null | undefined, t: Translator): string {
   switch (source) {
     case "mangadex":
       return "MangaDex";
     case "kitsu":
       return "Kitsu";
     default:
-      return "the source";
+      return t("seriesView.theSource");
   }
 }
 
@@ -1371,6 +1387,7 @@ function SeriesDetails({
   onResume: () => void;
   onForget: () => void;
 }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   const { ref, url } = useThumbnail(series.cover_path ?? "", 320);
 
@@ -1404,7 +1421,7 @@ function SeriesDetails({
         <p className="text-xs text-muted-foreground">
           {[series.author, series.artist !== series.author ? series.artist : null]
             .filter(Boolean)
-            .join(" · ") || "Unknown author"}
+            .join(" · ") || t("seriesView.unknownAuthor")}
           {series.year ? ` · ${series.year}` : ""}
           {series.status ? ` · ${series.status}` : ""}
         </p>
@@ -1423,7 +1440,7 @@ function SeriesDetails({
               className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
             >
               <ExternalLink className="size-3" />
-              {sourceLabel(series.source)}
+              {sourceLabel(series.source, t)}
             </a>
           )}
         </div>
@@ -1464,8 +1481,7 @@ function SeriesDetails({
           </Select>
           {switching && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
           <span className="text-[11px] text-muted-foreground">
-            Translation · changing it re-pulls the chapter list, and keeps what
-            you have downloaded.
+            {t("seriesView.translationHint")}
           </span>
         </div>
 
@@ -1477,21 +1493,28 @@ function SeriesDetails({
               <Button size="sm" onClick={onResume}>
                 <BookOpen className="size-3.5" />
                 {resume.opened_at && resume.last_page > 0
-                  ? `Continue chapter ${resume.number}, page ${resume.last_page + 1}`
-                  : `Read chapter ${resume.number}`}
+                  ? t("seriesView.continueChapter", {
+                      number: resume.number,
+                      page: resume.last_page + 1,
+                    })
+                  : t("seriesView.readChapterNumber", { number: resume.number })}
               </Button>
             )}
             {readCount > 0 && (
               <>
                 <span className="text-[11px] text-muted-foreground">
-                  {readCount} {readCount === 1 ? "chapter" : "chapters"} in your
-                  history
+                  {t(
+                    readCount === 1
+                      ? "seriesView.readHistorySingular"
+                      : "seriesView.readHistoryPlural",
+                    { count: readCount },
+                  )}
                 </span>
                 <button
                   onClick={onForget}
                   className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                 >
-                  Forget
+                  {t("seriesView.forget")}
                 </button>
               </>
             )}
@@ -1513,7 +1536,7 @@ function SeriesDetails({
               onClick={() => setExpanded((v) => !v)}
               className="mt-0.5 text-[11px] text-primary hover:underline"
             >
-              {expanded ? "Show less" : "Show more"}
+              {expanded ? t("seriesView.showLess") : t("seriesView.showMore")}
             </button>
           </div>
         )}

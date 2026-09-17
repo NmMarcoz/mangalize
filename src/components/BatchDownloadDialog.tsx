@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { useT } from "@/lib/i18n";
 import {
   downloadBatch,
   planBatch,
@@ -55,6 +56,7 @@ export function BatchDownloadDialog({
   missing,
   onStarted,
 }: BatchDownloadDialogProps) {
+  const t = useT();
   const [url, setUrl] = useState("");
   const [stage, setStage] = useState<Stage>("idle");
   const [plan, setPlan] = useState<BatchPlan | null>(null);
@@ -119,11 +121,9 @@ export function BatchDownloadDialog({
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <DialogContent className="max-h-[85dvh] max-w-2xl">
         <div className="border-b border-border px-4 py-3">
-          <DialogTitle>Download missing chapters</DialogTitle>
+          <DialogTitle>{t("batchDownloadDialog.title")}</DialogTitle>
           <DialogDescription>
-            Paste any chapter page, or the series index. The URL pattern is
-            learned from it and used to look for the {missing.length} chapters
-            you are missing.
+            {t("batchDownloadDialog.description", { count: missing.length })}
           </DialogDescription>
         </div>
 
@@ -131,7 +131,7 @@ export function BatchDownloadDialog({
           <Input
             autoFocus
             value={url}
-            placeholder="https://…/manga/ichi-the-witch-chapter-1/"
+            placeholder={t("batchDownloadDialog.urlPlaceholder")}
             disabled={busy}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => {
@@ -140,21 +140,23 @@ export function BatchDownloadDialog({
           />
           <Button onClick={() => void findChapters()} disabled={busy || !url.trim()}>
             {stage === "planning" ? <Loader2 className="animate-spin" /> : <Search />}
-            Find chapters
+            {t("batchDownloadDialog.findChapters")}
           </Button>
         </div>
 
         <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3">
           {stage === "idle" && !error && (
             <p className="text-xs text-muted-foreground">
-              Missing: {summariseRuns(missing) || "nothing"}.
+              {t("batchDownloadDialog.missing", {
+                summary: summariseRuns(missing) || t("batchDownloadDialog.nothing"),
+              })}
             </p>
           )}
 
           {stage === "planning" && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="size-3.5 animate-spin" />
-              Reading the page and checking which chapters exist…
+              {t("batchDownloadDialog.checkingChapters")}
             </div>
           )}
 
@@ -170,11 +172,11 @@ export function BatchDownloadDialog({
                 <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
                   <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
                   <div>
-                    <p className="font-medium">No chapters could be reached.</p>
+                    <p className="font-medium">
+                      {t("batchDownloadDialog.noneReachedTitle")}
+                    </p>
                     <p className="mt-0.5 text-muted-foreground">
-                      That URL has no number to vary and no chapter links. Try
-                      pasting an actual chapter page rather than the series
-                      landing page.
+                      {t("batchDownloadDialog.noneReachedDetail")}
                     </p>
                   </div>
                 </div>
@@ -182,21 +184,22 @@ export function BatchDownloadDialog({
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge>
                     <Check className="size-2.5" />
-                    {plan.items.length} chapters found
+                    {t("batchDownloadDialog.chaptersFound", { count: plan.items.length })}
                   </Badge>
                   <span className="text-[11px] text-muted-foreground">
-                    {plan.items.filter((i) => i.found === "linked").length} linked
-                    by the site,{" "}
-                    {plan.items.filter((i) => i.found === "guessed").length} matched
-                    by pattern
+                    {t("batchDownloadDialog.foundBreakdown", {
+                      linked: plan.items.filter((i) => i.found === "linked").length,
+                      guessed: plan.items.filter((i) => i.found === "guessed").length,
+                    })}
                   </span>
                 </div>
               )}
 
               {plan.unresolved.length > 0 && (
                 <p className="text-[11px] text-muted-foreground">
-                  No URL found for {summariseRuns(plan.unresolved)} — that site
-                  may not have them.
+                  {t("batchDownloadDialog.unresolvedHint", {
+                    summary: summariseRuns(plan.unresolved),
+                  })}
                 </p>
               )}
 
@@ -213,7 +216,7 @@ export function BatchDownloadDialog({
                       </span>
                       {item.found === "guessed" && (
                         <Badge variant="outline" className="text-[9px]">
-                          pattern
+                          {t("batchDownloadDialog.patternBadge")}
                         </Badge>
                       )}
                     </div>
@@ -235,9 +238,18 @@ export function BatchDownloadDialog({
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Chapter {progress.chapter} — {progress.stage}
+                {t("batchDownloadDialog.progressLine", {
+                  chapter: progress.chapter,
+                  stage:
+                    progress.stage === "reading"
+                      ? t("batchDownloadDialog.stageReading")
+                      : t("batchDownloadDialog.stageDownloading"),
+                })}
                 {progress.page_total > 0 &&
-                  ` ${progress.done}/${progress.page_total} pages`}
+                  ` ${t("batchDownloadDialog.pagesCount", {
+                    done: progress.done,
+                    total: progress.page_total,
+                  })}`}
               </p>
             </div>
           )}
@@ -245,9 +257,13 @@ export function BatchDownloadDialog({
           {report && (
             <div className="mt-3 flex flex-col gap-2">
               <p className="text-xs font-medium">
-                {report.cancelled ? "Stopped. " : ""}
-                {report.downloaded.length} chapters downloaded
-                {report.failed.length > 0 && `, ${report.failed.length} failed`}.
+                {report.cancelled ? `${t("batchDownloadDialog.stopped")} ` : ""}
+                {t("batchDownloadDialog.chaptersDownloaded", {
+                  count: report.downloaded.length,
+                })}
+                {report.failed.length > 0 &&
+                  t("batchDownloadDialog.chaptersFailed", { count: report.failed.length })}
+                .
               </p>
               {report.failed.map((failure) => (
                 <p
@@ -255,7 +271,10 @@ export function BatchDownloadDialog({
                   className="truncate text-[11px] text-destructive"
                   title={failure.error}
                 >
-                  Chapter {failure.number}: {failure.error}
+                  {t("batchDownloadDialog.failureLine", {
+                    number: failure.number,
+                    error: failure.error,
+                  })}
                 </p>
               ))}
             </div>
@@ -273,7 +292,7 @@ export function BatchDownloadDialog({
 
           <div className="ml-auto flex gap-2">
             <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-              Cancel
+              {t("batchDownloadDialog.cancel")}
             </Button>
 
             {stage !== "done" && (
@@ -282,7 +301,7 @@ export function BatchDownloadDialog({
                 disabled={busy || !plan || plan.items.length === 0}
               >
                 {running ? <Loader2 className="animate-spin" /> : <Download />}
-                Download {plan?.items.length ?? 0}
+                {t("batchDownloadDialog.download", { count: plan?.items.length ?? 0 })}
               </Button>
             )}
           </div>

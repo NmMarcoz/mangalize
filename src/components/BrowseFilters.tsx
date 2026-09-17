@@ -14,15 +14,16 @@ import {
 import { Separator } from "@/components/ui/separator";
 import {
   DEMOGRAPHICS,
-  RATINGS,
-  SORTS,
-  STATUSES,
-  TAG_GROUPS,
+  ratings,
   sortKey,
+  sorts,
+  STATUSES,
+  tagGroups,
   type BrowseQuery,
   type ContentRating,
   type Tag,
 } from "@/lib/browse";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 interface BrowseFiltersProps {
@@ -40,6 +41,7 @@ interface BrowseFiltersProps {
  * list of checkboxes is a miserable way to ask for it.
  */
 export function BrowseFilters({ query, tags, onChange, onReset }: BrowseFiltersProps) {
+  const t = useT();
   const grouped = useMemo(() => {
     const groups = new Map<string, Tag[]>();
     for (const tag of tags) {
@@ -70,11 +72,11 @@ export function BrowseFilters({ query, tags, onChange, onReset }: BrowseFiltersP
     <div className="scrollbar-thin flex max-h-[22rem] flex-col gap-4 overflow-y-auto border-b border-border bg-card/30 p-4">
       <div className="flex flex-wrap items-end gap-4">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="sort">Sort by</Label>
+          <Label htmlFor="sort">{t("browseFilters.sortBy")}</Label>
           <Select
             value={sortKey(query.sort, query.descending)}
             onValueChange={(v) => {
-              const found = SORTS.find((s) => sortKey(s.value, s.descending) === v);
+              const found = sorts(t).find((s) => sortKey(s.value, s.descending) === v);
               if (found) onChange({ sort: found.value, descending: found.descending });
             }}
           >
@@ -82,7 +84,7 @@ export function BrowseFilters({ query, tags, onChange, onReset }: BrowseFiltersP
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {SORTS.map((s) => (
+              {sorts(t).map((s) => (
                 <SelectItem key={sortKey(s.value, s.descending)} value={sortKey(s.value, s.descending)}>
                   {s.label}
                 </SelectItem>
@@ -92,9 +94,9 @@ export function BrowseFilters({ query, tags, onChange, onReset }: BrowseFiltersP
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <Label>Content rating</Label>
+          <Label>{t("browseFilters.contentRating")}</Label>
           <div className="flex flex-wrap gap-1.5">
-            {RATINGS.map((rating) => (
+            {ratings(t).map((rating) => (
               <Chip
                 key={rating.value}
                 label={rating.label}
@@ -114,13 +116,13 @@ export function BrowseFilters({ query, tags, onChange, onReset }: BrowseFiltersP
 
         <Button variant="ghost" size="sm" className="ml-auto" onClick={onReset}>
           <X className="size-3" />
-          Reset
+          {t("browseFilters.reset")}
         </Button>
       </div>
 
       <div className="flex flex-wrap gap-6">
         <div className="flex flex-col gap-1.5">
-          <Label>Status</Label>
+          <Label>{t("browseFilters.status")}</Label>
           <div className="flex flex-wrap gap-1.5">
             {STATUSES.map((status) => (
               <Chip
@@ -134,7 +136,7 @@ export function BrowseFilters({ query, tags, onChange, onReset }: BrowseFiltersP
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <Label>Demographic</Label>
+          <Label>{t("browseFilters.demographic")}</Label>
           <div className="flex flex-wrap gap-1.5">
             {DEMOGRAPHICS.map((demographic) => (
               <Chip
@@ -155,11 +157,11 @@ export function BrowseFilters({ query, tags, onChange, onReset }: BrowseFiltersP
           <Separator />
           <div className="flex flex-col gap-3">
             <p className="text-[11px] text-muted-foreground">
-              Click a tag to require it, again to exclude it, again to clear.
+              {t("browseFilters.tagHint")}
             </p>
             {grouped.map(([group, list]) => (
               <div key={group} className="flex flex-col gap-1.5">
-                <Label>{TAG_GROUPS[group] ?? group}</Label>
+                <Label>{tagGroups(t)[group] ?? group}</Label>
                 <div className="flex flex-wrap gap-1.5">
                   {list.map((tag) => (
                     <Chip
@@ -212,12 +214,13 @@ function Chip({
 
 /** A compact summary of what is currently narrowed, for the collapsed bar. */
 export function FilterSummary({ query, tags }: { query: BrowseQuery; tags: Tag[] }) {
+  const t = useT();
   const named = (ids: string[]) =>
-    ids.map((id) => tags.find((t) => t.id === id)?.name ?? "tag");
+    ids.map((id) => tags.find((tag) => tag.id === id)?.name ?? t("browseFilters.tag"));
 
   const parts = [
     ...named(query.included_tags),
-    ...named(query.excluded_tags).map((n) => `not ${n}`),
+    ...named(query.excluded_tags).map((n) => t("browseFilters.notTag", { tag: n })),
     ...query.status,
     ...query.demographic,
   ];
@@ -232,7 +235,7 @@ export function FilterSummary({ query, tags }: { query: BrowseQuery; tags: Tag[]
       ))}
       {parts.length > 4 && (
         <span className="text-[10px] text-muted-foreground">
-          +{parts.length - 4} more
+          {t("browseFilters.more", { count: parts.length - 4 })}
         </span>
       )}
     </div>

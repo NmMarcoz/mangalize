@@ -22,6 +22,7 @@ import {
   type Volume,
   deliverBuilt,
 } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import { isMobile } from "@/lib/platform";
 import { resolveBuildPath } from "@/lib/settings";
 import { sendFiles } from "@/lib/send";
@@ -65,6 +66,7 @@ export function EditorView({
   defaultFormat,
   onError,
 }: EditorViewProps) {
+  const t = useT();
   const [activeChapter, setActiveChapter] = useState<number | null>(null);
   /** Which panel is covering the grid, on a window too narrow to hold both. */
   const [panel, setPanel] = useState<"chapters" | "metadata" | null>(null);
@@ -415,14 +417,14 @@ export function EditorView({
     try {
       const result = await sendFiles([built.path]);
       if (result.failed.length > 0) {
-        onError(`Could not send: ${result.failed[0].error}`);
+        onError(t("editorView.sendFailed", { error: result.failed[0].error }));
       }
     } catch (e) {
       onError(String(e));
     } finally {
       setSending(false);
     }
-  }, [report, handleExport, onError]);
+  }, [report, handleExport, onError, t]);
 
   const pickCover = useCallback(async () => {
     const picked = await open({
@@ -471,7 +473,7 @@ export function EditorView({
               onClick={() => setPanel((p) => (p === "chapters" ? null : "chapters"))}
             >
               <List />
-              Chapters
+              {t("editorView.chapters")}
             </Button>
             <Button
               variant={panel === "metadata" ? "default" : "ghost"}
@@ -480,7 +482,7 @@ export function EditorView({
               onClick={() => setPanel((p) => (p === "metadata" ? null : "metadata"))}
             >
               <Tags />
-              Details
+              {t("editorView.details")}
             </Button>
           </div>
         )}

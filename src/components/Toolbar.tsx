@@ -21,6 +21,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Hint } from "@/components/ui/tooltip";
+import { useT } from "@/lib/i18n";
 import { canPickFolders, canSendToDevice, isMobile } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import {
@@ -76,6 +77,7 @@ export function Toolbar({
   sending,
   onReveal,
 }: ToolbarProps) {
+  const t = useT();
   const pages = volumePageCount(volume);
   const spreads = volumeSpreadCount(volume);
 
@@ -91,7 +93,7 @@ export function Toolbar({
         )}
       >
         <div className={cn("flex items-center gap-3", isMobile && "min-w-0")}>
-        <Hint label="Back to the library">
+        <Hint label={t("toolbar.backToLibrary")}>
           <Button variant="ghost" size="icon" onClick={onBack}>
             <ArrowLeft />
           </Button>
@@ -100,13 +102,15 @@ export function Toolbar({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h1 className="truncate text-sm font-semibold">
-              {volume.metadata.series || "Untitled volume"}
+              {volume.metadata.series || t("toolbar.untitledVolume")}
             </h1>
             {!isMobile && (
               <>
-                <Badge variant="outline">{volume.chapters.length} chapters</Badge>
-                <Badge variant="outline">{pages} pages</Badge>
-                {spreads > 0 && <Badge>{spreads} spreads</Badge>}
+                <Badge variant="outline">
+                  {t("toolbar.chapters", { count: volume.chapters.length })}
+                </Badge>
+                <Badge variant="outline">{t("toolbar.pages", { count: pages })}</Badge>
+                {spreads > 0 && <Badge>{t("toolbar.spreads", { count: spreads })}</Badge>}
               </>
             )}
           </div>
@@ -118,7 +122,7 @@ export function Toolbar({
             {/* The folder is a desktop-sized path and nothing a phone can act
                 on, so there the counts take the line instead. */}
             {isMobile
-              ? `${volume.chapters.length} chapters · ${pages} pages${spreads > 0 ? ` · ${spreads} spreads` : ""}`
+              ? `${t("toolbar.chapters", { count: volume.chapters.length })} · ${t("toolbar.pages", { count: pages })}${spreads > 0 ? ` · ${t("toolbar.spreads", { count: spreads })}` : ""}`
               : volume.root}
           </p>
         </div>
@@ -126,7 +130,7 @@ export function Toolbar({
 
         <div className={cn("flex items-center gap-2", isMobile && "justify-end")}>
           {canPickFolders && (
-          <Hint label="Reload this folder from disk">
+          <Hint label={t("toolbar.reloadFolder")}>
             <Button variant="ghost" size="icon" onClick={onRescan} disabled={scanning}>
               {scanning ? (
                 <Loader2 className="animate-spin" />
@@ -137,7 +141,7 @@ export function Toolbar({
           </Hint>
           )}
           {canPickFolders && (
-            <Hint label="Open another folder">
+            <Hint label={t("toolbar.openFolder")}>
               <Button variant="ghost" size="icon" onClick={onOpenFolder}>
                 <FolderOpen />
               </Button>
@@ -151,28 +155,28 @@ export function Toolbar({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="epub">EPUB · Kindle</SelectItem>
-              <SelectItem value="cbz">CBZ · Comic</SelectItem>
+              <SelectItem value="epub">{t("toolbar.formatEpub")}</SelectItem>
+              <SelectItem value="cbz">{t("toolbar.formatCbz")}</SelectItem>
             </SelectContent>
           </Select>
 
           <Button onClick={onExport} disabled={building !== null || pages === 0}>
             {building ? <Loader2 className="animate-spin" /> : <Upload />}
-            Build
+            {t("toolbar.build")}
           </Button>
           {canPickFolders && (
-            <Hint label="Choose a one-off location">
+            <Hint label={t("toolbar.chooseLocation")}>
               <Button
                 variant="outline"
                 onClick={onExportAs}
                 disabled={building !== null || pages === 0}
               >
-                Build as…
+                {t("toolbar.buildAs")}
               </Button>
             </Hint>
           )}
           {canSendToDevice && (
-            <Hint label="Build if needed, then email it to your Kindle">
+            <Hint label={t("toolbar.sendHint")}>
               <Button
                 variant="outline"
                 size="icon"
@@ -189,13 +193,13 @@ export function Toolbar({
       <div className="flex items-center gap-4 border-t border-border/60 px-4 py-1.5">
         <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
           <Switch checked={showExcluded} onCheckedChange={onShowExcluded} />
-          Show excluded
+          {t("toolbar.showExcluded")}
         </label>
 
         <Separator orientation="vertical" className="h-4" />
 
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          Size
+          {t("toolbar.size")}
           <input
             type="range"
             min={110}
@@ -223,12 +227,15 @@ export function Toolbar({
             >
               <PackageCheck className="size-3.5 shrink-0 text-primary" />
               <span className="truncate">
-                {report.pages} pages · {formatBytes(report.bytes)}
+                {t("toolbar.reportSummary", {
+                  pages: report.pages,
+                  bytes: formatBytes(report.bytes),
+                })}
               </span>
             </button>
           ) : (
             <span className="text-[11px] text-muted-foreground">
-              {isMobile ? "" : "X exclude · S split · C cover · Esc clear"}
+              {isMobile ? "" : t("toolbar.shortcutsHint")}
             </span>
           )}
         </div>

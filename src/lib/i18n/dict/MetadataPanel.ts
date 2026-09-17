@@ -1,0 +1,56 @@
+import type { PartialDictionary } from "@/lib/i18n/types";
+
+const dict: PartialDictionary = {
+  en: {
+    "metadataPanel.fetchOnline": "Fetch metadata online",
+    "metadataPanel.cover": "Cover",
+    "metadataPanel.chooseFile": "Choose file",
+    "metadataPanel.reset": "Reset",
+    "metadataPanel.resetHint": "Fall back to the first page",
+    "metadataPanel.usingPageOne": "Using page one. Press C on any page to promote it.",
+    "metadataPanel.series": "Series",
+    "metadataPanel.seriesPlaceholder": "Ichi the Witch",
+    "metadataPanel.volume": "Volume",
+    "metadataPanel.volumePlaceholder": "1",
+    "metadataPanel.language": "Language",
+    "metadataPanel.languagePlaceholder": "en",
+    "metadataPanel.author": "Author",
+    "metadataPanel.authorPlaceholder": "Osamu Nishi",
+    "metadataPanel.direction": "Reading direction",
+    "metadataPanel.directionRtl": "Right to left (manga)",
+    "metadataPanel.directionLtr": "Left to right",
+    "metadataPanel.description": "Description",
+    "metadataPanel.descriptionPlaceholder": "Optional blurb shown in your library.",
+    "metadataPanel.exportAs": "Export as",
+    "metadataPanel.exportNameHint": "Used as the file name when you export.",
+    "metadataPanel.exportNameHintDefault":
+      "Taken from the series and volume above. Type to override.",
+  },
+  "pt-BR": {
+    "metadataPanel.fetchOnline": "Buscar metadados online",
+    "metadataPanel.cover": "Capa",
+    "metadataPanel.chooseFile": "Escolher arquivo",
+    "metadataPanel.reset": "Redefinir",
+    "metadataPanel.resetHint": "Voltar a usar a primeira página",
+    "metadataPanel.usingPageOne": "Usando a página um. Pressione C em qualquer página para promovê-la.",
+    "metadataPanel.series": "Série",
+    "metadataPanel.seriesPlaceholder": "Ichi the Witch",
+    "metadataPanel.volume": "Volume",
+    "metadataPanel.volumePlaceholder": "1",
+    "metadataPanel.language": "Idioma",
+    "metadataPanel.languagePlaceholder": "en",
+    "metadataPanel.author": "Autor",
+    "metadataPanel.authorPlaceholder": "Osamu Nishi",
+    "metadataPanel.direction": "Direção de leitura",
+    "metadataPanel.directionRtl": "Direita para a esquerda (mangá)",
+    "metadataPanel.directionLtr": "Esquerda para a direita",
+    "metadataPanel.description": "Descrição",
+    "metadataPanel.descriptionPlaceholder": "Sinopse opcional exibida na sua biblioteca.",
+    "metadataPanel.exportAs": "Exportar como",
+    "metadataPanel.exportNameHint": "Usado como o nome do arquivo ao exportar.",
+    "metadataPanel.exportNameHintDefault":
+      "Retirado da série e do volume acima. Digite para substituir.",
+  },
+};
+
+export default dict;

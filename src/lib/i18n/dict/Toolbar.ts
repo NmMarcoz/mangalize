@@ -1,0 +1,44 @@
+import type { PartialDictionary } from "@/lib/i18n/types";
+
+const dict: PartialDictionary = {
+  en: {
+    "toolbar.backToLibrary": "Back to the library",
+    "toolbar.untitledVolume": "Untitled volume",
+    "toolbar.chapters": "{count} chapters",
+    "toolbar.pages": "{count} pages",
+    "toolbar.spreads": "{count} spreads",
+    "toolbar.reloadFolder": "Reload this folder from disk",
+    "toolbar.openFolder": "Open another folder",
+    "toolbar.formatEpub": "EPUB · Kindle",
+    "toolbar.formatCbz": "CBZ · Comic",
+    "toolbar.build": "Build",
+    "toolbar.buildAs": "Build as…",
+    "toolbar.chooseLocation": "Choose a one-off location",
+    "toolbar.sendHint": "Build if needed, then email it to your Kindle",
+    "toolbar.showExcluded": "Show excluded",
+    "toolbar.size": "Size",
+    "toolbar.reportSummary": "{pages} pages · {bytes}",
+    "toolbar.shortcutsHint": "X exclude · S split · C cover · Esc clear",
+  },
+  "pt-BR": {
+    "toolbar.backToLibrary": "Voltar para a biblioteca",
+    "toolbar.untitledVolume": "Volume sem título",
+    "toolbar.chapters": "{count} capítulos",
+    "toolbar.pages": "{count} páginas",
+    "toolbar.spreads": "{count} páginas duplas",
+    "toolbar.reloadFolder": "Recarregar esta pasta do disco",
+    "toolbar.openFolder": "Abrir outra pasta",
+    "toolbar.formatEpub": "EPUB · Kindle",
+    "toolbar.formatCbz": "CBZ · Quadrinhos",
+    "toolbar.build": "Gerar",
+    "toolbar.buildAs": "Gerar como…",
+    "toolbar.chooseLocation": "Escolher um local pontual",
+    "toolbar.sendHint": "Gera se necessário e envia por e-mail para o seu Kindle",
+    "toolbar.showExcluded": "Mostrar excluídas",
+    "toolbar.size": "Tamanho",
+    "toolbar.reportSummary": "{pages} páginas · {bytes}",
+    "toolbar.shortcutsHint": "X excluir · S dividir · C capa · Esc limpar",
+  },
+};
+
+export default dict;

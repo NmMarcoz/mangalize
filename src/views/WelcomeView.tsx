@@ -4,6 +4,7 @@ import { BookOpen, FolderOpen, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/lib/i18n";
 import { canPickFolders } from "@/lib/platform";
 import {
   getSettings,
@@ -26,6 +27,7 @@ interface WelcomeViewProps {
  * cleared with one click.
  */
 export function WelcomeView({ onDone, onError }: WelcomeViewProps) {
+  const t = useT();
   const [folder, setFolder] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -64,26 +66,13 @@ export function WelcomeView({ onDone, onError }: WelcomeViewProps) {
     <div className="flex h-full items-center justify-center p-8">
       <div className="w-full max-w-lg">
         <BookOpen className="size-8 text-primary" />
-        <h1 className="mt-4 text-lg font-semibold">Welcome to Mangalize</h1>
+        <h1 className="mt-4 text-lg font-semibold">{t("welcomeView.title")}</h1>
         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-          {canPickFolders ? (
-            <>
-              Where should finished volumes go? Build will write here without
-              asking, filing each volume under its series. You can change this
-              any time in Settings, and Build as… will always let you pick a
-              one-off location.
-            </>
-          ) : (
-            <>
-              Finished volumes are written here, filed under their series. Once
-              a volume is built you can hand it to any other app — Drive, mail,
-              a reader — from the Share button on it.
-            </>
-          )}
+          {canPickFolders ? t("welcomeView.introPicker") : t("welcomeView.introNoPicker")}
         </p>
 
         <div className="mt-5 flex flex-col gap-1.5">
-          <Label>Build folder</Label>
+          <Label>{t("welcomeView.buildFolder")}</Label>
           <div className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate rounded-md border border-border bg-background px-3 py-2 font-mono text-[11px]">
               {folder ?? "…"}
@@ -91,21 +80,19 @@ export function WelcomeView({ onDone, onError }: WelcomeViewProps) {
             {canPickFolders && (
               <Button variant="outline" size="sm" onClick={() => void pick()}>
                 <FolderOpen />
-                Change
+                {t("welcomeView.change")}
               </Button>
             )}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            {canPickFolders
-              ? "Created for you if it does not exist yet."
-              : "The app's own storage. Android does not hand out anywhere else without a document picker this app has no use for."}
+            {canPickFolders ? t("welcomeView.hintPicker") : t("welcomeView.hintNoPicker")}
           </p>
         </div>
 
         <div className="mt-6 flex items-center gap-2">
           <Button onClick={() => void confirm(folder)} disabled={!folder || saving}>
             {saving && <Loader2 className="animate-spin" />}
-            {canPickFolders ? "Use this folder" : "Get started"}
+            {canPickFolders ? t("welcomeView.useThisFolder") : t("welcomeView.getStarted")}
           </Button>
           {/* "Decide later" means Build asks where each time, which needs a
               folder picker Android does not have. */}
@@ -114,9 +101,9 @@ export function WelcomeView({ onDone, onError }: WelcomeViewProps) {
               variant="ghost"
               onClick={() => void confirm(null)}
               disabled={saving}
-              title="Build will ask for a location each time"
+              title={t("welcomeView.decideLaterHint")}
             >
-              Decide later
+              {t("welcomeView.decideLater")}
             </Button>
           )}
         </div>

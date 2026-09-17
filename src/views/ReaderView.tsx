@@ -13,6 +13,7 @@ import {
 import { ReaderSettings } from "@/components/ReaderSettings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n";
 import {
   cachedPage,
   clearPages,
@@ -106,6 +107,7 @@ export function ReaderView({
   onOpenSeries,
   onExit,
 }: ReaderViewProps) {
+  const t = useT();
   const [open, setOpen] = useState<OpenChapter | null>(null);
   /**
    * Why the chapter could not be shown.
@@ -176,7 +178,7 @@ export function ReaderView({
       // discovered by asking, and the honest response is to say where it lives.
       if (found.pages.length === 0) {
         setFailure({
-          message: found.message ?? "This chapter has no pages.",
+          message: found.message ?? t("readerView.noPagesMessage"),
           externalUrl: found.external_url,
         });
         return;
@@ -261,6 +263,7 @@ export function ReaderView({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target]);
 
   // Decoded pages are large; holding a whole series' worth would be a leak.
@@ -428,7 +431,10 @@ export function ReaderView({
         const found = ordered.find((c) => c.number === open.number);
         if (!found) {
           setFailure({
-            message: `There is no chapter ${open.number} in ${languageName(code)}.`,
+            message: t("readerView.noChapterInLanguage", {
+              number: open.number,
+              language: languageName(code),
+            }),
             externalUrl: null,
           });
           return;
@@ -454,7 +460,7 @@ export function ReaderView({
         setSwitching(false);
       }
     },
-    [open, page, onNavigate],
+    [open, page, onNavigate, t],
   );
 
   const patchPrefs = useCallback((patch: Partial<ReaderPrefs>) => {
@@ -492,7 +498,7 @@ export function ReaderView({
             <ArrowLeft />
           </Button>
           <p className="flex-1 truncate text-sm font-medium">
-            {target.kind === "online" ? target.seriesTitle : "Opening chapter"}
+            {target.kind === "online" ? target.seriesTitle : t("readerView.openingChapter")}
           </p>
         </header>
 
@@ -501,7 +507,7 @@ export function ReaderView({
             <div className="max-w-md text-center">
               <TriangleAlert className="mx-auto size-7 text-amber-500" />
               <h2 className="mt-3 text-sm font-medium text-white">
-                This chapter cannot be read here
+                {t("readerView.cannotReadTitle")}
               </h2>
               {/* The message ends in a publisher URL, which has no spaces in
                   it to wrap at and runs off both edges of a phone without this. */}
@@ -512,7 +518,7 @@ export function ReaderView({
               <div className="mt-5 flex items-center justify-center gap-2">
                 <Button variant="outline" onClick={onExit}>
                   <ArrowLeft />
-                  Go back
+                  {t("readerView.goBack")}
                 </Button>
                 {failure.externalUrl && (
                   <Button asChild>
@@ -522,14 +528,14 @@ export function ReaderView({
                       rel="noreferrer"
                     >
                       <ExternalLink />
-                      Read at the publisher
+                      {t("readerView.readAtPublisher")}
                     </a>
                   </Button>
                 )}
               </div>
 
               <p className="mt-4 text-[10px] text-white/35">
-                {isMobile ? "Back also closes the reader." : "Esc also closes the reader."}
+                {isMobile ? t("readerView.backCloses") : t("readerView.escCloses")}
               </p>
             </div>
           ) : (
@@ -556,16 +562,17 @@ export function ReaderView({
           >
             <p className="truncate text-sm font-medium">{open.seriesTitle}</p>
             <p className="truncate text-[11px] text-white/60">
-              Chapter {open.number}
+              {t("readerView.chapterLabel", { number: open.number })}
               {open.title ? ` · ${open.title}` : ""}
             </p>
           </button>
           {open.online && (
             <Badge variant="outline" className="shrink-0 border-white/30 text-white/70">
               <Cloud className="size-2.5" />
-              streaming
+              {t("readerView.streaming")}
             </Badge>
           )}
+          {/* A raw counter, not narrative text — left unwrapped like a clock. */}
           <span className="shrink-0 font-mono text-xs text-white/70">
             {page + 1} / {total}
           </span>
@@ -721,6 +728,7 @@ function PageImage({
   fit: FitMode;
   paired: boolean;
 }) {
+  const t = useT();
   const [url, setUrl] = useState<string | undefined>(() => cachedPage(source, online));
   const [failed, setFailed] = useState(false);
 
@@ -742,11 +750,11 @@ function PageImage({
   if (failed) {
     return (
       <div className="flex h-full items-center justify-center p-8 text-center text-xs text-white/50">
-        This page could not be opened.
+        {t("readerView.pageLoadFailed")}
         {online && (
           <>
             <br />
-            The source may be rate limiting; try again in a moment.
+            {t("readerView.rateLimited")}
           </>
         )}
       </div>

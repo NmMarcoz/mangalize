@@ -12,6 +12,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export type TaskState = "queued" | "running" | "done" | "failed" | "cancelled";
@@ -51,15 +52,16 @@ export function TaskPanel({
   tasks: Task[];
   onClose: () => void;
 }) {
-  const finished = tasks.filter((t) => !isActive(t));
+  const t = useT();
+  const finished = tasks.filter((task) => !isActive(task));
 
   return (
     <aside className="absolute right-3 top-14 z-40 flex max-h-[70dvh] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <h2 className="flex-1 text-xs font-semibold">Tasks</h2>
+        <h2 className="flex-1 text-xs font-semibold">{t("taskPanel.title")}</h2>
         {finished.length > 0 && (
           <Button variant="ghost" size="sm" onClick={() => void clearFinishedTasks()}>
-            Clear finished
+            {t("taskPanel.clearFinished")}
           </Button>
         )}
         <Button variant="ghost" size="icon-sm" onClick={onClose}>
@@ -70,8 +72,7 @@ export function TaskPanel({
       <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
         {tasks.length === 0 ? (
           <p className="px-3 py-6 text-center text-[11px] text-muted-foreground">
-            Nothing running. Downloads and builds appear here, and carry on while
-            you read.
+            {t("taskPanel.empty")}
           </p>
         ) : (
           tasks.map((task) => <Row key={task.id} task={task} />)
@@ -82,6 +83,7 @@ export function TaskPanel({
 }
 
 function Row({ task }: { task: Task }) {
+  const t = useT();
   const running = task.state === "running";
 
   return (
@@ -114,9 +116,9 @@ function Row({ task }: { task: Task }) {
           {task.error ??
             task.summary ??
             (task.state === "queued"
-              ? "waiting"
+              ? t("taskPanel.waiting")
               : task.state === "cancelled"
-                ? "stopped"
+                ? t("taskPanel.stopped")
                 : task.detail)}
         </p>
 
@@ -134,7 +136,7 @@ function Row({ task }: { task: Task }) {
         <Button
           variant="ghost"
           size="icon-sm"
-          title="Stop"
+          title={t("taskPanel.stop")}
           onClick={() => void cancelTask(task.id)}
         >
           <X className="size-3" />

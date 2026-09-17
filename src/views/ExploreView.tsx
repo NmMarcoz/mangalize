@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useT } from "@/lib/i18n";
 import {
   latestSource,
   listSources,
@@ -164,6 +165,7 @@ function MangaDexExplore({
   onError,
   sourcePicker,
 }: ExploreViewProps & { sourcePicker: ReactNode }) {
+  const t = useT();
   // Held by the app rather than here: leaving for a series unmounts this view,
   // and coming back to a cleared filter bar and the top of the catalogue is not
   // "back", it is starting again.
@@ -277,11 +279,11 @@ function MangaDexExplore({
   return (
     <div className="flex h-full flex-col">
       <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card/60 px-4 py-2.5">
-        <h1 className="mr-2 text-sm font-semibold">Explore</h1>
+        <h1 className="mr-2 text-sm font-semibold">{t("exploreView.title")}</h1>
         {sourcePicker}
         <Input
           value={text}
-          placeholder="Search by title, or just browse…"
+          placeholder={t("exploreView.searchPlaceholder")}
           className="max-w-sm"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -298,13 +300,13 @@ function MangaDexExplore({
           onClick={() => setShowFilters((open) => !open)}
         >
           <SlidersHorizontal />
-          Filters
+          {t("exploreView.filters")}
         </Button>
 
         {!showFilters && <FilterSummary query={query} tags={tags} />}
 
         <span className="ml-auto shrink-0 text-[11px] text-muted-foreground">
-          {total > 0 && `${total.toLocaleString()} series`}
+          {total > 0 && t("exploreView.totalSeries", { total: total.toLocaleString() })}
         </span>
       </header>
 
@@ -327,14 +329,14 @@ function MangaDexExplore({
       >
         {results.length === 0 && loading ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" /> Loading…
+            <Loader2 className="size-3.5 animate-spin" /> {t("exploreView.loading")}
           </div>
         ) : results.length === 0 ? (
           <div className="mx-auto mt-20 max-w-md text-center">
             <Compass className="mx-auto size-8 text-muted-foreground" />
-            <h2 className="mt-3 text-sm font-medium">Nothing matches those filters</h2>
+            <h2 className="mt-3 text-sm font-medium">{t("exploreView.noMatchesTitle")}</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Try widening the content rating, or clearing a tag or two.
+              {t("exploreView.noMatchesDescription")}
             </p>
           </div>
         ) : (
@@ -354,7 +356,7 @@ function MangaDexExplore({
               <div className="mt-5 flex justify-center">
                 <Button variant="outline" onClick={loadMore} disabled={loading}>
                   {loading && <Loader2 className="animate-spin" />}
-                  Load {Math.min(PAGE_SIZE, total - results.length)} more
+                  {t("exploreView.loadMore", { count: Math.min(PAGE_SIZE, total - results.length) })}
                 </Button>
               </div>
             )}
@@ -389,6 +391,7 @@ function ResultCard({
   owned: boolean;
   onSelect: () => void;
 }) {
+  const t = useT();
   return (
     <button
       onClick={onSelect}
@@ -416,7 +419,7 @@ function ResultCard({
           {match.title_english ?? match.title_romaji ?? match.title_native}
         </p>
         <p className="truncate text-[10px] text-muted-foreground">
-          {match.author ?? "Unknown author"}
+          {match.author ?? t("exploreView.unknownAuthor")}
           {match.year ? ` · ${match.year}` : ""}
         </p>
       </div>
@@ -448,6 +451,7 @@ function RegisteredSourceExplore({
   onRead: (target: ReaderTarget) => void;
   onError: (message: string | null) => void;
 }) {
+  const t = useT();
   const [mode, setMode] = useState<"popular" | "latest">("popular");
   const [text, setText] = useState("");
   const [results, setResults] = useState<SourceManga[]>([]);
@@ -518,7 +522,7 @@ function RegisteredSourceExplore({
   return (
     <div className="flex h-full flex-col">
       <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card/60 px-4 py-2.5">
-        <h1 className="mr-2 text-sm font-semibold">Explore</h1>
+        <h1 className="mr-2 text-sm font-semibold">{t("exploreView.title")}</h1>
         <SourcePicker value={sourceId} sources={sources} onChange={onSourceChange} />
 
         <div className="flex shrink-0 rounded-md border border-border p-0.5">
@@ -527,20 +531,20 @@ function RegisteredSourceExplore({
             size="sm"
             onClick={() => setMode("popular")}
           >
-            Popular
+            {t("exploreView.popular")}
           </Button>
           <Button
             variant={mode === "latest" ? "default" : "ghost"}
             size="sm"
             onClick={() => setMode("latest")}
           >
-            Latest
+            {t("exploreView.latest")}
           </Button>
         </div>
 
         <Input
           value={text}
-          placeholder="Search this source…"
+          placeholder={t("exploreView.searchSourcePlaceholder")}
           className="max-w-sm"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -559,13 +563,13 @@ function RegisteredSourceExplore({
       >
         {results.length === 0 && loading ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" /> Loading…
+            <Loader2 className="size-3.5 animate-spin" /> {t("exploreView.loading")}
           </div>
         ) : results.length === 0 ? (
           <div className="mx-auto mt-20 max-w-md text-center">
             <Compass className="mx-auto size-8 text-muted-foreground" />
-            <h2 className="mt-3 text-sm font-medium">Nothing here</h2>
-            <p className="mt-1 text-xs text-muted-foreground">Try a different search.</p>
+            <h2 className="mt-3 text-sm font-medium">{t("exploreView.emptyTitle")}</h2>
+            <p className="mt-1 text-xs text-muted-foreground">{t("exploreView.emptyDescription")}</p>
           </div>
         ) : (
           <>
@@ -584,7 +588,7 @@ function RegisteredSourceExplore({
               <div className="mt-5 flex justify-center">
                 <Button variant="outline" onClick={loadMore} disabled={loading}>
                   {loading && <Loader2 className="animate-spin" />}
-                  Load more
+                  {t("exploreView.loadMorePlain")}
                 </Button>
               </div>
             )}

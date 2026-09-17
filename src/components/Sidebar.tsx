@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 
 import type { UpdateStage } from "@/hooks/useUpdater";
+import { useT } from "@/lib/i18n";
+import type { Translator } from "@/lib/i18n/types";
 import { canSendToDevice } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 
@@ -48,13 +50,17 @@ interface Destination {
   label: string;
 }
 
-function destinations(): Destination[] {
+function destinations(t: Translator): Destination[] {
   const all: Destination[] = [
-    { section: "library", icon: <BookOpen className="size-4" />, label: "Library" },
-    { section: "explore", icon: <Compass className="size-4" />, label: "Explore" },
-    { section: "history", icon: <Clock className="size-4" />, label: "History" },
-    { section: "send", icon: <Send className="size-4" />, label: "Send to Kindle" },
-    { section: "settings", icon: <Settings className="size-4" />, label: "Settings" },
+    { section: "library", icon: <BookOpen className="size-4" />, label: t("sidebar.library") },
+    { section: "explore", icon: <Compass className="size-4" />, label: t("sidebar.explore") },
+    { section: "history", icon: <Clock className="size-4" />, label: t("sidebar.history") },
+    {
+      section: "send",
+      icon: <Send className="size-4" />,
+      label: t("sidebar.sendToKindle"),
+    },
+    { section: "settings", icon: <Settings className="size-4" />, label: t("sidebar.settings") },
   ];
   return all.filter((d) => d.section !== "send" || canSendToDevice);
 }
@@ -73,6 +79,7 @@ export function Sidebar({
   onCheckUpdates,
   variant = "rail",
 }: SidebarProps) {
+  const t = useT();
   const [expanded, setExpanded] = useState(
     () => localStorage.getItem(EXPANDED_KEY) === "true",
   );
@@ -92,11 +99,11 @@ export function Sidebar({
         // is for a platform that reports it to CSS instead, and is zero here.
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        {destinations().map((d) => (
+        {destinations(t).map((d) => (
           <Tab
             key={d.section}
             icon={d.icon}
-            label={d.section === "send" ? "Send" : d.label}
+            label={d.section === "send" ? t("sidebar.send") : d.label}
             active={active === d.section}
             onClick={() => onNavigate(d.section)}
           />
@@ -113,7 +120,7 @@ export function Sidebar({
       )}
     >
       <div className="flex flex-col gap-1 px-2">
-        {destinations().map((d) => (
+        {destinations(t).map((d) => (
           <Item
             key={d.section}
             icon={d.icon}
@@ -134,7 +141,7 @@ export function Sidebar({
               <CloudDownload className="size-4" />
             )
           }
-          label={updateStage === "uptodate" ? "Up to date" : "Check for updates"}
+          label={updateStage === "uptodate" ? t("sidebar.upToDate") : t("sidebar.checkForUpdates")}
           expanded={expanded}
           active={false}
           disabled={updateStage === "checking"}
@@ -150,7 +157,7 @@ export function Sidebar({
               <PanelLeftOpen className="size-4" />
             )
           }
-          label="Collapse"
+          label={t("sidebar.collapse")}
           expanded={expanded}
           active={false}
           onClick={toggle}

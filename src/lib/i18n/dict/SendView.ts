@@ -1,0 +1,86 @@
+import type { PartialDictionary } from "@/lib/i18n/types";
+
+const dict: PartialDictionary = {
+  en: {
+    "sendView.title": "Send to Kindle",
+    "sendView.testSent": "Test sent",
+    "sendView.sendTest": "Send test",
+    "sendView.saved": "Saved",
+    "sendView.save": "Save",
+    "sendView.loading": "Loading…",
+    "sendView.approvalWarningTitle":
+      "Amazon only accepts mail from an address you have approved.",
+    "sendView.approvedBefore": "Add the",
+    "sendView.approvedEmphasis": "sender address",
+    "sendView.approvedAfter":
+      "below to your Approved Personal Document E-mail List, or Amazon discards the message without a bounce — a successful send here will still never arrive.",
+    "sendView.manageDevicesLink": "Manage Your Content and Devices → Preferences",
+    "sendView.deviceAddress": "Device address",
+    "sendView.deviceAddressPlaceholder": "something@kindle.com",
+    "sendView.deviceAddressHint": "Found under the same Amazon page, per device.",
+    "sendView.senderAddress": "Sender address",
+    "sendView.exampleAddress": "you@gmail.com",
+    "sendView.senderAddressHint": "This is the one Amazon must have approved.",
+    "sendView.mailProvider": "Mail provider",
+    "sendView.mailProviderPlaceholder": "Choose one, or set it up by hand",
+    "sendView.server": "Server",
+    "sendView.serverPlaceholder": "smtp.gmail.com",
+    "sendView.port": "Port",
+    "sendView.encryption": "Encryption",
+    "sendView.encryptionStartTls": "STARTTLS · 587",
+    "sendView.encryptionTls": "TLS · 465",
+    "sendView.encryptionNone": "None",
+    "sendView.username": "Username",
+    "sendView.password": "Password",
+    "sendView.passwordStored": "Stored in your keychain",
+    "sendView.passwordPlaceholder": "App password",
+    "sendView.passwordHint":
+      "The password is kept in {keychain}, never in Mangalize's settings file. Leave the field blank to keep the stored one; clear it and save to forget it.",
+    "sendView.windowsCredentialManager": "Windows Credential Manager",
+    "sendView.macKeychain": "the macOS Keychain",
+    "sendView.testSuccess":
+      "Your mail server accepted the message. If it does not reach the device, the sender address is not approved with Amazon.",
+  },
+  "pt-BR": {
+    "sendView.title": "Enviar para o Kindle",
+    "sendView.testSent": "Teste enviado",
+    "sendView.sendTest": "Enviar teste",
+    "sendView.saved": "Salvo",
+    "sendView.save": "Salvar",
+    "sendView.loading": "Carregando…",
+    "sendView.approvalWarningTitle":
+      "A Amazon só aceita e-mails de um endereço que você tenha aprovado.",
+    "sendView.approvedBefore": "Adicione o",
+    "sendView.approvedEmphasis": "endereço do remetente",
+    "sendView.approvedAfter":
+      "abaixo à sua Lista de E-mails de Documentos Pessoais Aprovados, ou a Amazon descarta a mensagem sem aviso — um envio bem-sucedido aqui mesmo assim nunca vai chegar.",
+    "sendView.manageDevicesLink": "Gerenciar Conteúdo e Dispositivos → Preferências",
+    "sendView.deviceAddress": "Endereço do dispositivo",
+    "sendView.deviceAddressPlaceholder": "algumacoisa@kindle.com",
+    "sendView.deviceAddressHint": "Encontrado na mesma página da Amazon, por dispositivo.",
+    "sendView.senderAddress": "Endereço do remetente",
+    "sendView.exampleAddress": "voce@gmail.com",
+    "sendView.senderAddressHint": "Este é o que a Amazon precisa ter aprovado.",
+    "sendView.mailProvider": "Provedor de e-mail",
+    "sendView.mailProviderPlaceholder": "Escolha um, ou configure manualmente",
+    "sendView.server": "Servidor",
+    "sendView.serverPlaceholder": "smtp.gmail.com",
+    "sendView.port": "Porta",
+    "sendView.encryption": "Criptografia",
+    "sendView.encryptionStartTls": "STARTTLS · 587",
+    "sendView.encryptionTls": "TLS · 465",
+    "sendView.encryptionNone": "Nenhuma",
+    "sendView.username": "Usuário",
+    "sendView.password": "Senha",
+    "sendView.passwordStored": "Guardada no seu chaveiro",
+    "sendView.passwordPlaceholder": "Senha de app",
+    "sendView.passwordHint":
+      "A senha é guardada no {keychain}, nunca no arquivo de configurações do Mangalize. Deixe o campo em branco para manter a senha salva; limpe-o e salve para esquecê-la.",
+    "sendView.windowsCredentialManager": "Gerenciador de Credenciais do Windows",
+    "sendView.macKeychain": "Chaveiro do macOS",
+    "sendView.testSuccess":
+      "Seu servidor de e-mail aceitou a mensagem. Se ela não chegar ao dispositivo, o endereço do remetente não está aprovado na Amazon.",
+  },
+};
+
+export default dict;

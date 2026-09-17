@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Hint } from "@/components/ui/tooltip";
+import { useT } from "@/lib/i18n";
 import {
   mangaDetailsSource,
   volumesSource,
@@ -53,6 +54,7 @@ export function SourceSeriesModal({
   onAdded,
   onError,
 }: SourceSeriesModalProps) {
+  const t = useT();
   const [details, setDetails] = useState<SourceMangaDetails | null>(null);
   const [layout, setLayout] = useState<VolumeChapters[] | null>(null);
   const [adding, setAdding] = useState(false);
@@ -181,7 +183,7 @@ export function SourceSeriesModal({
               </p>
 
               <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                <span>{details?.author ?? "Unknown author"}</span>
+                <span>{details?.author ?? t("sourceSeriesModal.unknownAuthor")}</span>
                 {details?.artist && details.artist !== details.author && (
                   <span>· {details.artist}</span>
                 )}
@@ -226,18 +228,18 @@ export function SourceSeriesModal({
             )}
           >
             <p className="flex-1 pb-2 text-[11px] text-muted-foreground">
-              {layout && `${flat.length} chapters.`}
+              {layout && t("sourceSeriesModal.chaptersCount", { count: flat.length })}
             </p>
 
             {owned ? (
               <Button variant="outline" onClick={() => onOpenSeries(owned.id)}>
                 <Check />
-                In your library
+                {t("sourceSeriesModal.inLibrary")}
               </Button>
             ) : (
               <Button onClick={() => void add()} disabled={adding}>
                 {adding ? <Loader2 className="animate-spin" /> : <Plus />}
-                Add to library
+                {t("sourceSeriesModal.addToLibrary")}
               </Button>
             )}
           </div>
@@ -245,16 +247,22 @@ export function SourceSeriesModal({
           <div className="px-5 pb-5">
             {layout === null ? (
               <p className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" /> Loading chapters…
+                <Loader2 className="size-3.5 animate-spin" />{" "}
+                {t("sourceSeriesModal.loadingChapters")}
               </p>
             ) : flat.length === 0 ? (
-              <p className="py-4 text-xs text-muted-foreground">No chapters found.</p>
+              <p className="py-4 text-xs text-muted-foreground">
+                {t("sourceSeriesModal.noChapters")}
+              </p>
             ) : (
               <div className="max-h-72 overflow-y-auto rounded-md border border-border">
                 {layout.map((volume) => (
                   <div key={volume.volume}>
                     <p className="sticky top-0 bg-card/95 px-2.5 py-1 text-[10px] font-medium text-muted-foreground backdrop-blur">
-                      Volume {volume.volume} · {volume.chapters.length}
+                      {t("sourceSeriesModal.volumeHeading", {
+                        number: volume.volume,
+                        count: volume.chapters.length,
+                      })}
                     </p>
                     {volume.chapters.map((chapter) => (
                       <ChapterRow
@@ -287,6 +295,7 @@ function ChapterRow({
   onRead: () => void;
   onGet: () => void;
 }) {
+  const t = useT();
   const fetchable = chapter.id !== null && !chapter.unavailable;
 
   return (
@@ -299,26 +308,26 @@ function ChapterRow({
       <span className="w-12 shrink-0 font-mono">{chapter.number}</span>
       <span className="min-w-0 flex-1 truncate text-muted-foreground">
         {!fetchable && (
-          <span className="text-amber-500/80">not hosted by the source</span>
+          <span className="text-amber-500/80">{t("sourceSeriesModal.notHosted")}</span>
         )}
       </span>
 
       {fetchable && (
         <>
-          <Hint label="Read now, streaming from the source">
+          <Hint label={t("sourceSeriesModal.readHint")}>
             <Button variant="ghost" size="sm" onClick={onRead} disabled={busy}>
               <Cloud className="size-3" />
-              Read
+              {t("sourceSeriesModal.read")}
             </Button>
           </Hint>
-          <Hint label="Download into your library">
+          <Hint label={t("sourceSeriesModal.getHint")}>
             <Button variant="ghost" size="sm" onClick={onGet} disabled={busy}>
               {busy ? (
                 <Loader2 className="size-3 animate-spin" />
               ) : (
                 <Download className="size-3" />
               )}
-              Get
+              {t("sourceSeriesModal.get")}
             </Button>
           </Hint>
         </>

@@ -8,6 +8,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useT } from "@/lib/i18n";
 import { downloadFromSource } from "@/lib/library";
 
 interface SourceDownloadDialogProps {
@@ -39,6 +40,7 @@ export function SourceDownloadDialog({
   chapters,
   onStarted,
 }: SourceDownloadDialogProps) {
+  const t = useT();
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,19 +69,21 @@ export function SourceDownloadDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <div className="border-b border-border px-4 py-3">
-          <DialogTitle>Get {chapters.length} from {sourceName}</DialogTitle>
-          <DialogDescription>
-            Only the chapters already listed as missing. Nothing else is looked
-            for, and one that fails does not stop the rest.
-          </DialogDescription>
+          <DialogTitle>
+            {t("sourceDownloadDialog.title", { count: chapters.length, sourceName })}
+          </DialogTitle>
+          <DialogDescription>{t("sourceDownloadDialog.description")}</DialogDescription>
         </div>
 
         <div className="min-h-0 flex-1 px-4 py-3">
           <p className="text-xs text-muted-foreground">
             {chapters.length === 1
-              ? `Chapter ${chapters[0]}.`
-              : `Chapters ${chapters[0]} to ${chapters[chapters.length - 1]}.`}{" "}
-            This runs in the background — you can close this and carry on reading.
+              ? t("sourceDownloadDialog.singleChapter", { number: chapters[0] })
+              : t("sourceDownloadDialog.rangeChapters", {
+                  first: chapters[0],
+                  last: chapters[chapters.length - 1],
+                })}{" "}
+            {t("sourceDownloadDialog.backgroundHint")}
           </p>
 
           {error && (
@@ -91,11 +95,11 @@ export function SourceDownloadDialog({
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("sourceDownloadDialog.cancel")}
           </Button>
           <Button onClick={() => void run()} disabled={starting || chapters.length === 0}>
             {starting ? <Loader2 className="animate-spin" /> : <Download />}
-            Download
+            {t("sourceDownloadDialog.download")}
           </Button>
         </div>
       </DialogContent>

@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { useT } from "@/lib/i18n";
 import { listSources, searchSource, type SourceInfo, type SourceManga } from "@/lib/api";
 import { addSeriesFromSource, type Series } from "@/lib/library";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,7 @@ interface AddFromSourceDialogProps {
  * adding — the backend fetches full details itself once a result is picked.
  */
 export function AddFromSourceDialog({ open, onOpenChange, onAdded }: AddFromSourceDialogProps) {
+  const t = useT();
   const [sources, setSources] = useState<SourceInfo[] | null>(null);
   const [sourceId, setSourceId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -70,14 +72,14 @@ export function AddFromSourceDialog({ open, onOpenChange, onAdded }: AddFromSour
       const page = await searchSource(sourceId, query, 1);
       setResults(page.manga);
       setSelected(page.manga[0] ?? null);
-      if (page.manga.length === 0) setError("No matches.");
+      if (page.manga.length === 0) setError(t("addFromSourceDialog.noMatches"));
     } catch (e) {
       setError(String(e));
       setResults([]);
     } finally {
       setSearching(false);
     }
-  }, [sourceId, query]);
+  }, [sourceId, query, t]);
 
   const add = useCallback(async () => {
     if (!sourceId || !selected) return;
@@ -98,26 +100,34 @@ export function AddFromSourceDialog({ open, onOpenChange, onAdded }: AddFromSour
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85dvh] max-w-lg">
         <div className="border-b border-border px-4 py-3">
-          <DialogTitle>Add from a source</DialogTitle>
-          <DialogDescription>
-            Search a registered source directly — for a site MangaDex and Kitsu
-            have no listing for at all.
-          </DialogDescription>
+          <DialogTitle>{t("addFromSourceDialog.title")}</DialogTitle>
+          <DialogDescription>{t("addFromSourceDialog.description")}</DialogDescription>
         </div>
 
         <div className="flex flex-col gap-3 px-4 py-3">
           {sources !== null && sources.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No sources are registered. Drop a <code>.lua</code> extension into
-              your library's <code>extensions</code> folder and reopen this dialog.
+              {(() => {
+                const [before, rest] = t("addFromSourceDialog.noSources").split("{ext}");
+                const [middle, after] = rest.split("{folder}");
+                return (
+                  <>
+                    {before}
+                    <code>.lua</code>
+                    {middle}
+                    <code>extensions</code>
+                    {after}
+                  </>
+                );
+              })()}
             </p>
           ) : (
             <>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="source">Source</Label>
+                <Label htmlFor="source">{t("addFromSourceDialog.sourceLabel")}</Label>
                 <Select value={sourceId ?? undefined} onValueChange={setSourceId}>
                   <SelectTrigger id="source">
-                    <SelectValue placeholder="Choose a source…" />
+                    <SelectValue placeholder={t("addFromSourceDialog.sourcePlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
                     {sources?.map((s) => (
@@ -133,7 +143,7 @@ export function AddFromSourceDialog({ open, onOpenChange, onAdded }: AddFromSour
                 <Input
                   autoFocus
                   value={query}
-                  placeholder="Series name…"
+                  placeholder={t("addFromSourceDialog.seriesNamePlaceholder")}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") void runSearch();
@@ -146,7 +156,9 @@ export function AddFromSourceDialog({ open, onOpenChange, onAdded }: AddFromSour
 
               <div className="scrollbar-thin max-h-72 min-h-0 overflow-y-auto rounded-md border border-border">
                 {results === null && !searching && (
-                  <p className="p-4 text-xs text-muted-foreground">Press Enter to search.</p>
+                  <p className="p-4 text-xs text-muted-foreground">
+                    {t("addFromSourceDialog.pressEnter")}
+                  </p>
                 )}
                 {results?.map((manga) => (
                   <button
@@ -187,11 +199,11 @@ export function AddFromSourceDialog({ open, onOpenChange, onAdded }: AddFromSour
           )}
           <div className="ml-auto flex gap-2">
             <Button variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("addFromSourceDialog.cancel")}
             </Button>
             <Button onClick={() => void add()} disabled={!selected || adding}>
               {adding ? <Loader2 className="animate-spin" /> : <Plus />}
-              Add to library
+              {t("addFromSourceDialog.addToLibrary")}
             </Button>
           </div>
         </div>

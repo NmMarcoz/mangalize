@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { Hint } from "@/components/ui/tooltip";
 import { useThumbnail } from "@/hooks/useThumbnail";
+import { useT } from "@/lib/i18n";
+import type { Translator } from "@/lib/i18n/types";
 import { isMobile } from "@/lib/platform";
 import {
   clearHistory,
@@ -38,6 +40,7 @@ const LIMIT = 100;
 
 /** What you were reading, most recent first. */
 export function HistoryView({ onRead, onOpenSeries, onError }: HistoryViewProps) {
+  const t = useT();
   const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
   const [clearing, setClearing] = useState(false);
 
@@ -80,19 +83,18 @@ export function HistoryView({ onRead, onOpenSeries, onError }: HistoryViewProps)
     <div className="flex h-full flex-col">
       <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-4 py-2.5">
         <div className="min-w-0 flex-1">
-          <h1 className="text-sm font-semibold">History</h1>
+          <h1 className="text-sm font-semibold">{t("historyView.title")}</h1>
           <p className="truncate text-[11px] text-muted-foreground">
-            What you read and in what order, whether the pages came off disk or
-            from the source.
+            {t("historyView.subtitle")}
           </p>
         </div>
         <Button variant="ghost" size="sm" onClick={refresh}>
-          Refresh
+          {t("historyView.refresh")}
         </Button>
         {entries !== null && entries.length > 0 && (
           <Button variant="ghost" size="sm" onClick={() => setClearing(true)}>
             <Trash2 />
-            Clear
+            {t("historyView.clear")}
           </Button>
         )}
       </header>
@@ -100,14 +102,14 @@ export function HistoryView({ onRead, onOpenSeries, onError }: HistoryViewProps)
       <main className="scrollbar-thin min-h-0 flex-1 overflow-y-auto p-5">
         {entries === null ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" /> Loading…
+            <Loader2 className="size-3.5 animate-spin" /> {t("historyView.loading")}
           </div>
         ) : entries.length === 0 ? (
           <div className="mx-auto mt-20 max-w-md text-center">
             <Clock className="mx-auto size-8 text-muted-foreground" />
-            <h2 className="mt-3 text-sm font-medium">Nothing read yet</h2>
+            <h2 className="mt-3 text-sm font-medium">{t("historyView.emptyTitle")}</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Chapters you open appear here, with the page you stopped on.
+              {t("historyView.emptyHint")}
             </p>
           </div>
         ) : (
@@ -130,19 +132,18 @@ export function HistoryView({ onRead, onOpenSeries, onError }: HistoryViewProps)
       <Dialog open={clearing} onOpenChange={setClearing}>
         <DialogContent className="max-w-md">
           <div className="border-b border-border px-4 py-3">
-            <DialogTitle>Clear reading history?</DialogTitle>
+            <DialogTitle>{t("historyView.clearDialogTitle")}</DialogTitle>
             <DialogDescription>
-              Forgets every chapter you have opened and the page you stopped on.
-              No downloaded pages are deleted and nothing leaves your library.
+              {t("historyView.clearDialogDescription")}
             </DialogDescription>
           </div>
           <div className="flex items-center justify-end gap-2 px-4 py-3">
             <Button variant="ghost" onClick={() => setClearing(false)}>
-              Cancel
+              {t("historyView.cancel")}
             </Button>
             <Button variant="destructive" onClick={() => void clearAll()}>
               <Trash2 />
-              Clear history
+              {t("historyView.clearHistoryButton")}
             </Button>
           </div>
         </DialogContent>
@@ -162,6 +163,7 @@ function Row({
   onOpenSeries: () => void;
   onForget: () => void;
 }) {
+  const t = useT();
   const { ref, url } = useThumbnail(entry.cover_path ?? "", 120);
   const progress =
     entry.page_count > 0 ? ((entry.last_page + 1) / entry.page_count) * 100 : 0;
@@ -182,11 +184,16 @@ function Row({
       <button onClick={onOpenSeries} className="min-w-0 flex-1 text-left">
         <p className="truncate text-xs font-medium">{entry.series_title}</p>
         <p className="truncate text-[11px] text-muted-foreground">
-          Chapter {entry.chapter} ·{" "}
-          {entry.finished
-            ? "finished"
-            : `page ${entry.last_page + 1} of ${entry.page_count}`}{" "}
-          · {relative(entry.opened_at)}
+          {t("historyView.entrySubtitle", {
+            chapter: entry.chapter,
+            status: entry.finished
+              ? t("historyView.finished")
+              : t("historyView.pageProgress", {
+                  page: entry.last_page + 1,
+                  total: entry.page_count,
+                }),
+            time: relative(entry.opened_at, t),
+          })}
         </p>
         {!entry.finished && (
           <div className="mt-1 h-0.5 w-full max-w-48 rounded-full bg-muted">
@@ -201,11 +208,11 @@ function Row({
       {entry.finished && (
         <Badge variant="outline" className="shrink-0">
           <Check className="size-2.5" />
-          read
+          {t("historyView.read")}
         </Badge>
       )}
 
-      <Hint label="Forget this chapter's progress">
+      <Hint label={t("historyView.forgetHint")}>
         <Button
           variant="ghost"
           size="icon-sm"
@@ -222,7 +229,7 @@ function Row({
       </Hint>
 
       <Button variant="outline" size="sm" onClick={onRead}>
-        {entry.finished ? "Re-read" : "Continue"}
+        {entry.finished ? t("historyView.reRead") : t("historyView.continue")}
       </Button>
     </div>
   );
@@ -231,14 +238,16 @@ function Row({
 /**
  * A rough "how long ago".
  *
+ * A plain function outside the component, so it takes `t` as a parameter
+ * rather than calling the hook — see `Translator` in `lib/i18n/types.ts`.
  * Exact timestamps are noise here: what matters is whether this was a moment
  * ago or last month.
  */
-function relative(seconds: number): string {
+function relative(seconds: number, t: Translator): string {
   const elapsed = Date.now() / 1000 - seconds;
-  if (elapsed < 60) return "just now";
-  if (elapsed < 3600) return `${Math.floor(elapsed / 60)}m ago`;
-  if (elapsed < 86400) return `${Math.floor(elapsed / 3600)}h ago`;
-  if (elapsed < 604800) return `${Math.floor(elapsed / 86400)}d ago`;
+  if (elapsed < 60) return t("historyView.justNow");
+  if (elapsed < 3600) return t("historyView.minutesAgo", { minutes: Math.floor(elapsed / 60) });
+  if (elapsed < 86400) return t("historyView.hoursAgo", { hours: Math.floor(elapsed / 3600) });
+  if (elapsed < 604800) return t("historyView.daysAgo", { days: Math.floor(elapsed / 86400) });
   return new Date(seconds * 1000).toLocaleDateString();
 }

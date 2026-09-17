@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import type { Translator } from "@/lib/i18n/types";
+
 /** Mirrors `settings::DeliveryConfig`. Never carries the password. */
 export interface DeliveryConfig {
   kindle_email: string;
@@ -48,40 +50,39 @@ export const sendFiles = (paths: string[]) =>
  * hunting for a port number. Ports and TLS modes are not interchangeable —
  * 587 wants STARTTLS and 465 wants TLS — which is a common way to get stuck.
  */
-export const PRESETS: {
-  label: string;
-  host: string;
-  port: number;
-  security: string;
-  note?: string;
-}[] = [
+/** Labels are brand names and stay as-is in every language; `note` is the
+ * only part of this worth translating, so this is a function of `t` like
+ * `compressionPresets` in `lib/settings.ts`. */
+export const presets = (
+  t: Translator,
+): { label: string; host: string; port: number; security: string; note?: string }[] => [
   {
     label: "Gmail",
     host: "smtp.gmail.com",
     port: 587,
     security: "start-tls",
-    note: "Needs an app password, which requires 2-step verification to be on.",
+    note: t("send.noteGmail"),
   },
   {
     label: "Outlook / Hotmail",
     host: "smtp-mail.outlook.com",
     port: 587,
     security: "start-tls",
-    note: "Needs an app password when two-step verification is on.",
+    note: t("send.noteOutlook"),
   },
   {
     label: "Yahoo",
     host: "smtp.mail.yahoo.com",
     port: 465,
     security: "tls",
-    note: "Needs an app password.",
+    note: t("send.noteYahoo"),
   },
   {
     label: "iCloud",
     host: "smtp.mail.me.com",
     port: 587,
     security: "start-tls",
-    note: "Needs an app-specific password from your Apple account.",
+    note: t("send.noteICloud"),
   },
 ];
 

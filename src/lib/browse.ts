@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type { SeriesMatch, Tag } from "@/lib/api";
+import type { Translator } from "@/lib/i18n/types";
 
 /** Mirrors `mangalize_meta::Sort`. */
 export type Sort =
@@ -49,41 +50,43 @@ export const PAGE_SIZE = 32;
  * Both directions of each ordering, because "least followed" is as valid a
  * thing to ask for as "most", and inverting is free.
  */
-export const SORTS: { value: Sort; descending: boolean; label: string }[] = [
-  { value: "follows", descending: true, label: "Most follows" },
-  { value: "follows", descending: false, label: "Fewest follows" },
-  { value: "rating", descending: true, label: "Highest rated" },
-  { value: "rating", descending: false, label: "Lowest rated" },
-  { value: "latest-upload", descending: true, label: "Recently updated" },
-  { value: "latest-upload", descending: false, label: "Longest untouched" },
-  { value: "recently-added", descending: true, label: "Newest to the catalogue" },
-  { value: "recently-added", descending: false, label: "Oldest in the catalogue" },
-  { value: "title", descending: false, label: "Title A–Z" },
-  { value: "title", descending: true, label: "Title Z–A" },
+/** A function of `t`, not a static array — see `compressionPresets` in
+ * `lib/settings.ts` for why. */
+export const sorts = (t: Translator): { value: Sort; descending: boolean; label: string }[] => [
+  { value: "follows", descending: true, label: t("browse.sortMostFollows") },
+  { value: "follows", descending: false, label: t("browse.sortFewestFollows") },
+  { value: "rating", descending: true, label: t("browse.sortHighestRated") },
+  { value: "rating", descending: false, label: t("browse.sortLowestRated") },
+  { value: "latest-upload", descending: true, label: t("browse.sortRecentlyUpdated") },
+  { value: "latest-upload", descending: false, label: t("browse.sortLongestUntouched") },
+  { value: "recently-added", descending: true, label: t("browse.sortNewestToCatalogue") },
+  { value: "recently-added", descending: false, label: t("browse.sortOldestInCatalogue") },
+  { value: "title", descending: false, label: t("browse.sortTitleAZ") },
+  { value: "title", descending: true, label: t("browse.sortTitleZA") },
 ];
 
 /** A stable key for a sort option, since value alone is not unique. */
 export const sortKey = (sort: Sort, descending: boolean) =>
   `${sort}:${descending ? "desc" : "asc"}`;
 
-export const RATINGS: { value: ContentRating; label: string }[] = [
-  { value: "safe", label: "Safe" },
-  { value: "suggestive", label: "Suggestive" },
-  { value: "erotica", label: "Erotica" },
-  { value: "pornographic", label: "Explicit" },
+export const ratings = (t: Translator): { value: ContentRating; label: string }[] => [
+  { value: "safe", label: t("browse.ratingSafe") },
+  { value: "suggestive", label: t("browse.ratingSuggestive") },
+  { value: "erotica", label: t("browse.ratingErotica") },
+  { value: "pornographic", label: t("browse.ratingExplicit") },
 ];
 
 export const STATUSES = ["ongoing", "completed", "hiatus", "cancelled"] as const;
 
 export const DEMOGRAPHICS = ["shounen", "shoujo", "seinen", "josei"] as const;
 
-/** Readable names for the tag groups MangaDex uses. */
-export const TAG_GROUPS: Record<string, string> = {
-  genre: "Genre",
-  theme: "Theme",
-  format: "Format",
-  content: "Content",
-};
+/** Readable names for the tag groups MangaDex uses, as a function of `t`. */
+export const tagGroups = (t: Translator): Record<string, string> => ({
+  genre: t("browse.tagGroupGenre"),
+  theme: t("browse.tagGroupTheme"),
+  format: t("browse.tagGroupFormat"),
+  content: t("browse.tagGroupContent"),
+});
 
 export const defaultQuery = (): BrowseQuery => ({
   title: null,

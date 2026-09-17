@@ -5,6 +5,7 @@ import { isAndroid, isMobile } from "@/lib/platform";
 import { Progress } from "@/components/ui/progress";
 import type { UpdateState } from "@/hooks/useUpdater";
 import { formatBytes } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 interface UpdateBannerProps {
@@ -29,6 +30,7 @@ export function UpdateBanner({
   onRestart,
   onDismiss,
 }: UpdateBannerProps) {
+  const t = useT();
   const showing =
     !dismissed &&
     (state.stage === "available" ||
@@ -51,13 +53,13 @@ export function UpdateBanner({
         <>
           <RefreshCw className="size-4 shrink-0 text-primary" />
           <p className="min-w-0 flex-1 text-xs">
-            <span className="font-medium">Version {state.version} is ready.</span>{" "}
-            <span className="text-muted-foreground">
-              Restart to start using it.
-            </span>
+            <span className="font-medium">
+              {t("updateBanner.versionReady", { version: state.version ?? "" })}
+            </span>{" "}
+            <span className="text-muted-foreground">{t("updateBanner.restartHint")}</span>
           </p>
           <Button size="sm" onClick={onRestart}>
-            Restart now
+            {t("updateBanner.restartNow")}
           </Button>
           <Button variant="ghost" size="icon-sm" onClick={onDismiss}>
             <X className="size-3" />
@@ -84,7 +86,7 @@ export function UpdateBanner({
           <Download className="size-4 shrink-0 text-primary" />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium">
-              Mangalize {state.version} is available
+              {t("updateBanner.available", { version: state.version ?? "" })}
             </p>
             {/* An error here is not a dead end — it is usually "allow installs
                 from this app first", and the offer is still good. Notes are the
@@ -104,9 +106,14 @@ export function UpdateBanner({
             )}
           </div>
           <Button size="sm" onClick={onInstall}>
-            Update
+            {t("updateBanner.update")}
           </Button>
-          <Button variant="ghost" size="icon-sm" onClick={onDismiss} title="Not now">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onDismiss}
+            title={t("updateBanner.notNow")}
+          >
             <X className="size-3" />
           </Button>
         </>

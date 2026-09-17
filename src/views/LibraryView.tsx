@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
 import { useRestoredScroll } from "@/hooks/useRestoredScroll";
 import { useThumbnail } from "@/hooks/useThumbnail";
+import { useT } from "@/lib/i18n";
 import {
   libraryRoot,
   librarySeries,
@@ -60,6 +61,7 @@ export function LibraryView({
   onOpenFolder,
   onError,
 }: LibraryViewProps) {
+  const t = useT();
   const [root, setRoot] = useState<string | null>(null);
   const [series, setSeries] = useState<Series[] | null>(null);
   const [adding, setAdding] = useState(false);
@@ -129,12 +131,12 @@ export function LibraryView({
     <div className="flex h-full flex-col">
       <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-4 py-2.5">
         <div className="min-w-0 flex-1">
-          <h1 className="text-sm font-semibold">Library</h1>
+          <h1 className="text-sm font-semibold">{t("libraryView.title")}</h1>
           {canPickFolders ? (
             <button
               onClick={() => void relocate()}
               className="block w-full truncate text-left text-[11px] text-muted-foreground hover:text-foreground"
-              title={root ? `${root} — click to move the library` : undefined}
+              title={root ? t("libraryView.moveLibraryTitle", { root }) : undefined}
             >
               {root ?? "…"}
             </button>
@@ -145,13 +147,13 @@ export function LibraryView({
         </div>
 
         {canPickFolders && (
-          <Hint label="Build a volume from a folder instead">
+          <Hint label={t("libraryView.buildFromFolderHint")}>
             <Button variant="ghost" size="icon" onClick={onOpenFolder}>
               <FolderOpen />
             </Button>
           </Hint>
         )}
-        <Hint label="Reload the library">
+        <Hint label={t("libraryView.reloadHint")}>
           <Button variant="ghost" size="icon" onClick={() => void refresh()}>
             <RefreshCw />
           </Button>
@@ -164,16 +166,16 @@ export function LibraryView({
           }
         >
           <SlidersHorizontal />
-          Filters
+          {t("libraryView.filters")}
         </Button>
 
         <Button onClick={() => setAdding(true)}>
           <Plus />
-          Add series
+          {t("libraryView.addSeries")}
         </Button>
         <Button variant="ghost" onClick={() => setAddingFromSource(true)}>
           <Plus />
-          Add from source
+          {t("libraryView.addFromSource")}
         </Button>
       </header>
 
@@ -188,28 +190,27 @@ export function LibraryView({
       >
         {series === null ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" /> Opening the library…
+            <Loader2 className="size-3.5 animate-spin" /> {t("libraryView.openingLibrary")}
           </div>
         ) : series.length === 0 ? (
           <div className="mx-auto mt-20 max-w-md text-center">
             <BookOpen className="mx-auto size-8 text-muted-foreground" />
-            <h2 className="mt-3 text-sm font-medium">Nothing here yet</h2>
+            <h2 className="mt-3 text-sm font-medium">{t("libraryView.emptyTitle")}</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Add a series and Mangalize will pull its published volume layout,
-              then tell you which chapters you are missing.
+              {t("libraryView.emptyDescription")}
             </p>
             <Button className="mt-4" onClick={() => setAdding(true)}>
               <Plus />
-              Add your first series
+              {t("libraryView.addFirstSeries")}
             </Button>
           </div>
         ) : (
           sections.length === 0 ? (
             <div className="mx-auto mt-20 max-w-md text-center">
               <BookOpen className="mx-auto size-8 text-muted-foreground" />
-              <h2 className="mt-3 text-sm font-medium">Nothing matches those filters</h2>
+              <h2 className="mt-3 text-sm font-medium">{t("libraryView.noMatchesTitle")}</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Try clearing a tag, or widening the content rating.
+                {t("libraryView.noMatchesDescription")}
               </p>
             </div>
           ) : (
@@ -278,6 +279,7 @@ function SeriesCard({
   onOpen: () => void;
   onRemove: () => void;
 }) {
+  const t = useT();
   // The cover is a file in the library, so it goes through the same thumbnail
   // cache as page images rather than a second mechanism.
   const { ref, url } = useThumbnail(series.cover_path ?? "", 300);
@@ -304,17 +306,20 @@ function SeriesCard({
             {series.title}
           </p>
           <p className="truncate text-[10px] text-muted-foreground">
-            {series.author || "Unknown author"}
+            {series.author || t("libraryView.unknownAuthor")}
           </p>
           <Badge variant={complete ? "default" : "outline"} className="mt-0.5 w-fit">
-            {series.have_chapters}/{series.known_chapters || "?"} chapters
+            {t("libraryView.chaptersCount", {
+              have: series.have_chapters,
+              known: series.known_chapters || "?",
+            })}
           </Badge>
         </div>
       </button>
 
       <button
         onClick={onRemove}
-        title={`Remove ${series.title} from the library`}
+        title={t("libraryView.removeFromLibrary", { title: series.title })}
         className={cn(
           "absolute right-1.5 top-1.5 rounded-md bg-background/80 p-1.5 text-muted-foreground backdrop-blur-sm transition-opacity hover:text-destructive focus-visible:opacity-100",
           !isMobile && "opacity-0 group-hover:opacity-100",

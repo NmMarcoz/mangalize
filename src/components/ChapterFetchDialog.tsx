@@ -22,6 +22,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { usePreview } from "@/hooks/useThumbnail";
 import { formatBytes } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 import {
   downloadChapter,
   extractChapter,
@@ -60,6 +61,7 @@ export function ChapterFetchDialog({
   chapter,
   onDownloaded,
 }: ChapterFetchDialogProps) {
+  const t = useT();
   const [url, setUrl] = useState("");
   const [stage, setStage] = useState<Stage>("idle");
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -183,18 +185,15 @@ export function ChapterFetchDialog({
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <DialogContent className="max-h-[88dvh] max-w-5xl">
         <div className="border-b border-border px-4 py-3">
-          <DialogTitle>Get chapter {chapter}</DialogTitle>
-          <DialogDescription>
-            Paste the page holding the chapter's images. Nothing is downloaded
-            until you choose it.
-          </DialogDescription>
+          <DialogTitle>{t("chapterFetchDialog.title", { chapter })}</DialogTitle>
+          <DialogDescription>{t("chapterFetchDialog.description")}</DialogDescription>
         </div>
 
         <div className="flex items-center gap-2 px-4 py-3">
           <Input
             autoFocus
             value={url}
-            placeholder="https://…"
+            placeholder={t("chapterFetchDialog.urlPlaceholder")}
             disabled={busy}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => {
@@ -203,17 +202,17 @@ export function ChapterFetchDialog({
           />
           <Button onClick={() => void readMarkup()} disabled={busy || !url.trim()}>
             {stage === "looking" ? <Loader2 className="animate-spin" /> : <Search />}
-            Find images
+            {t("chapterFetchDialog.findImages")}
           </Button>
           {canRenderPages && (
             <Button
               variant="outline"
               onClick={() => void openInWindow()}
               disabled={busy || !url.trim()}
-              title="Render the page in a window and capture what it loads"
+              title={t("chapterFetchDialog.openPageHint")}
             >
               <Globe />
-              Open page
+              {t("chapterFetchDialog.openPage")}
             </Button>
           )}
         </div>
@@ -223,22 +222,25 @@ export function ChapterFetchDialog({
             <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
               <div>
-                <p className="font-medium">No images in that page's markup.</p>
+                <p className="font-medium">{t("chapterFetchDialog.noImagesTitle")}</p>
                 <p className="mt-0.5 text-muted-foreground">
                   {canRenderPages ? (
-                    <>
-                      It most likely builds itself in JavaScript. Use{" "}
-                      <span className="font-medium text-foreground">Open page</span>{" "}
-                      to render it in a window, scroll until the pages have
-                      loaded, and click Capture.
-                    </>
+                    (() => {
+                      const [before, after] = t("chapterFetchDialog.jsBuiltHint").split(
+                        "{link}",
+                      );
+                      return (
+                        <>
+                          {before}
+                          <span className="font-medium text-foreground">
+                            {t("chapterFetchDialog.openPage")}
+                          </span>
+                          {after}
+                        </>
+                      );
+                    })()
                   ) : (
-                    <>
-                      It most likely builds itself in JavaScript, which needs a
-                      second window to render — something this platform does not
-                      have. Downloading it on the desktop app and syncing the
-                      library is the way round.
-                    </>
+                    <>{t("chapterFetchDialog.jsBuiltNoWindow")}</>
                   )}
                 </p>
               </div>
@@ -247,8 +249,7 @@ export function ChapterFetchDialog({
 
           {stage === "idle" && !emptyResult && (
             <p className="text-xs text-muted-foreground">
-              Images are measured before anything is saved, so pages, spreads and
-              banners can be told apart and preselected for you.
+              {t("chapterFetchDialog.idleHint")}
             </p>
           )}
 
@@ -259,7 +260,10 @@ export function ChapterFetchDialog({
                 className="flex-1"
               />
               <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
-                {progress.stage} {progress.done}/{progress.total}
+                {progress.stage === "measuring"
+                  ? t("chapterFetchDialog.stageMeasuring")
+                  : t("chapterFetchDialog.stageDownloading")}{" "}
+                {progress.done}/{progress.total}
               </span>
             </div>
           )}
@@ -292,7 +296,7 @@ export function ChapterFetchDialog({
                 disabled={busy}
                 onClick={() => setChosen(new Set(candidates.map((c) => c.url)))}
               >
-                All
+                {t("chapterFetchDialog.allButton")}
               </Button>
               <Button
                 variant="ghost"
@@ -300,7 +304,7 @@ export function ChapterFetchDialog({
                 disabled={busy}
                 onClick={() => setChosen(new Set())}
               >
-                None
+                {t("chapterFetchDialog.noneButton")}
               </Button>
               <Button
                 variant="ghost"
@@ -310,7 +314,7 @@ export function ChapterFetchDialog({
                   setChosen(new Set(candidates.filter((c) => c.selected).map((c) => c.url)))
                 }
               >
-                Reset
+                {t("chapterFetchDialog.resetButton")}
               </Button>
             </div>
           )}
@@ -323,10 +327,11 @@ export function ChapterFetchDialog({
 
           <div className="ml-auto flex items-center gap-2">
             <span className="text-xs text-muted-foreground">
-              {selectedUrls.length > 0 && `${selectedUrls.length} pages`}
+              {selectedUrls.length > 0 &&
+                t("chapterFetchDialog.pagesCount", { count: selectedUrls.length })}
             </span>
             <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-              Cancel
+              {t("chapterFetchDialog.cancel")}
             </Button>
             <Button
               onClick={() => void download()}
@@ -337,7 +342,7 @@ export function ChapterFetchDialog({
               ) : (
                 <Download />
               )}
-              Download
+              {t("chapterFetchDialog.download")}
             </Button>
           </div>
         </div>
@@ -363,6 +368,7 @@ function CandidateCard({
   onToggle: () => void;
   index: number;
 }) {
+  const t = useT();
   const { ref, url, failed } = usePreview(candidate.url, referer, 240);
 
   return (
@@ -388,10 +394,12 @@ function CandidateCard({
         <span className="font-mono text-[10px] text-muted-foreground">
           {candidate.width}×{candidate.height}
         </span>
-        {candidate.verdict === "spread" && <Badge className="text-[9px]">spread</Badge>}
+        {candidate.verdict === "spread" && (
+          <Badge className="text-[9px]">{t("chapterFetchDialog.spreadBadge")}</Badge>
+        )}
         {candidate.verdict === "off-size" && (
           <Badge variant="outline" className="text-[9px]">
-            off-size
+            {t("chapterFetchDialog.offSizeBadge")}
           </Badge>
         )}
         {candidate.bytes > 0 && (
