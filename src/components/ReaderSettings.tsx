@@ -2,8 +2,9 @@ import { Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { useT } from "@/lib/i18n";
 import { languageName } from "@/lib/api";
-import { FITS, MODES, type ReaderPrefs } from "@/lib/reader";
+import { readerFits, readerModes, type ReaderPrefs } from "@/lib/reader";
 import { cn } from "@/lib/utils";
 
 interface ReaderSettingsProps {
@@ -36,13 +37,16 @@ export function ReaderSettings({
   onChange,
   onClose,
 }: ReaderSettingsProps) {
+  const t = useT();
   const directionLabel =
-    seriesDirection === "right-to-left" ? "right to left" : "left to right";
+    seriesDirection === "right-to-left"
+      ? t("readerSettings.directionRightToLeft")
+      : t("readerSettings.directionLeftToRight");
 
   return (
     <aside className="absolute right-3 top-16 z-30 flex w-72 flex-col gap-4 rounded-lg border border-white/15 bg-neutral-900/95 p-4 text-white shadow-xl backdrop-blur">
       <div className="flex items-center gap-2">
-        <h2 className="flex-1 text-sm font-medium">Reader</h2>
+        <h2 className="flex-1 text-sm font-medium">{t("readerSettings.title")}</h2>
         <Button variant="ghost" size="icon-sm" className="text-white" onClick={onClose}>
           <X className="size-3.5" />
         </Button>
@@ -52,7 +56,7 @@ export function ReaderSettings({
           and changes nothing but which images are fetched. */}
       {translations.length > 1 && (
         <section className="flex flex-col gap-1.5">
-          <Label className="text-white/70">Translation</Label>
+          <Label className="text-white/70">{t("readerSettings.translation")}</Label>
           <div className="flex items-center gap-2">
             <select
               value={language}
@@ -68,16 +72,14 @@ export function ReaderSettings({
             </select>
             {switching && <Loader2 className="size-3.5 animate-spin text-white/60" />}
           </div>
-          <p className="text-[11px] text-white/45">
-            Keeps you on this chapter and page.
-          </p>
+          <p className="text-[11px] text-white/45">{t("readerSettings.translationHint")}</p>
         </section>
       )}
 
       <section className="flex flex-col gap-1.5">
-        <Label className="text-white/70">Layout</Label>
+        <Label className="text-white/70">{t("readerSettings.layout")}</Label>
         <div className="flex flex-col gap-1">
-          {MODES.map((mode) => (
+          {readerModes(t).map((mode) => (
             <button
               key={mode.value}
               onClick={() => onChange({ mode: mode.value })}
@@ -98,9 +100,9 @@ export function ReaderSettings({
       </section>
 
       <section className="flex flex-col gap-1.5">
-        <Label className="text-white/70">Fit</Label>
+        <Label className="text-white/70">{t("readerSettings.fit")}</Label>
         <div className="flex flex-wrap gap-1.5">
-          {FITS.map((fit) => (
+          {readerFits(t).map((fit) => (
             <Chip
               key={fit.value}
               label={fit.label}
@@ -112,32 +114,31 @@ export function ReaderSettings({
       </section>
 
       <section className="flex flex-col gap-1.5">
-        <Label className="text-white/70">Direction</Label>
+        <Label className="text-white/70">{t("readerSettings.direction")}</Label>
         <div className="flex flex-wrap gap-1.5">
           <Chip
-            label={`Auto (${directionLabel})`}
+            label={t("readerSettings.directionAuto", { direction: directionLabel })}
             active={prefs.direction === null}
             onClick={() => onChange({ direction: null })}
           />
           <Chip
-            label="Right to left"
+            label={t("readerSettings.directionOptionRightToLeft")}
             active={prefs.direction === "right-to-left"}
             onClick={() => onChange({ direction: "right-to-left" })}
           />
           <Chip
-            label="Left to right"
+            label={t("readerSettings.directionOptionLeftToRight")}
             active={prefs.direction === "left-to-right"}
             onClick={() => onChange({ direction: "left-to-right" })}
           />
         </div>
         <p className="text-[10px] leading-snug text-white/50">
-          Auto follows the series, which the metadata usually gets right. Override
-          when it does not.
+          {t("readerSettings.directionHint")}
         </p>
       </section>
 
       <section className="flex flex-col gap-1.5">
-        <Label className="text-white/70">Background</Label>
+        <Label className="text-white/70">{t("readerSettings.background")}</Label>
         <div className="flex flex-wrap gap-1.5">
           {(["black", "grey", "white"] as const).map((shade) => (
             <Chip
@@ -151,8 +152,7 @@ export function ReaderSettings({
       </section>
 
       <p className="border-t border-white/10 pt-3 text-[10px] leading-relaxed text-white/40">
-        Arrows turn pages, space moves on, Home and End jump to the ends, Esc
-        closes. Tapping the middle of the page hides this chrome.
+        {t("readerSettings.help")}
       </p>
     </aside>
   );

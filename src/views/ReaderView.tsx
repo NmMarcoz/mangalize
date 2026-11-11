@@ -13,6 +13,7 @@ import {
 import { ReaderSettings } from "@/components/ReaderSettings";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useImageZoom } from "@/hooks/useImageZoom";
 import { useT } from "@/lib/i18n";
 import {
   cachedPage,
@@ -729,6 +730,7 @@ function PageImage({
   paired: boolean;
 }) {
   const t = useT();
+  const zoom = useImageZoom<HTMLImageElement>();
   const [url, setUrl] = useState<string | undefined>(() => cachedPage(source, online));
   const [failed, setFailed] = useState(false);
 
@@ -769,12 +771,27 @@ function PageImage({
   }
 
   return (
-    <img
-      src={url}
-      alt=""
-      draggable={false}
-      className={cn(fitClass(fit), paired && "max-w-[50%]")}
-    />
+    <>
+      <img
+        ref={zoom.ref}
+        src={url}
+        alt=""
+        draggable={false}
+        style={zoom.style}
+        className={cn(fitClass(fit), paired && "max-w-[50%]")}
+      />
+      {zoom.zoomed && (
+        <button
+          onClick={(event) => {
+            event.stopPropagation();
+            zoom.reset();
+          }}
+          className="absolute bottom-16 right-3 z-30 rounded-md border border-white/20 bg-black/70 px-2.5 py-1 text-[11px] text-white backdrop-blur-sm hover:bg-black/85"
+        >
+          {t("readerView.zoomReset")}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -825,7 +842,7 @@ function WebtoonPages({
         else if (ref) (ref as React.RefObject<HTMLDivElement | null>).current = node;
       }}
       onClick={onToggleChrome}
-      className="scrollbar-thin flex min-h-0 flex-1 flex-col items-center overflow-y-auto"
+      className="scrollbar-thin flex min-h-0 flex-1 flex-col items-center overflow-x-hidden overflow-y-auto"
     >
       {chapter.pages.map((source, index) => (
         <div key={source} data-page={index} className="w-full max-w-4xl">
@@ -852,6 +869,8 @@ function LazyStripPage({
   online: boolean;
   fit: FitMode;
 }) {
+  const t = useT();
+  const zoom = useImageZoom<HTMLImageElement>();
   const [url, setUrl] = useState<string | undefined>(() => cachedPage(source, online));
   const holder = useRef<HTMLDivElement | null>(null);
 
@@ -877,12 +896,27 @@ function LazyStripPage({
   return (
     <div ref={holder} className="flex min-h-32 w-full items-center justify-center">
       {url ? (
-        <img
-          src={url}
-          alt=""
-          draggable={false}
-          className={cn("w-full", fit === "original" && "max-w-none")}
-        />
+        <>
+          <img
+            ref={zoom.ref}
+            src={url}
+            alt=""
+            draggable={false}
+            style={zoom.style}
+            className={cn("w-full", fit === "original" && "max-w-none")}
+          />
+          {zoom.zoomed && (
+            <button
+              onClick={(event) => {
+                event.stopPropagation();
+                zoom.reset();
+              }}
+              className="fixed bottom-16 right-3 z-30 rounded-md border border-white/20 bg-black/70 px-2.5 py-1 text-[11px] text-white backdrop-blur-sm hover:bg-black/85"
+            >
+              {t("readerView.zoomReset")}
+            </button>
+          )}
+        </>
       ) : (
         <Loader2 className="size-4 animate-spin text-white/30" />
       )}

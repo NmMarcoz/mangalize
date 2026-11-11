@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { createImageCache } from "@/lib/imagecache";
 import type { ChapterStatus } from "@/lib/library";
+import type { Translator } from "@/lib/i18n/types";
 
 /** Mirrors `reader::ReaderChapter`. */
 export interface ReaderChapter {
@@ -219,29 +220,32 @@ export const clearPages = () => {
 export type ReaderMode = "paged" | "double" | "webtoon";
 export type FitMode = "width" | "height" | "contain" | "original";
 
-export const MODES: { value: ReaderMode; label: string; detail: string }[] = [
+/** A function of `t`, not a static array — see `sorts` in `lib/browse.ts`. */
+export const readerModes = (
+  t: Translator,
+): { value: ReaderMode; label: string; detail: string }[] => [
   {
     value: "paged",
-    label: "Single page",
-    detail: "One page at a time. What most manga is drawn for.",
+    label: t("reader.modePaged"),
+    detail: t("reader.modePagedDetail"),
   },
   {
     value: "double",
-    label: "Two pages",
-    detail: "A facing pair, as a printed book falls open. Wide screens only.",
+    label: t("reader.modeDouble"),
+    detail: t("reader.modeDoubleDetail"),
   },
   {
     value: "webtoon",
-    label: "Continuous",
-    detail: "Scrolls without page breaks. What webtoons are drawn for.",
+    label: t("reader.modeWebtoon"),
+    detail: t("reader.modeWebtoonDetail"),
   },
 ];
 
-export const FITS: { value: FitMode; label: string }[] = [
-  { value: "contain", label: "Fit page" },
-  { value: "width", label: "Fit width" },
-  { value: "height", label: "Fit height" },
-  { value: "original", label: "Original size" },
+export const readerFits = (t: Translator): { value: FitMode; label: string }[] => [
+  { value: "contain", label: t("reader.fitContain") },
+  { value: "width", label: t("reader.fitWidth") },
+  { value: "height", label: t("reader.fitHeight") },
+  { value: "original", label: t("reader.fitOriginal") },
 ];
 
 /** Reader preferences, kept client-side: they are chrome, not library data. */
