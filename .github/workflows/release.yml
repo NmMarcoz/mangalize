@@ -49,6 +49,11 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      # `vite build` (rolldown) needs Node 20.12+ for `node:util`'s `styleText`.
+      # Bun alone leaves `node` at the runner default, which is older than that.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
         with:
@@ -198,6 +203,11 @@ jobs:
         with:
           bun-version: latest
 
+      # Same Node pin as `check`: the `beforeBuildCommand` runs `vite build`.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust-targets }}
@@ -303,6 +313,11 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      # Same Node pin as `check`: `scripts/android.sh` runs the `beforeBuildCommand`.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       # The Android Gradle Plugin this project generates needs 17 or newer, and
       # the runner's default has been older than that before now.
