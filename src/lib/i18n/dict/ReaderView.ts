@@ -14,6 +14,7 @@ const dict: PartialDictionary = {
     "readerView.noChapterInLanguage": "There is no chapter {number} in {language}.",
     "readerView.pageLoadFailed": "This page could not be opened.",
     "readerView.rateLimited": "The source may be rate limiting; try again in a moment.",
+    "readerView.zoomReset": "Reset zoom",
   },
   "pt-BR": {
     "readerView.openingChapter": "Abrindo capítulo",
@@ -28,6 +29,7 @@ const dict: PartialDictionary = {
     "readerView.noChapterInLanguage": "Não há capítulo {number} em {language}.",
     "readerView.pageLoadFailed": "Esta página não pôde ser aberta.",
     "readerView.rateLimited": "A fonte pode estar limitando as requisições; tente novamente em instantes.",
+    "readerView.zoomReset": "Redefinir zoom",
   },
 };
 
