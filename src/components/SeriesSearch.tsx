@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Search } from "lucide-react";
 
+import { RemoteImage } from "@/components/RemoteImage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,11 +101,10 @@ export function SeriesSearch({
             )}
           >
             {match.thumbnail_url ? (
-              <img
-                src={match.thumbnail_url}
-                alt=""
-                loading="lazy"
-                className="h-16 w-12 shrink-0 rounded object-cover"
+              <RemoteImage
+                url={match.thumbnail_url}
+                max={96}
+                className="h-16 w-12 shrink-0 rounded"
               />
             ) : (
               <div className="h-16 w-12 shrink-0 rounded bg-muted" />

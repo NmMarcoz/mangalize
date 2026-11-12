@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { BookOpen, Check, Compass, Loader2, Search, SlidersHorizontal } from "lucide-react";
 
 import { BrowseFilters, FilterSummary } from "@/components/BrowseFilters";
+import { RemoteImage } from "@/components/RemoteImage";
 import { SeriesModal } from "@/components/SeriesModal";
 import { SourceSeriesModal } from "@/components/SourceSeriesModal";
 import { Button } from "@/components/ui/button";
@@ -399,12 +400,7 @@ function ResultCard({
     >
       <div className="relative flex aspect-[10/15] items-center justify-center bg-muted/40">
         {match.thumbnail_url ? (
-          <img
-            src={match.thumbnail_url}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover"
-          />
+          <RemoteImage url={match.thumbnail_url} max={256} className="h-full w-full" />
         ) : (
           <BookOpen className="size-5 text-muted-foreground" />
         )}
@@ -628,12 +624,7 @@ function SourceResultCard({
     >
       <div className="relative flex aspect-[10/15] items-center justify-center bg-muted/40">
         {manga.cover_url ? (
-          <img
-            src={manga.cover_url}
-            alt=""
-            loading="lazy"
-            className="h-full w-full object-cover"
-          />
+          <RemoteImage url={manga.cover_url} max={256} className="h-full w-full" />
         ) : (
           <BookOpen className="size-5 text-muted-foreground" />
         )}

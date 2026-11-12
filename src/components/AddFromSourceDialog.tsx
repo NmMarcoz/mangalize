@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Plus, Search } from "lucide-react";
 
+import { RemoteImage } from "@/components/RemoteImage";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -170,11 +171,10 @@ export function AddFromSourceDialog({ open, onOpenChange, onAdded }: AddFromSour
                     )}
                   >
                     {manga.cover_url ? (
-                      <img
-                        src={manga.cover_url}
-                        alt=""
-                        loading="lazy"
-                        className="h-16 w-12 shrink-0 rounded object-cover"
+                      <RemoteImage
+                        url={manga.cover_url}
+                        max={96}
+                        className="h-16 w-12 shrink-0 rounded"
                       />
                     ) : (
                       <div className="h-16 w-12 shrink-0 rounded bg-muted" />

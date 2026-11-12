@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BookOpen, Check, Cloud, Download, Loader2, Plus } from "lucide-react";
 
+import { RemoteImage } from "@/components/RemoteImage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -163,10 +164,10 @@ export function SourceSeriesModal({
               )}
             >
               {(details?.cover_url ?? manga.cover_url) ? (
-                <img
-                  src={details?.cover_url ?? manga.cover_url ?? undefined}
-                  alt=""
-                  className="h-full w-full object-cover"
+                <RemoteImage
+                  url={(details?.cover_url ?? manga.cover_url)!}
+                  max={512}
+                  className="h-full w-full"
                 />
               ) : (
                 <BookOpen className="size-6 text-muted-foreground" />
