@@ -626,6 +626,9 @@ export function ReaderView({
             else setShowChrome((v) => !v);
           }}
           onTouchStart={(event) => {
+            // Chrome sends no click after a touch that moved, so a swipe's flag
+            // would otherwise linger and eat the next real tap.
+            swiped.current = false;
             const touch = event.touches[0];
             swipe.current = { x: touch.clientX, y: touch.clientY };
           }}
@@ -737,6 +740,11 @@ function PageImage({
   const zoom = useImageZoom<HTMLImageElement>();
   const [url, setUrl] = useState<string | undefined>(() => cachedPage(source, online));
   const [failed, setFailed] = useState(false);
+  // "Original size" is one image pixel per *screen* pixel. Left to CSS it is one
+  // per CSS pixel, which on a phone at a device pixel ratio near 3 draws a page
+  // three times wider than the screen — blurred, cropped to its middle, and
+  // already below the zoom's floor, so it looks stuck zoomed in.
+  const [nativeWidth, setNativeWidth] = useState<number | null>(null);
 
   useEffect(() => {
     const hit = cachedPage(source, online);
@@ -781,7 +789,13 @@ function PageImage({
         src={url}
         alt=""
         draggable={false}
-        style={zoom.style}
+        onLoad={(event) =>
+          setNativeWidth(event.currentTarget.naturalWidth / window.devicePixelRatio)
+        }
+        style={{
+          ...(fit === "original" && nativeWidth ? { width: nativeWidth } : {}),
+          ...zoom.style,
+        }}
         className={cn(fitClass(fit), paired && "max-w-[50%]")}
       />
       {zoom.zoomed && (
