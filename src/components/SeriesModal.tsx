@@ -11,6 +11,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { RemoteImage } from "@/components/RemoteImage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -225,11 +226,7 @@ export function SeriesModal({
               )}
             >
               {series.thumbnail_url ? (
-                <img
-                  src={series.thumbnail_url}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
+                <RemoteImage url={series.thumbnail_url} max={512} className="h-full w-full" />
               ) : (
                 <BookOpen className="size-6 text-muted-foreground" />
               )}
@@ -426,11 +423,11 @@ export function SeriesModal({
                     >
                       <div className="flex aspect-[10/15] items-center justify-center overflow-hidden rounded bg-muted/40">
                         {other.thumbnail_url ? (
-                          <img
-                            src={other.thumbnail_url}
-                            alt=""
-                            loading="lazy"
-                            className="h-full w-full object-cover transition-opacity hover:opacity-80"
+                          <RemoteImage
+                            url={other.thumbnail_url}
+                            max={256}
+                            className="h-full w-full"
+                            imageClassName="transition-opacity hover:opacity-80"
                           />
                         ) : (
                           <BookOpen className="size-4 text-muted-foreground" />

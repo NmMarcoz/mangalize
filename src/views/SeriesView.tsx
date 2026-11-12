@@ -28,6 +28,7 @@ import {
 } from "@/components/ContextMenu";
 import { ChapterFetchDialog } from "@/components/ChapterFetchDialog";
 import { OrganizeChaptersPanel } from "@/components/OrganizeChaptersPanel";
+import { RemoteImage } from "@/components/RemoteImage";
 import { RemoveSeriesDialog } from "@/components/RemoveSeriesDialog";
 import { SourceDownloadDialog } from "@/components/SourceDownloadDialog";
 import {
@@ -987,23 +988,22 @@ function VolumeCard({
  */
 function VolumeArt({ volume, dimmed }: { volume: VolumeStatus; dimmed: boolean }) {
   const { ref, url } = useThumbnail(volume.cover_path ?? "", 400);
-  const src = volume.cover_path ? url : (volume.cover_url ?? undefined);
+  // Nothing downloaded reads as "not yours yet" at a glance.
+  const fade = cn("transition-opacity", dimmed && "opacity-40");
 
   return (
     <div
       ref={ref}
       className="flex aspect-[10/15] w-full items-center justify-center bg-muted/40"
     >
-      {src ? (
-        <img
-          src={src}
-          alt=""
-          loading="lazy"
-          className={cn(
-            "h-full w-full object-cover transition-opacity",
-            // Nothing downloaded reads as "not yours yet" at a glance.
-            dimmed && "opacity-40",
-          )}
+      {volume.cover_path ? (
+        url && <img src={url} alt="" className={cn("h-full w-full object-cover", fade)} />
+      ) : volume.cover_url ? (
+        <RemoteImage
+          url={volume.cover_url}
+          max={400}
+          className="h-full w-full"
+          imageClassName={fade}
         />
       ) : (
         <BookOpen className="size-5 text-muted-foreground" />

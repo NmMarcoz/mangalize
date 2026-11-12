@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Check, Loader2 } from "lucide-react";
 
+import { RemoteImage } from "@/components/RemoteImage";
 import { Label } from "@/components/ui/label";
 import type { SeriesMatch } from "@/lib/api";
 import type { SeriesDetailState } from "@/hooks/useSeriesDetail";
@@ -98,11 +99,11 @@ export function SeriesDetail({
                         : "border-transparent hover:border-border",
                     )}
                   >
-                    <img
-                      src={cover.thumbnail_url}
+                    <RemoteImage
+                      url={cover.thumbnail_url}
+                      max={256}
                       alt={`Volume ${cover.volume ?? "?"}`}
-                      loading="lazy"
-                      className="aspect-[10/15] w-full object-cover"
+                      className="aspect-[10/15] w-full"
                     />
                     <span className="absolute bottom-0 left-0 right-0 bg-black/70 py-0.5 text-center text-[9px] text-white">
                       {cover.volume ? `v${cover.volume}` : "—"}
