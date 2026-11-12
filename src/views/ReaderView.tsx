@@ -606,7 +606,11 @@ export function ReaderView({
         />
       ) : (
         <div
-          className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden"
+          // Chrome's WebView ignores user-scalable=no, so pinch-zoom is still
+          // native and fights the reader's own scaling. touch-none hands the
+          // whole gesture to the reader; tap and swipe still work because they
+          // read touch events, not the browser's pan/zoom handling.
+          className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden touch-none"
           onClick={(event) => {
             // A swipe ends in a click too, and turning the page twice for one
             // gesture is worse than either behaviour on its own.
@@ -842,7 +846,7 @@ function WebtoonPages({
         else if (ref) (ref as React.RefObject<HTMLDivElement | null>).current = node;
       }}
       onClick={onToggleChrome}
-      className="scrollbar-thin flex min-h-0 flex-1 flex-col items-center overflow-x-hidden overflow-y-auto"
+      className="scrollbar-thin flex min-h-0 flex-1 flex-col items-center overflow-x-hidden overflow-y-auto touch-pan-y"
     >
       {chapter.pages.map((source, index) => (
         <div key={source} data-page={index} className="w-full max-w-4xl">
