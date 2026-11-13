@@ -28,7 +28,7 @@ import { scanFolder, type MetaSource, type Volume } from "@/lib/api";
 import { unseenChangelog, type ChangelogEntry } from "@/lib/changelog";
 import { getSettings, setSettings as saveSettings, type Settings } from "@/lib/settings";
 import { isMobile } from "@/lib/platform";
-import { recordBuilt } from "@/lib/library";
+import { recordBuilt, librarySetVolumeCover } from "@/lib/library";
 import { clearThumbnails } from "@/lib/thumbs";
 
 /**
@@ -39,7 +39,7 @@ import { clearThumbnails } from "@/lib/thumbs";
  */
 type View =
   | { kind: "library" }
-  | { kind: "series"; id: number }
+  | { kind: "series"; id: number; selectedVolume: string | null }
   | { kind: "explore" }
   | { kind: "history" }
   // `back` is carried along so closing the reader returns where it was opened
@@ -67,9 +67,11 @@ function backFrom(view: View): View | null {
     case "reader":
       return view.back;
     case "series":
+      // On mobile, closing the volume panel comes before leaving the series.
+      if (isMobile && view.selectedVolume) return { ...view, selectedVolume: null };
       return { kind: "library" };
     case "editor":
-      return view.from ? { kind: "series", id: view.from.seriesId } : { kind: "library" };
+      return view.from ? { kind: "series", id: view.from.seriesId, selectedVolume: null } : { kind: "library" };
     case "library":
       return null;
     default:
@@ -242,7 +244,7 @@ export default function App() {
         <ReaderView
           target={view.target}
           onNavigate={(target) => setView({ kind: "reader", target, back })}
-          onOpenSeries={(id) => setView({ kind: "series", id })}
+          onOpenSeries={(id) => setView({ kind: "series", id, selectedVolume: null })}
           onExit={() => setView(back)}
         />
       );
@@ -278,7 +280,7 @@ export default function App() {
               back: { kind: "history" },
             })
           }
-          onOpenSeries={(id) => setView({ kind: "series", id })}
+          onOpenSeries={(id) => setView({ kind: "series", id, selectedVolume: null })}
           onError={setError}
         />
       );
@@ -289,7 +291,7 @@ export default function App() {
         <ExploreView
           browse={browse}
           onBrowseChange={setBrowse}
-          onOpenSeries={(id) => setView({ kind: "series", id })}
+          onOpenSeries={(id) => setView({ kind: "series", id, selectedVolume: null })}
           onRead={(target) =>
             setView({ kind: "reader", target, back: { kind: "explore" } })
           }
@@ -318,7 +320,7 @@ export default function App() {
         <LibraryView
           shelf={shelf}
           onShelfChange={setShelf}
-          onOpenSeries={(id) => setView({ kind: "series", id })}
+          onOpenSeries={(id) => setView({ kind: "series", id, selectedVolume: null })}
           onOpenFolder={() => void pickFolder()}
           onError={setError}
         />
@@ -329,8 +331,12 @@ export default function App() {
       return (
         <SeriesView
           seriesId={view.id}
+          selectedVolume={view.selectedVolume}
+          onSelectedVolumeChange={(selectedVolume) =>
+            setView({ ...view, selectedVolume })
+          }
           onRead={(target) =>
-            setView({ kind: "reader", target, back: { kind: "series", id: view.id } })
+            setView({ kind: "reader", target, back: { kind: "series", id: view.id, selectedVolume: view.selectedVolume } })
           }
           onBack={() => setView({ kind: "library" })}
           onEditVolume={(built, source) => {
@@ -365,19 +371,30 @@ export default function App() {
         onRescan={() => void runScan(volume.root)}
         onOpenFolder={() => void pickFolder()}
         onBack={() =>
-          setView(from ? { kind: "series", id: from.seriesId } : { kind: "library" })
+          setView(from ? { kind: "series", id: from.seriesId, selectedVolume: null } : { kind: "library" })
         }
         // A volume from the library is remembered once written, so its page can
         // offer to share the file rather than build an identical one again.
+        // The cover is persisted separately: the editor's custom cover (picked
+        // from disk or promoted from a page) must land in the library so the
+        // shelf shows it next time, not just while the volume is in memory.
         onBuilt={
           from
-            ? (built) =>
+            ? (built) => {
                 void recordBuilt(
                   from.seriesId,
                   from.number,
                   built.path,
                   built.bytes,
-                ).catch(() => {})
+                ).catch(() => {});
+                if (volume?.cover) {
+                  void librarySetVolumeCover(
+                    from.seriesId,
+                    from.number,
+                    volume.cover,
+                  ).catch(() => {});
+                }
+              }
             : undefined
         }
         defaultFormat={settings.default_format}

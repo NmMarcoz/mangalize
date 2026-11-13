@@ -525,6 +525,7 @@ export function EditorView({
           volume={volume}
           onChange={patchMetadata}
           onPickCover={() => void pickCover()}
+          onSetCover={setCover}
           onFetchMetadata={() => setLookupOpen(true)}
           onClearCover={() => setVolume((c) => (c ? { ...c, cover: null } : c))}
           fileName={fileName}

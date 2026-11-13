@@ -1,6 +1,8 @@
-import { ArrowLeftRight, Image as ImageIcon, Sparkles, Star } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeftRight, Image as ImageIcon, Search, Sparkles, Star } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { CoverSearchDialog } from "@/components/CoverSearchDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -20,6 +22,7 @@ import {
   type Metadata,
   type Volume,
 } from "@/lib/api";
+import { useT } from "@/lib/i18n";
 
 interface MetadataPanelProps {
   volume: Volume;
@@ -27,6 +30,8 @@ interface MetadataPanelProps {
   onPickCover: () => void;
   onClearCover: () => void;
   onFetchMetadata: () => void;
+  /** Set the cover to a specific path (used by the image search dialog). */
+  onSetCover: (path: string) => void;
   /** What the user typed for the output name. Empty means "use the suggestion". */
   fileName: string;
   /** The name derived from the metadata, shown as the placeholder. */
@@ -40,40 +45,56 @@ export function MetadataPanel({
   onPickCover,
   onClearCover,
   onFetchMetadata,
+  onSetCover,
   fileName: exportName,
   suggestedFileName,
   onFileName,
 }: MetadataPanelProps) {
+  const t = useT();
   const cover = effectiveCover(volume);
   const { metadata } = volume;
+  const [searchOpen, setSearchOpen] = useState(false);
 
   return (
     <aside className="scrollbar-thin flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l border-border bg-card/40 p-4">
       <Button variant="secondary" size="sm" onClick={onFetchMetadata}>
-        <Sparkles /> Fetch metadata online
+        <Sparkles /> {t("metadataPanel.fetchOnline")}
       </Button>
 
       <section className="flex flex-col gap-2">
-        <Label>Cover</Label>
+        <Label>{t("metadataPanel.cover")}</Label>
         <CoverPreview path={cover} />
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="flex-1" onClick={onPickCover}>
-            <ImageIcon /> Choose file
-          </Button>
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="flex-1" onClick={onPickCover}>
+              <ImageIcon /> {t("metadataPanel.chooseFile")}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClearCover}
+              disabled={!volume.cover}
+              title={t("metadataPanel.resetHint")}
+            >
+              {t("metadataPanel.reset")}
+            </Button>
+          </div>
           <Button
-            variant="ghost"
+            variant="secondary"
             size="sm"
-            onClick={onClearCover}
-            disabled={!volume.cover}
-            title="Fall back to the first page"
+            className="w-full"
+            onClick={() => setSearchOpen(true)}
+            disabled={!metadata.series}
+            title={t("metadataPanel.searchGoogleHint")}
           >
-            Reset
+            <Search className="size-3.5" />
+            {t("coverSearch.search")}
           </Button>
         </div>
         <p className="text-[11px] leading-snug text-muted-foreground">
           {volume.cover
             ? baseName(volume.cover)
-            : "Using page one. Press C on any page to promote it."}
+            : t("metadataPanel.usingPageOne")}
         </p>
       </section>
 
@@ -81,24 +102,24 @@ export function MetadataPanel({
 
       <section className="flex flex-col gap-3">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="series">Series</Label>
+          <Label htmlFor="series">{t("metadataPanel.series")}</Label>
           <Input
             id="series"
             value={metadata.series}
-            placeholder="Ichi the Witch"
+            placeholder={t("metadataPanel.seriesPlaceholder")}
             onChange={(e) => onChange({ series: e.target.value })}
           />
         </div>
 
         <div className="flex gap-2">
           <div className="flex w-24 flex-col gap-1.5">
-            <Label htmlFor="volume">Volume</Label>
+            <Label htmlFor="volume">{t("metadataPanel.volume")}</Label>
             <Input
               id="volume"
               type="number"
               min={0}
               value={metadata.volume ?? ""}
-              placeholder="1"
+              placeholder={t("metadataPanel.volumePlaceholder")}
               onChange={(e) =>
                 onChange({
                   volume: e.target.value === "" ? null : Number(e.target.value),
@@ -107,28 +128,28 @@ export function MetadataPanel({
             />
           </div>
           <div className="flex flex-1 flex-col gap-1.5">
-            <Label htmlFor="language">Language</Label>
+            <Label htmlFor="language">{t("metadataPanel.language")}</Label>
             <Input
               id="language"
               value={metadata.language}
-              placeholder="en"
+              placeholder={t("metadataPanel.languagePlaceholder")}
               onChange={(e) => onChange({ language: e.target.value })}
             />
           </div>
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="author">Author</Label>
+          <Label htmlFor="author">{t("metadataPanel.author")}</Label>
           <Input
             id="author"
             value={metadata.author}
-            placeholder="Osamu Nishi"
+            placeholder={t("metadataPanel.authorPlaceholder")}
             onChange={(e) => onChange({ author: e.target.value })}
           />
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="direction">Reading direction</Label>
+          <Label htmlFor="direction">{t("metadataPanel.direction")}</Label>
           <Select
             value={metadata.direction}
             onValueChange={(v) => onChange({ direction: v as Direction })}
@@ -140,18 +161,18 @@ export function MetadataPanel({
               </span>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="right-to-left">Right to left (manga)</SelectItem>
-              <SelectItem value="left-to-right">Left to right</SelectItem>
+              <SelectItem value="right-to-left">{t("metadataPanel.directionRtl")}</SelectItem>
+              <SelectItem value="left-to-right">{t("metadataPanel.directionLtr")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="description">Description</Label>
+          <Label htmlFor="description">{t("metadataPanel.description")}</Label>
           <Textarea
             id="description"
             value={metadata.description}
-            placeholder="Optional blurb shown in your library."
+            placeholder={t("metadataPanel.descriptionPlaceholder")}
             onChange={(e) => onChange({ description: e.target.value })}
           />
         </div>
@@ -160,7 +181,7 @@ export function MetadataPanel({
       <Separator />
 
       <section className="flex flex-col gap-1.5">
-        <Label htmlFor="filename">Export as</Label>
+        <Label htmlFor="filename">{t("metadataPanel.exportAs")}</Label>
         <Input
           id="filename"
           value={exportName}
@@ -169,13 +190,20 @@ export function MetadataPanel({
         />
         <p className="text-[11px] leading-snug text-muted-foreground">
           {exportName.trim()
-            ? "Used as the file name when you export."
-            : "Taken from the series and volume above. Type to override."}
+            ? t("metadataPanel.exportNameHint")
+            : t("metadataPanel.exportNameHintDefault")}
         </p>
       </section>
+
+      <CoverSearchDialog
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        onPick={onSetCover}
+      />
     </aside>
   );
 }
+
 
 function CoverPreview({ path }: { path: string | null }) {
   if (!path) {

@@ -227,6 +227,17 @@ export const libraryUnlockChapters = (id: number, numbers: string[]) =>
 export const libraryDownloadCovers = (id: number) =>
   invoke<number>("library_download_covers", { id });
 
+/**
+ * Persist a user-picked cover for one volume.
+ *
+ * The editor lets the user choose a custom cover (or promote a page), but that
+ * choice only lives in the `Volume` in memory. When the volume is written and
+ * the editor returns to the library, the cover must be stored alongside the
+ * chapters so the shelf shows it next time.
+ */
+export const librarySetVolumeCover = (id: number, volume: string, path: string) =>
+  invoke<string>("library_set_volume_cover", { id, volume, path });
+
 export const libraryBuildVolume = (id: number, volume: string) =>
   invoke<Volume>("library_build_volume", { id, volume });
 

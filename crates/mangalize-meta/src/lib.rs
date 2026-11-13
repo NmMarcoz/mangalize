@@ -22,6 +22,7 @@
 //! [Jikan]: https://docs.api.jikan.moe/
 
 pub mod anilist;
+pub mod image_search;
 pub mod jikan;
 pub mod kitsu;
 pub mod mangadex;
