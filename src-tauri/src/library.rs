@@ -345,6 +345,30 @@ pub async fn library_download_covers(app: AppHandle, id: i64) -> Result<usize, S
     .await
 }
 
+/// Store a user-picked cover for one volume.
+///
+/// The editor lets the user choose a custom cover (or promote a page to one),
+/// but that choice lives in the `Volume` in memory. When the volume is written
+/// and the editor returns to the library, the cover must be persisted alongside
+/// the chapters so the shelf shows it next time. Reading the bytes here keeps
+/// the pipeline's "no UI, no network" rule intact: the caller supplies a path
+/// on disk, and the library copies it into its own cover slot.
+#[tauri::command]
+pub async fn library_set_volume_cover(
+    app: AppHandle,
+    id: i64,
+    volume: String,
+    path: String,
+) -> Result<String, String> {
+    blocking(move || {
+        let library = open(&app)?;
+        let bytes = std::fs::read(&path)?;
+        let stored = library.set_volume_cover(SeriesId(id), &volume, &bytes)?;
+        Ok(stored.to_string_lossy().into_owned())
+    })
+    .await
+}
+
 /// Hand a stored volume to the editor the folder path already uses.
 #[tauri::command]
 pub async fn library_build_volume(

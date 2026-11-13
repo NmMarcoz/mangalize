@@ -103,6 +103,7 @@ pub fn run() {
             library::library_assign_chapters_to_volume,
             library::library_unlock_chapters,
             library::library_download_covers,
+            library::library_set_volume_cover,
             library::library_build_volume,
             library::library_delete_chapter,
             library::build_library_volumes,

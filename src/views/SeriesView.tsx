@@ -99,6 +99,8 @@ import { cn } from "@/lib/utils";
 
 interface SeriesViewProps {
   seriesId: number;
+  selectedVolume: string | null;
+  onSelectedVolumeChange: (selected: string | null) => void;
   onBack: () => void;
   /** Hand a built volume to the editor. */
   onEditVolume: (volume: Volume, source: { seriesId: number; number: string }) => void;
@@ -128,6 +130,8 @@ interface SeriesViewProps {
  */
 export function SeriesView({
   seriesId,
+  selectedVolume,
+  onSelectedVolumeChange,
   onBack,
   onEditVolume,
   defaultFormat,
@@ -142,7 +146,6 @@ export function SeriesView({
   const [refetching, setRefetching] = useState(false);
   const [building, setBuilding] = useState<string | null>(null);
   const [fetching, setFetching] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
   const [organizing, setOrganizing] = useState(false);
   const [removing, setRemoving] = useState(false);
   // A "get missing" run, once the user has chosen how to fetch. `wanted` is
@@ -204,7 +207,7 @@ export function SeriesView({
   // whatever is opened next.
   useEffect(() => {
     setOrganizing(false);
-  }, [selected]);
+  }, [selectedVolume]);
 
   /**
    * Pull any volume covers we do not hold yet, then show them.
@@ -367,7 +370,7 @@ export function SeriesView({
     [volumes],
   );
 
-  const detail = volumes?.find((v) => v.number === selected) ?? null;
+  const detail = volumes?.find((v) => v.number === selectedVolume) ?? null;
 
   /* ----------------------------------------------------------- selection */
 
@@ -409,7 +412,7 @@ export function SeriesView({
       // A plain click is both "this one" and "show me its chapters".
       setPicked(new Set([number]));
       setAnchor(number);
-      setSelected((current) => (current === number ? null : number));
+      onSelectedVolumeChange(selectedVolume === number ? null : number);
     },
     [anchor, order],
   );
@@ -526,7 +529,18 @@ export function SeriesView({
   return (
     <div className="flex h-full flex-col">
       <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-4 py-2.5">
-        <Button variant="ghost" size="icon" onClick={onBack}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            // On mobile, closing the volume panel comes before leaving the series.
+            if (isMobile && selectedVolume) {
+              onSelectedVolumeChange(null);
+            } else {
+              onBack();
+            }
+          }}
+        >
           <ArrowLeft />
         </Button>
         <div className="min-w-0 flex-1">
@@ -642,7 +656,7 @@ export function SeriesView({
                 <VolumeCard
                   key={volume.number}
                   volume={volume}
-                  open={selected === volume.number}
+                  open={selectedVolume === volume.number}
                   picked={picked.has(volume.number)}
                   building={building === volume.number}
                   onPick={(e) => pick(volume.number, e)}
@@ -658,7 +672,7 @@ export function SeriesView({
           <VolumePanel
             volume={detail}
             building={building === detail.number}
-            onClose={() => setSelected(null)}
+            onClose={() => onSelectedVolumeChange(null)}
             onBuild={() => (detail.built ? setRebuild(detail) : void edit(detail.number))}
             onShare={() =>
               detail.built &&
