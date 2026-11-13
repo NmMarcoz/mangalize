@@ -1,23 +1,23 @@
 [package]
-name = "mangalize-app"
+name = "leaf-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [lib]
-name = "mangalize_app"
+name = "leaf_app"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-mangalize-core = { path = "../crates/mangalize-core" }
-mangalize-meta = { path = "../crates/mangalize-meta" }
-mangalize-library = { path = "../crates/mangalize-library" }
-mangalize-fetch = { path = "../crates/mangalize-fetch" }
-mangalize-extensions = { path = "../crates/mangalize-extensions" }
-mangalize-send = { path = "../crates/mangalize-send" }
+leaf-core = { path = "../crates/leaf-core" }
+leaf-meta = { path = "../crates/leaf-meta" }
+leaf-library = { path = "../crates/leaf-library" }
+leaf-fetch = { path = "../crates/leaf-fetch" }
+leaf-extensions = { path = "../crates/leaf-extensions" }
+leaf-send = { path = "../crates/leaf-send" }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"

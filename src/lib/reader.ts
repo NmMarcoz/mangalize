@@ -24,7 +24,7 @@ export interface ReaderChapter {
   language: string;
 }
 
-/** Mirrors `mangalize_library::model::HistoryEntry`. */
+/** Mirrors `leaf_library::model::HistoryEntry`. */
 export interface HistoryEntry {
   series_id: number;
   series_title: string;
@@ -258,7 +258,7 @@ export interface ReaderPrefs {
   background: "black" | "grey" | "white";
 }
 
-const PREFS_KEY = "mangalize:reader-prefs";
+const PREFS_KEY = "leaf:reader-prefs";
 
 export const defaultPrefs = (): ReaderPrefs => ({
   mode: "paged",

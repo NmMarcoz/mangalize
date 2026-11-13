@@ -7,8 +7,8 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use mangalize_fetch::{BatchItem, BatchPlan, Candidate, Extraction};
-use mangalize_library::{ChapterStatus, Library, SeriesId};
+use leaf_fetch::{BatchItem, BatchPlan, Candidate, Extraction};
+use leaf_library::{ChapterStatus, Library, SeriesId};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -31,7 +31,7 @@ struct FetchProgress {
 #[tauri::command]
 pub async fn extract_chapter(app: AppHandle, url: String) -> Result<Extraction, String> {
     blocking(move || {
-        mangalize_fetch::extract_page(&url, &mut emit(&app, "measuring"))
+        leaf_fetch::extract_page(&url, &mut emit(&app, "measuring"))
     })
     .await
 }
@@ -44,7 +44,7 @@ pub async fn measure_images(
     referer: Option<String>,
 ) -> Result<Vec<Candidate>, String> {
     blocking(move || {
-        Ok(mangalize_fetch::measure(
+        Ok(leaf_fetch::measure(
             &urls,
             referer.as_deref(),
             &mut emit(&app, "measuring"),
@@ -78,7 +78,7 @@ pub async fn preview_image(
             return Ok(tauri::ipc::Response::new(bytes));
         }
 
-        let (bytes, _) = mangalize_fetch::download::fetch_image(&url, referer.as_deref())?;
+        let (bytes, _) = leaf_fetch::download::fetch_image(&url, referer.as_deref())?;
         let thumb = image::load_from_memory(&bytes)?.thumbnail(max, max * 3);
 
         let mut out = Vec::new();
@@ -119,7 +119,7 @@ pub async fn download_chapter(
             std::fs::remove_dir_all(&dest)?;
         }
 
-        let written = mangalize_fetch::download_pages(
+        let written = leaf_fetch::download_pages(
             &urls,
             &dest,
             referer.as_deref(),
@@ -170,7 +170,7 @@ pub async fn download_chapter_from_source(
             std::fs::remove_dir_all(&dest)?;
         }
 
-        let written = mangalize_fetch::download_pages(
+        let written = leaf_fetch::download_pages(
             &pages,
             &dest,
             referer.as_deref(),
@@ -207,7 +207,7 @@ pub async fn import_chapter(
         std::fs::create_dir_all(&dest)?;
 
         // Copied, never moved: the user's own folder is not ours to empty.
-        let scanned = mangalize_core::scan_volume(&source)?;
+        let scanned = leaf_core::scan_volume(&source)?;
         let mut count = 0usize;
         for page in scanned.included_pages() {
             let ext = page
@@ -351,8 +351,8 @@ fn summarise(downloaded: &[String], failed: &[BatchFailure]) -> String {
 /// registered source means loading every `.lua` extension, which fifty
 /// chapters have no reason to repeat fifty times.
 enum ChapterSource {
-    Meta(mangalize_meta::Source),
-    Registered(std::sync::Arc<dyn mangalize_extensions::Source>),
+    Meta(leaf_meta::Source),
+    Registered(std::sync::Arc<dyn leaf_extensions::Source>),
 }
 
 impl ChapterSource {
@@ -374,7 +374,7 @@ impl ChapterSource {
     /// before each chapter's download rather than cached across the batch.
     fn page_list(&self, chapter_id: &str) -> anyhow::Result<(Vec<String>, Option<String>)> {
         match self {
-            Self::Meta(source) => Ok((mangalize_meta::chapter_pages(*source, chapter_id)?, None)),
+            Self::Meta(source) => Ok((leaf_meta::chapter_pages(*source, chapter_id)?, None)),
             Self::Registered(source) => {
                 Ok((source.page_list(chapter_id)?, Some(source.info().base_url.clone())))
             }
@@ -386,7 +386,7 @@ fn one_from_source(
     app: &AppHandle,
     library: &Library,
     series_id: SeriesId,
-    series: &mangalize_library::Series,
+    series: &leaf_library::Series,
     source: &ChapterSource,
     number: &str,
     report: &dyn Fn(&'static str, usize, usize),
@@ -405,7 +405,7 @@ fn one_from_source(
     }
 
     let written =
-        mangalize_fetch::download_pages(&pages, &dest, referer.as_deref(), &mut emit(app, "downloading"))?;
+        leaf_fetch::download_pages(&pages, &dest, referer.as_deref(), &mut emit(app, "downloading"))?;
     library.record_chapter(
         series_id,
         number,
@@ -422,7 +422,7 @@ pub async fn plan_batch(
     url: String,
     wanted: Vec<String>,
 ) -> Result<BatchPlan, String> {
-    blocking(move || mangalize_fetch::plan_batch(&url, &wanted, &mut emit(&app, "checking"))).await
+    blocking(move || leaf_fetch::plan_batch(&url, &wanted, &mut emit(&app, "checking"))).await
 }
 
 /// Download a whole planned batch into the library.
@@ -503,7 +503,7 @@ fn fetch_one(
 ) -> anyhow::Result<usize> {
     // No picker here, so the size sieve does the choosing. A page that offers
     // nothing it recognises is reported rather than silently stored empty.
-    let pages = mangalize_fetch::chapter_pages(&item.url, &mut |done, total| {
+    let pages = leaf_fetch::chapter_pages(&item.url, &mut |done, total| {
         report("reading", done, total)
     })?;
 
@@ -517,7 +517,7 @@ fn fetch_one(
     }
 
     let page_total = pages.len();
-    let written = mangalize_fetch::download_pages(
+    let written = leaf_fetch::download_pages(
         &pages,
         &dest,
         Some(&item.url),

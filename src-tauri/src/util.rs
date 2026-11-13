@@ -2,17 +2,17 @@
 
 use anyhow::Result;
 
-/// Try to read a series' free-text `source` as `mangalize_meta::Source`
+/// Try to read a series' free-text `source` as `leaf_meta::Source`
 /// (MangaDex/Kitsu). `None` for anything else — a registered `Source`
 /// instead (a built-in beyond that pair, or a `.lua` extension) — which is
 /// the caller's cue to fall back to `sources::load_registry`.
 ///
 /// One spelling of this dispatch shared by `library.rs`, `fetch.rs`,
 /// `meta.rs` and `reader.rs`, rather than four copies of the same match.
-pub fn parse_meta_source(name: &str) -> Option<mangalize_meta::Source> {
+pub fn parse_meta_source(name: &str) -> Option<leaf_meta::Source> {
     match name {
-        "mangadex" => Some(mangalize_meta::Source::MangaDex),
-        "kitsu" => Some(mangalize_meta::Source::Kitsu),
+        "mangadex" => Some(leaf_meta::Source::MangaDex),
+        "kitsu" => Some(leaf_meta::Source::Kitsu),
         _ => None,
     }
 }

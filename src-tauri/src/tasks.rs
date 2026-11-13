@@ -190,7 +190,7 @@ fn send<R: Runtime>(app: &AppHandle<R>, job: Job) {
     if sender.is_none() {
         let (tx, rx) = mpsc::channel::<Job>();
         std::thread::Builder::new()
-            .name("mangalize-tasks".into())
+            .name("leaf-tasks".into())
             .spawn(move || {
                 for job in rx {
                     job();

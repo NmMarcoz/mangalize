@@ -3,12 +3,12 @@ import { invoke } from "@tauri-apps/api/core";
 import type { SeriesMatch, Volume } from "@/lib/api";
 
 /**
- * Mirrors of the serde shapes in `mangalize-library` and `mangalize-fetch`.
+ * Mirrors of the serde shapes in `leaf-library` and `leaf-fetch`.
  * Keep these in step with the Rust definitions; serde uses kebab-case for the
  * enums, and `SeriesId` is a newtype so it crosses the wire as a plain number.
  */
 
-/** Mirrors `mangalize_library::model::Series`. */
+/** Mirrors `leaf_library::model::Series`. */
 export interface Series {
   id: number;
   source: string | null;
@@ -82,10 +82,10 @@ export interface SyncReport {
   orphaned: number;
 }
 
-/** Mirrors `mangalize_core::sieve::Verdict`. */
+/** Mirrors `leaf_core::sieve::Verdict`. */
 export type Verdict = "single" | "spread" | "off-size";
 
-/** Mirrors `mangalize_fetch::Candidate`. */
+/** Mirrors `leaf_fetch::Candidate`. */
 export interface Candidate {
   url: string;
   width: number;
@@ -111,7 +111,7 @@ export interface Harvested {
 /** Whether a chapter URL was published by the site or constructed from its pattern. */
 export type Found = "linked" | "guessed";
 
-/** Mirrors `mangalize_fetch::BatchItem`. */
+/** Mirrors `leaf_fetch::BatchItem`. */
 export interface BatchItem {
   number: string;
   url: string;

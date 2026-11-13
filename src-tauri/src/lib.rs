@@ -4,14 +4,14 @@
 //! library crates; no pipeline logic lives here. The modules split along the
 //! same seams the crates do:
 //!
-//! - [`volume`] — scan a folder, preview it, export it (`mangalize-core`)
-//! - [`meta`] — online series lookup (`mangalize-meta`)
+//! - [`volume`] — scan a folder, preview it, export it (`leaf-core`)
+//! - [`meta`] — online series lookup (`leaf-meta`)
 //! - [`sources`] — registered `Source`s beyond MangaDex/Kitsu: built-in and
-//!   `.lua` extensions (`mangalize-extensions`)
-//! - [`library`] — the stored collection (`mangalize-library`)
-//! - [`fetch`] — pulling a chapter's images off a URL (`mangalize-fetch`)
+//!   `.lua` extensions (`leaf-extensions`)
+//! - [`library`] — the stored collection (`leaf-library`)
+//! - [`fetch`] — pulling a chapter's images off a URL (`leaf-fetch`)
 //! - [`harvest`] — rendering a page to see what images it really loads
-//! - [`send`] — mailing a finished volume to a device (`mangalize-send`)
+//! - [`send`] — mailing a finished volume to a device (`leaf-send`)
 //!
 //! Two of those are desktop-only in substance: `harvest` needs a second window
 //! and `send` needs an OS keychain, neither of which Android offers. Their
@@ -130,6 +130,6 @@ pub fn run() {
             reader::resume_point,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running mangalize");
+        .expect("error while running Leaf");
 }
 

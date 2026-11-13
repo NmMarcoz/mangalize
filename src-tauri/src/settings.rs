@@ -23,7 +23,7 @@ pub struct DeliveryConfig {
     pub from: String,
     pub host: String,
     pub port: u16,
-    /// Mirrors `mangalize_send::Security`: `start-tls`, `tls` or `none`.
+    /// Mirrors `leaf_send::Security`: `start-tls`, `tls` or `none`.
     pub security: String,
     pub username: String,
 }
@@ -146,8 +146,8 @@ pub fn save(app: &AppHandle, next: &Settings) -> Result<()> {
 }
 
 /// Turn the stored preset name into the settings the writers take.
-pub fn compression(name: &str) -> mangalize_core::Compression {
-    use mangalize_core::Compression;
+pub fn compression(name: &str) -> leaf_core::Compression {
+    use leaf_core::Compression;
     match name {
         "original" => Compression::ORIGINAL,
         "large" => Compression::LARGE,
@@ -205,7 +205,7 @@ pub fn suggested_output_root(app: AppHandle) -> Result<String, String> {
 
 /// Where a library lives when the user has not said otherwise.
 ///
-/// On desktop, `~/Mangalize`: deliberately a plain, visible folder rather than
+/// On desktop, `~/Leaf`: deliberately a plain, visible folder rather than
 /// an app-private one, and deliberately the same default the CLI uses so both
 /// front ends see the same collection. It is the user's library; they should be
 /// able to find it, back it up and move it without our help.
@@ -215,7 +215,7 @@ pub fn suggested_output_root(app: AppHandle) -> Result<String, String> {
 /// points somewhere meaningless, so the app's private data directory is used
 /// instead.
 pub fn default_library_root(app: &AppHandle) -> Result<PathBuf> {
-    Ok(base_dir(app)?.join("Mangalize"))
+    Ok(base_dir(app)?.join("Leaf"))
 }
 
 /// Where builds land by default, offered on first run.
@@ -236,10 +236,10 @@ pub fn default_output_root(app: &AppHandle) -> Result<PathBuf> {
         static ROOT: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
         let resolved = ROOT.get_or_init(|| app.path().download_dir().ok());
         if let Some(downloads) = resolved {
-            return Ok(downloads.join("Mangalize"));
+            return Ok(downloads.join("Leaf"));
         }
     }
-    Ok(base_dir(app)?.join("Mangalize").join("Exports"))
+    Ok(base_dir(app)?.join("Leaf").join("Exports"))
 }
 
 #[cfg(desktop)]

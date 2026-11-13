@@ -12,7 +12,7 @@ const dict: PartialDictionary = {
     "libraryView.openingLibrary": "Opening the library…",
     "libraryView.emptyTitle": "Nothing here yet",
     "libraryView.emptyDescription":
-      "Add a series and Mangalize will pull its published volume layout, then tell you which chapters you are missing.",
+      "Add a series and Leaf will pull its published volume layout, then tell you which chapters you are missing.",
     "libraryView.addFirstSeries": "Add your first series",
     "libraryView.noMatchesTitle": "Nothing matches those filters",
     "libraryView.noMatchesDescription": "Try clearing a tag, or widening the content rating.",
@@ -31,7 +31,7 @@ const dict: PartialDictionary = {
     "libraryView.openingLibrary": "Abrindo a biblioteca…",
     "libraryView.emptyTitle": "Nada por aqui ainda",
     "libraryView.emptyDescription":
-      "Adicione uma série e o Mangalize vai buscar o layout de volumes publicados, e então dizer quais capítulos estão faltando.",
+      "Adicione uma série e o Leaf vai buscar o layout de volumes publicados, e então dizer quais capítulos estão faltando.",
     "libraryView.addFirstSeries": "Adicione sua primeira série",
     "libraryView.noMatchesTitle": "Nada corresponde a esses filtros",
     "libraryView.noMatchesDescription": "Tente limpar uma tag, ou ampliar a classificação de conteúdo.",

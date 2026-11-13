@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
-use mangalize_send::{Account, Delivery, Security};
+use leaf_send::{Account, Delivery, Security};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
@@ -17,7 +17,7 @@ use crate::util::blocking;
 
 /// Keychain coordinates. The service matches the bundle identifier so the entry
 /// is recognisable in Keychain Access or Credential Manager.
-const SERVICE: &str = "dev.mangalize.app";
+const SERVICE: &str = "dev.Leaf.app";
 const ACCOUNT: &str = "smtp-password";
 
 /// The delivery settings plus whether a password is stored, which is all the UI
@@ -144,7 +144,7 @@ pub async fn send_test_email(app: AppHandle) -> Result<(), String> {
         if to.is_empty() {
             bail!("no device address set");
         }
-        mangalize_send::send_test(&account(&config)?, &stored_password().unwrap_or_default(), &to)
+        leaf_send::send_test(&account(&config)?, &stored_password().unwrap_or_default(), &to)
         }
     })
     .await
@@ -225,7 +225,7 @@ fn deliver(
     name: &str,
 ) -> Result<()> {
     let bytes = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
-    mangalize_send::send(account, password, &Delivery { to, filename: name, bytes })
+    leaf_send::send(account, password, &Delivery { to, filename: name, bytes })
 }
 
 fn account(config: &DeliveryConfig) -> Result<Account> {

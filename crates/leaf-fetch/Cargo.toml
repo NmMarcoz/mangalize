@@ -1,0 +1,17 @@
+[package]
+name = "leaf-fetch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+leaf-core = { path = "../leaf-core" }
+anyhow.workspace = true
+serde.workspace = true
+ureq.workspace = true
+image.workspace = true
+# Pages embedded in the markup arrive base64-encoded inside a data: URI.
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,6 +1,6 @@
 //! Commands for online metadata lookup. Always user-initiated.
 
-use mangalize_meta::{
+use leaf_meta::{
     BrowsePage, BrowseQuery, SeriesMatch, Source, Statistics, Tag, VolumeChapters, VolumeCover,
 };
 use tauri::{AppHandle, Manager};
@@ -10,13 +10,13 @@ use crate::util::blocking;
 /// Search public manga databases for a series.
 #[tauri::command]
 pub async fn search_series(query: String) -> Result<Vec<SeriesMatch>, String> {
-    blocking(move || mangalize_meta::search(&query, 8)).await
+    blocking(move || leaf_meta::search(&query, 8)).await
 }
 
 /// Browse the catalogue by ordering and filters, with or without a search term.
 #[tauri::command]
 pub async fn browse_series(query: BrowseQuery) -> Result<BrowsePage, String> {
-    blocking(move || mangalize_meta::browse(&query)).await
+    blocking(move || leaf_meta::browse(&query)).await
 }
 
 /// Every tag a series can carry, for the filter picker.
@@ -25,19 +25,19 @@ pub async fn browse_series(query: BrowseQuery) -> Result<BrowsePage, String> {
 /// keystroke.
 #[tauri::command]
 pub async fn mangadex_tags() -> Result<Vec<Tag>, String> {
-    blocking(mangalize_meta::tags).await
+    blocking(leaf_meta::tags).await
 }
 
 /// Every published volume cover for a series.
 #[tauri::command]
 pub async fn series_covers(source: Source, id: String) -> Result<Vec<VolumeCover>, String> {
-    blocking(move || mangalize_meta::volume_covers(source, &id)).await
+    blocking(move || leaf_meta::volume_covers(source, &id)).await
 }
 
 /// Rating and follow counts for a series.
 #[tauri::command]
 pub async fn series_statistics(source: Source, id: String) -> Result<Statistics, String> {
-    blocking(move || mangalize_meta::statistics(source, &id)).await
+    blocking(move || leaf_meta::statistics(source, &id)).await
 }
 
 /// Other series filed under the same genres.
@@ -50,7 +50,7 @@ pub async fn similar_series(
     tags: Vec<String>,
     exclude: String,
 ) -> Result<Vec<SeriesMatch>, String> {
-    blocking(move || mangalize_meta::similar(source, &tags, &exclude)).await
+    blocking(move || leaf_meta::similar(source, &tags, &exclude)).await
 }
 
 /// The volume-to-chapter layout for one translation.
@@ -60,13 +60,13 @@ pub async fn series_chapters_in(
     id: String,
     language: Option<String>,
 ) -> Result<Vec<VolumeChapters>, String> {
-    blocking(move || mangalize_meta::volume_chapters_in(source, &id, language.as_deref())).await
+    blocking(move || leaf_meta::volume_chapters_in(source, &id, language.as_deref())).await
 }
 
 /// The published volume-to-chapter layout, for checking a folder against it.
 #[tauri::command]
 pub async fn series_chapters(source: Source, id: String) -> Result<Vec<VolumeChapters>, String> {
-    blocking(move || mangalize_meta::volume_chapters(source, &id)).await
+    blocking(move || leaf_meta::volume_chapters(source, &id)).await
 }
 
 /// Download a cover and return its local path.
@@ -82,7 +82,7 @@ pub async fn save_cover(app: AppHandle, url: String) -> Result<String, String> {
         .join("covers");
 
     blocking(move || {
-        let bytes = mangalize_meta::download_image(&url)?;
+        let bytes = leaf_meta::download_image(&url)?;
         std::fs::create_dir_all(&dir)?;
 
         // Name by content so re-picking the same cover reuses the same file.
@@ -110,10 +110,10 @@ pub async fn save_cover(app: AppHandle, url: String) -> Result<String, String> {
 #[tauri::command]
 pub async fn series_translations(source: String, series_source_id: String) -> Result<Vec<String>, String> {
     crate::util::blocking(move || match crate::util::parse_meta_source(&source) {
-        Some(mangalize_meta::Source::MangaDex) => {
-            Ok(mangalize_meta::mangadex::manga(&series_source_id)?.available_languages)
+        Some(leaf_meta::Source::MangaDex) => {
+            Ok(leaf_meta::mangadex::manga(&series_source_id)?.available_languages)
         }
-        Some(mangalize_meta::Source::Kitsu) | None => Ok(Vec::new()),
+        Some(leaf_meta::Source::Kitsu) | None => Ok(Vec::new()),
     })
     .await
 }

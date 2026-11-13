@@ -57,13 +57,13 @@ pub async fn install_apk<R: Runtime>(app: &AppHandle<R>, path: String) -> Result
 /// Registers the Kotlin side. A no-op plugin elsewhere, so `lib.rs` stays free
 /// of a `cfg` around the builder chain.
 pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
-    let builder = tauri::plugin::Builder::new("mangalize-export");
+    let builder = tauri::plugin::Builder::new("leaf-export");
 
     #[cfg(target_os = "android")]
     let builder = builder.setup(|app, api: PluginApi<R, ()>| {
         // Resolved by reflection as `<identifier>.<class>`, so this has to
         // match the package `SharePlugin.kt` declares.
-        let handle = api.register_android_plugin("dev.mangalize.app", "SharePlugin")?;
+        let handle = api.register_android_plugin("dev.Leaf.app", "SharePlugin")?;
         app.manage(Share(handle));
         Ok(())
     });

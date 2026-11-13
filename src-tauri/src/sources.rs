@@ -1,6 +1,6 @@
 //! Commands for registered `Source`s — built-in beyond MangaDex, and `.lua`
 //! extensions — the counterpart to `meta.rs` for anything that isn't the
-//! MangaDex/Kitsu pair `mangalize_meta::Source` names.
+//! MangaDex/Kitsu pair `leaf_meta::Source` names.
 //!
 //! A fresh [`Registry`] is built per request, same reasoning as opening the
 //! library per request in `library.rs`: it keeps every command a plain
@@ -8,10 +8,10 @@
 //! `.lua` files is cheap next to the SQLite/HTTP work each command already does.
 
 use anyhow::{anyhow, Result};
-use mangalize_extensions::{MangaDetails, MangasPage, Registry, SourceInfo};
-use mangalize_library::model::{NewSeries, PublishedChapter, PublishedVolume};
-use mangalize_library::{Library, Series, SeriesId};
-use mangalize_meta::VolumeChapters;
+use leaf_extensions::{MangaDetails, MangasPage, Registry, SourceInfo};
+use leaf_library::model::{NewSeries, PublishedChapter, PublishedVolume};
+use leaf_library::{Library, Series, SeriesId};
+use leaf_meta::VolumeChapters;
 use tauri::AppHandle;
 
 use crate::settings;
@@ -160,7 +160,7 @@ pub async fn add_series_from_source(
         // no layout yet is recoverable with Refresh, a failed add is not.
         let _ = pull_layout(&mut library, added.id, ext_source.as_ref(), &external_id, &added.title);
         if let Some(url) = details.cover_url {
-            if let Ok(bytes) = mangalize_meta::download_image(&url) {
+            if let Ok(bytes) = leaf_meta::download_image(&url) {
                 let _ = library.set_cover(added.id, &bytes);
             }
         }
@@ -170,26 +170,26 @@ pub async fn add_series_from_source(
     .await
 }
 
-/// The `mangalize_meta::Source`-flavoured `pull_layout` in `library.rs`
+/// The `leaf_meta::Source`-flavoured `pull_layout` in `library.rs`
 /// mirrors this for MangaDex/Kitsu; this is the same shape for any other
 /// registered `Source`, plus the best-effort MangaDex volume remap a flat,
 /// volume-less source (most scraped sites) needs to organise into anything
 /// other than one "Unsorted" bucket. `pub(crate)` rather than a command of its
 /// own: `library::library_sync_series` calls this as its fallback when a
-/// series' `source` isn't `mangalize_meta::Source`, so the app's one Refresh
+/// series' `source` isn't `leaf_meta::Source`, so the app's one Refresh
 /// button works for either kind without the frontend needing to know which.
 pub(crate) fn pull_layout(
     library: &mut Library,
     id: SeriesId,
-    source: &dyn mangalize_extensions::Source,
+    source: &dyn leaf_extensions::Source,
     source_id: &str,
     title: &str,
-) -> Result<mangalize_library::SyncReport> {
+) -> Result<leaf_library::SyncReport> {
     let mut published = source.volumes(source_id, None)?;
     let mut covers = source.covers(source_id)?;
 
-    if published.len() == 1 && published[0].volume == mangalize_library::UNSORTED {
-        if let Some((remapped, mangadex_covers)) = mangalize_meta::mangadex::remap_onto_volumes(title, &published) {
+    if published.len() == 1 && published[0].volume == leaf_library::UNSORTED {
+        if let Some((remapped, mangadex_covers)) = leaf_meta::mangadex::remap_onto_volumes(title, &published) {
             published = remapped;
             // The source's own gallery (if any) has no idea these volume
             // numbers exist, so MangaDex's own covers are the only ones that

@@ -1,0 +1,18 @@
+[package]
+name = "leaf-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "leaf"
+path = "src/main.rs"
+
+[dependencies]
+leaf-core = { path = "../leaf-core" }
+leaf-meta = { path = "../leaf-meta" }
+leaf-library = { path = "../leaf-library" }
+leaf-fetch = { path = "../leaf-fetch" }
+leaf-extensions = { path = "../leaf-extensions" }
+anyhow.workspace = true
+clap.workspace = true

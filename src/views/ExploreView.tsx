@@ -86,11 +86,11 @@ export function ExploreView(props: ExploreViewProps) {
 
   // MangaDex is offered natively, with its own filter UI, rather than as
   // just another registered `Source` — the registry lists it too, under
-  // `mangalize.mangadex` (so the download path can look it up by the same id
+  // `leaf.mangadex` (so the download path can look it up by the same id
   // space as an extension), but showing it twice in one picker would be
   // confusing.
   const otherSources = useMemo(
-    () => sources.filter((s) => s.id !== "mangalize.mangadex"),
+    () => sources.filter((s) => s.id !== "leaf.mangadex"),
     [sources],
   );
 

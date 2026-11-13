@@ -1,13 +1,13 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/mangalize-core",
-    "crates/mangalize-meta",
-    "crates/mangalize-library",
-    "crates/mangalize-fetch",
-    "crates/mangalize-extensions",
-    "crates/mangalize-send",
-    "crates/mangalize-cli",
+    "crates/leaf-core",
+    "crates/leaf-meta",
+    "crates/leaf-library",
+    "crates/leaf-fetch",
+    "crates/leaf-extensions",
+    "crates/leaf-send",
+    "crates/leaf-cli",
     "src-tauri",
 ]
 

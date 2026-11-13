@@ -35,7 +35,7 @@ const dict: PartialDictionary = {
     "sendView.passwordStored": "Stored in your keychain",
     "sendView.passwordPlaceholder": "App password",
     "sendView.passwordHint":
-      "The password is kept in {keychain}, never in Mangalize's settings file. Leave the field blank to keep the stored one; clear it and save to forget it.",
+      "The password is kept in {keychain}, never in Leaf's settings file. Leave the field blank to keep the stored one; clear it and save to forget it.",
     "sendView.windowsCredentialManager": "Windows Credential Manager",
     "sendView.macKeychain": "the macOS Keychain",
     "sendView.testSuccess":
@@ -75,7 +75,7 @@ const dict: PartialDictionary = {
     "sendView.passwordStored": "Guardada no seu chaveiro",
     "sendView.passwordPlaceholder": "Senha de app",
     "sendView.passwordHint":
-      "A senha é guardada no {keychain}, nunca no arquivo de configurações do Mangalize. Deixe o campo em branco para manter a senha salva; limpe-o e salve para esquecê-la.",
+      "A senha é guardada no {keychain}, nunca no arquivo de configurações do Leaf. Deixe o campo em branco para manter a senha salva; limpe-o e salve para esquecê-la.",
     "sendView.windowsCredentialManager": "Gerenciador de Credenciais do Windows",
     "sendView.macKeychain": "Chaveiro do macOS",
     "sendView.testSuccess":

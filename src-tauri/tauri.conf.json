@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Mangalize",
+  "productName": "Leaf",
   "version": "1.14.0",
-  "identifier": "dev.mangalize.app",
+  "identifier": "dev.leaf.app",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Mangalize",
+        "title": "Leaf",
         "width": 1440,
         "height": 920,
         "minWidth": 1040,
@@ -35,14 +35,14 @@
       "icons/icon.ico"
     ],
     "createUpdaterArtifacts": true,
-    "publisher": "Mangalize",
+    "publisher": "Leaf",
     "shortDescription": "Turn folders of manga chapters into volumes your e-reader understands."
   },
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgxQ0RFMTdBNjJEMkE5NDYKUldSR3FkSmlldUhOZ2JUUkcrT1l0TFZJR2swZ0grNVAzZWRkL0FRZDRIYXdjZHRIMnp6eDRWWU0K",
       "endpoints": [
-        "https://github.com/NmMarcoz/mangalize/releases/latest/download/latest.json"
+        "https://github.com/NmMarcoz/leaf/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

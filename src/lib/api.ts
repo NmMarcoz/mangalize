@@ -4,7 +4,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { canRevealFiles } from "@/lib/platform";
 
 /**
- * Mirrors of the serde shapes in `mangalize-core`. Keep these in step with the
+ * Mirrors of the serde shapes in `leaf-core`. Keep these in step with the
  * Rust definitions; serde uses kebab-case for the enums.
  */
 export type Direction = "right-to-left" | "left-to-right";
@@ -61,7 +61,7 @@ export interface BuildReport {
 export type MetaSource = "mangadex" | "kitsu";
 
 /**
- * Mirrors `mangalize_meta::Tag`.
+ * Mirrors `leaf_meta::Tag`.
  *
  * Defined here rather than beside the browse filters because a series carries
  * its own tags; putting it there and importing back would be circular.
@@ -73,14 +73,14 @@ export interface Tag {
   group: string;
 }
 
-/** Mirrors `mangalize_meta::Statistics`. */
+/** Mirrors `leaf_meta::Statistics`. */
 export interface Statistics {
   rating: number | null;
   bayesian: number | null;
   follows: number | null;
 }
 
-/** Mirrors `mangalize_meta::SeriesMatch`. */
+/** Mirrors `leaf_meta::SeriesMatch`. */
 export interface SeriesMatch {
   source: MetaSource;
   id: string;
@@ -108,7 +108,7 @@ export interface VolumeCover {
   thumbnail_url: string;
 }
 
-/** Mirrors `mangalize_meta::ChapterRef`. */
+/** Mirrors `leaf_meta::ChapterRef`. */
 export interface ChapterRef {
   number: string;
   /** The source's own id; present means its pages can be fetched directly. */
@@ -177,10 +177,10 @@ export const sourceLabel = (source: MetaSource) =>
 /**
  * A registered `Source` beyond the MangaDex/Kitsu pair: built in, or a
  * `.lua` extension under `<library>/extensions/`. Mirrors
- * `mangalize_extensions::SourceInfo`.
+ * `leaf_extensions::SourceInfo`.
  */
 export interface SourceInfo {
-  /** Stable and namespaced, e.g. `mangalize.mangadex` or `user.mangataro` —
+  /** Stable and namespaced, e.g. `leaf.mangadex` or `user.mangataro` —
    * this is the exact string stored in a `Series`' `source` column. */
   id: string;
   name: string;

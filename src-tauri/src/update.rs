@@ -32,11 +32,11 @@ use crate::util::blocking;
 /// Where releases are published. The same repository `tauri.conf.json` points
 /// the desktop updater at.
 #[cfg(target_os = "android")]
-const RELEASES: &str = "https://api.github.com/repos/NmMarcoz/mangalize/releases/latest";
+const RELEASES: &str = "https://api.github.com/repos/NmMarcoz/Leaf/releases/latest";
 
 /// GitHub rejects requests with no user agent.
 #[cfg(target_os = "android")]
-const AGENT: &str = "mangalize-updater";
+const AGENT: &str = "leaf-updater";
 
 /// What a desktop build answers, since it has a real updater.
 pub const UNAVAILABLE: &str = "This build updates itself through the usual updater.";
@@ -168,8 +168,8 @@ fn fetch_apk(app: &AppHandle, url: &str) -> Result<PathBuf> {
 
     // Written under a temporary name and renamed on success, so a download cut
     // off halfway can never be handed to the installer as if it were whole.
-    let target = dir.join("mangalize-update.apk");
-    let partial = dir.join("mangalize-update.apk.part");
+    let target = dir.join("Leaf-update.apk");
+    let partial = dir.join("Leaf-update.apk.part");
     let mut source = response.into_reader();
     let mut sink = std::fs::File::create(&partial)?;
 

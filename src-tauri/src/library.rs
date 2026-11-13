@@ -1,15 +1,15 @@
 //! Commands over the stored library. Translation only: every decision about
-//! what a library *is* lives in `mangalize-library`.
+//! what a library *is* lives in `leaf-library`.
 
 use std::path::PathBuf;
 
 use anyhow::Result;
-use mangalize_core::project::Volume;
-use mangalize_library::model::{NewSeries, PublishedChapter, PublishedVolume};
-use mangalize_library::{ChapterStatus, Library, Series, SeriesId, SyncReport, VolumeStatus};
-use mangalize_meta::{SeriesMatch, Source};
+use leaf_core::project::Volume;
+use leaf_library::model::{NewSeries, PublishedChapter, PublishedVolume};
+use leaf_library::{ChapterStatus, Library, Series, SeriesId, SyncReport, VolumeStatus};
+use leaf_meta::{SeriesMatch, Source};
 
-use mangalize_core::writers;
+use leaf_core::writers;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
@@ -106,7 +106,7 @@ pub async fn library_add_series(
             language.as_deref(),
         );
         if let Some(url) = &series.thumbnail_url {
-            if let Ok(bytes) = mangalize_meta::download_image(url) {
+            if let Ok(bytes) = leaf_meta::download_image(url) {
                 let _ = library.set_cover(added.id, &bytes);
             }
         }
@@ -118,7 +118,7 @@ pub async fn library_add_series(
 
 /// Re-pull the published layout for a series.
 ///
-/// One Refresh button covers both kinds of source: a `mangalize_meta::Source`
+/// One Refresh button covers both kinds of source: a `leaf_meta::Source`
 /// (MangaDex/Kitsu) is tried first, and anything else falls back to the
 /// registered-`Source` path (`sources::pull_layout`) — a `.lua` extension, or
 /// a built-in beyond the metadata pair — so the frontend never has to know
@@ -177,7 +177,7 @@ pub async fn library_refetch_metadata(app: AppHandle, id: i64) -> Result<Series,
             // MangaDex/Kitsu are themselves the metadata pair, so there is no
             // source page of their own to try first — just the same
             // search-then-AniList-then-Jikan chain `best_effort` runs after it.
-            let mut details = mangalize_extensions::MangaDetails::default();
+            let mut details = leaf_extensions::MangaDetails::default();
             details.fill_from_metadata_search(&series.title);
             details
         } else {
@@ -185,7 +185,7 @@ pub async fn library_refetch_metadata(app: AppHandle, id: i64) -> Result<Series,
             let ext_source = registry
                 .get(&source)
                 .ok_or_else(|| anyhow::anyhow!("{source:?} is not a registered source"))?;
-            mangalize_extensions::MangaDetails::best_effort(ext_source.as_ref(), &source_id, &series.title)
+            leaf_extensions::MangaDetails::best_effort(ext_source.as_ref(), &source_id, &series.title)
         };
 
         library.set_classification(series.id, &details.tags, details.content_rating.as_deref())?;
@@ -194,7 +194,7 @@ pub async fn library_refetch_metadata(app: AppHandle, id: i64) -> Result<Series,
         // not silently replace a cover the user picked by hand.
         if series.cover_path.is_none() {
             if let Some(url) = &details.cover_url {
-                if let Ok(bytes) = mangalize_meta::download_image(url) {
+                if let Ok(bytes) = leaf_meta::download_image(url) {
                     let _ = library.set_cover(series.id, &bytes);
                 }
             }
@@ -202,7 +202,7 @@ pub async fn library_refetch_metadata(app: AppHandle, id: i64) -> Result<Series,
 
         library.set_fetched_metadata(
             series.id,
-            &mangalize_library::FetchedMetadata {
+            &leaf_library::FetchedMetadata {
                 title: if details.title.is_empty() { series.title.clone() } else { details.title },
                 title_romaji: details.title_romaji,
                 title_native: details.title_native,
@@ -231,7 +231,7 @@ pub async fn library_languages(app: AppHandle, id: i64) -> Result<Vec<String>, S
             return Ok(Vec::new());
         };
         match parse_source(source) {
-            Ok(Source::MangaDex) => Ok(mangalize_meta::mangadex::manga(source_id)?.available_languages),
+            Ok(Source::MangaDex) => Ok(leaf_meta::mangadex::manga(source_id)?.available_languages),
             Ok(Source::Kitsu) | Err(_) => Ok(Vec::new()),
         }
     })
@@ -334,7 +334,7 @@ pub async fn library_download_covers(app: AppHandle, id: i64) -> Result<usize, S
         let mut fetched = 0;
 
         for (number, url) in library.volumes_missing_covers(series)? {
-            if let Ok(bytes) = mangalize_meta::download_image(&url) {
+            if let Ok(bytes) = leaf_meta::download_image(&url) {
                 if library.set_volume_cover(series, &number, &bytes).is_ok() {
                     fetched += 1;
                 }
@@ -570,7 +570,7 @@ struct BuildOptions<'a> {
     root: &'a std::path::Path,
     folder_per_series: bool,
     split_spreads: bool,
-    compression: mangalize_core::Compression,
+    compression: leaf_core::Compression,
 }
 
 /// Assemble one stored volume and write it out.
@@ -626,8 +626,8 @@ fn pull_layout(
     source_id: &str,
     language: Option<&str>,
 ) -> Result<SyncReport> {
-    let published = mangalize_meta::volume_chapters_in(source, source_id, language)?;
-    let covers = mangalize_meta::volume_covers(source, source_id)?;
+    let published = leaf_meta::volume_chapters_in(source, source_id, language)?;
+    let covers = leaf_meta::volume_covers(source, source_id)?;
 
     let volumes: Vec<PublishedVolume> = published
         .into_iter()
@@ -655,7 +655,7 @@ fn pull_layout(
     // away from being filterable. Failing here must not fail the sync — the
     // layout is what was asked for.
     if let Source::MangaDex = source {
-        if let Ok(fresh) = mangalize_meta::mangadex::manga(source_id) {
+        if let Ok(fresh) = leaf_meta::mangadex::manga(source_id) {
             let tags: Vec<String> = fresh.tags.iter().map(|t| t.name.clone()).collect();
             let _ = library.set_classification(id, &tags, fresh.content_rating.as_deref());
         }

@@ -12,7 +12,7 @@
 
 use std::path::PathBuf;
 
-use mangalize_library::{ChapterStatus, HistoryEntry, Library, SeriesId};
+use leaf_library::{ChapterStatus, HistoryEntry, Library, SeriesId};
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
 
@@ -143,10 +143,10 @@ pub async fn reader_online_chapter(
     chapter_id: String,
 ) -> Result<OnlineChapter, String> {
     blocking(move || {
-        use mangalize_meta::mangadex::{unhosted_message, ChapterImages};
+        use leaf_meta::mangadex::{unhosted_message, ChapterImages};
 
         if let Some(meta_source) = crate::util::parse_meta_source(&source) {
-            return Ok(match mangalize_meta::chapter_images(meta_source, &chapter_id)? {
+            return Ok(match leaf_meta::chapter_images(meta_source, &chapter_id)? {
                 ChapterImages::Hosted(pages) => OnlineChapter {
                     pages,
                     external_url: None,
@@ -207,7 +207,7 @@ pub async fn reader_online_chapters(
     blocking(move || {
         let language = language.as_deref().filter(|l| !l.is_empty());
         let volumes = if let Some(meta_source) = crate::util::parse_meta_source(&source) {
-            mangalize_meta::volume_chapters_in(meta_source, &series_source_id, language)?
+            leaf_meta::volume_chapters_in(meta_source, &series_source_id, language)?
         } else {
             let registry = crate::sources::load_registry(&app)?;
             let ext_source = registry
@@ -254,7 +254,7 @@ pub struct OnlineRead {
 pub async fn reader_track_online(app: AppHandle, read: OnlineRead) -> Result<i64, String> {
     blocking(move || {
         let mut library = open(&app)?;
-        let series = library.record_unshelved_series(mangalize_library::NewSeries {
+        let series = library.record_unshelved_series(leaf_library::NewSeries {
             source: Some(read.source),
             source_id: Some(read.series_source_id),
             title: read.title,
@@ -290,7 +290,7 @@ pub async fn reader_track_online(app: AppHandle, read: OnlineRead) -> Result<i64
         // over.
         if series.cover_path.is_none() {
             if let Some(url) = read.cover_url.as_deref() {
-                if let Ok(bytes) = mangalize_meta::download_image(url) {
+                if let Ok(bytes) = leaf_meta::download_image(url) {
                     let _ = library.set_cover(series.id, &bytes);
                 }
             }
@@ -321,16 +321,16 @@ pub async fn reader_remote_page(
         }
 
         let started = std::time::Instant::now();
-        let fetched = mangalize_fetch::download::fetch_image(&url, None);
+        let fetched = leaf_fetch::download::fetch_image(&url, None);
         let millis = started.elapsed().as_millis() as u64;
 
         // Tell the volunteer network how its server did, either way. See
-        // `mangalize_meta::report_page_fetch`.
+        // `leaf_meta::report_page_fetch`.
         let bytes = match &fetched {
             Ok((bytes, _)) => bytes.len(),
             Err(_) => 0,
         };
-        mangalize_meta::report_page_fetch(&url, fetched.is_ok(), false, bytes, millis);
+        leaf_meta::report_page_fetch(&url, fetched.is_ok(), false, bytes, millis);
 
         let (raw, _) = fetched?;
         let page = image::load_from_memory(&raw)?.thumbnail(max, max * 3);

@@ -1,0 +1,18 @@
+[package]
+name = "leaf-extensions"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+leaf-core = { path = "../leaf-core" }
+leaf-fetch = { path = "../leaf-fetch" }
+leaf-meta = { path = "../leaf-meta" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+mlua.workspace = true
+scraper.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

@@ -42,7 +42,7 @@ interface SidebarProps {
 // place to put one; on a phone that lives in Settings instead.
 
 /** Remembered across launches; purely chrome, so it does not belong in settings. */
-const EXPANDED_KEY = "mangalize:sidebar-expanded";
+const EXPANDED_KEY = "leaf:sidebar-expanded";
 
 interface Destination {
   section: Section;

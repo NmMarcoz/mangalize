@@ -1,6 +1,6 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
-Mangalize turns folders of scraped manga chapters into fixed-layout EPUB / CBZ
+Leaf turns folders of scraped manga chapters into fixed-layout EPUB / CBZ
 volumes for a Kindle. `README.md` explains *what* it does and why the formats
 were chosen — read it first. This file records *how the code is put together*
 and the conventions to keep.
@@ -8,11 +8,11 @@ and the conventions to keep.
 ## Layout
 
 ```
-crates/mangalize-core/    the pipeline. No UI, no Tauri, no network. Ever.
-crates/mangalize-meta/    MangaDex + Kitsu clients. Networked.
-crates/mangalize-library/ the stored collection: SQLite index + files. No network.
-crates/mangalize-fetch/   page-URL -> image candidates -> downloads. Networked.
-crates/mangalize-cli/     `mangalize` binary; thin wrapper over the above.
+crates/Leaf-core/    the pipeline. No UI, no Tauri, no network. Ever.
+crates/Leaf-meta/    MangaDex + Kitsu clients. Networked.
+crates/Leaf-library/ the stored collection: SQLite index + files. No network.
+crates/Leaf-fetch/   page-URL -> image candidates -> downloads. Networked.
+crates/Leaf-cli/     `Leaf` binary; thin wrapper over the above.
 src-tauri/                Tauri v2 shell. Commands only; no pipeline logic.
 src/                      React 19 + Vite 8 + Tailwind 4 frontend.
 ```
@@ -22,7 +22,7 @@ other, and neither depends on `meta`. The library is handed already-fetched
 metadata as plain `PublishedVolume` values, so "where metadata comes from" stays
 a decision the callers make.
 
-Cargo workspace at the root includes `src-tauri` as a member (`mangalize-app`).
+Cargo workspace at the root includes `src-tauri` as a member (`Leaf-app`).
 Shared deps live in `[workspace.dependencies]`; crates use `dep.workspace = true`.
 
 `[profile.dev.package."*"] opt-level = 2` is deliberate — the `image` crate is
@@ -30,7 +30,7 @@ unusably slow unoptimised and the test fixtures encode real JPEGs.
 
 ## The architectural rule
 
-`mangalize-core` must stay free of UI and network dependencies. The CLI, the
+`Leaf-core` must stay free of UI and network dependencies. The CLI, the
 desktop app and the integration tests all drive the same `scan_volume` → edit
 `Volume` → `writers::*::write` path. That is what keeps the pipeline testable
 without launching a GUI and the UI shell replaceable.
@@ -54,7 +54,7 @@ writing an `if` about pages or chapters in there, it belongs in core.
 ## Scanning heuristics (`core/src/sieve.rs`, `core/src/scan.rs`)
 
 The size judgement lives in `sieve.rs` and is shared: `scan.rs` uses it on files,
-and `mangalize-fetch` uses it on images that are still only URLs, so the download
+and `Leaf-fetch` uses it on images that are still only URLs, so the download
 picker preselects pages and flags banners using the same rules as the scanner.
 Thresholds are named consts at the top of `sieve.rs` (`HEIGHT_MIN`, `WIDTH_MAX`,
 `SPREAD_MIN`, `MIN_SAMPLE`). Tune those, don't inline magic numbers.
@@ -89,7 +89,7 @@ Thresholds are named consts at the top of `sieve.rs` (`HEIGHT_MIN`, `WIDTH_MAX`,
 - Both writers take `&mut Progress = dyn FnMut(usize, usize)`. `write()` is the
   thin wrapper over `write_with_progress()`.
 
-## Metadata (`crates/mangalize-meta`)
+## Metadata (`crates/Leaf-meta`)
 
 - Network access is **always user-initiated**. Scan and export never touch it.
 - MangaDex responses are walked as untyped `serde_json::Value` on purpose: the
@@ -110,17 +110,17 @@ Thresholds are named consts at the top of `sieve.rs` (`HEIGHT_MIN`, `WIDTH_MAX`,
 - AniList is out (public API disabled by its operators). Kitsu is the fallback
   and has no per-volume data.
 
-## The library (`crates/mangalize-library`)
+## The library (`crates/Leaf-library`)
 
 A folder the user owns, with a SQLite index beside the files:
 
 ```
-<library>/mangalize.db
+<library>/Leaf.db
 <library>/series/<Title [id]>/cover.jpg
 <library>/series/<Title [id]>/chapters/c0007/0001.jpg
 ```
 
-- Default root is `~/Mangalize` for **both** the CLI and the app, deliberately:
+- Default root is `~/Leaf` for **both** the CLI and the app, deliberately:
   same collection, either front end. Visible, not app-private — the user has to
   be able to back it up and move it.
 - One `chapters` table holds published *and* downloaded chapters. A row with a
@@ -154,7 +154,7 @@ A folder the user owns, with a SQLite index beside the files:
 - Schema changes need a new step in `schema.rs` and a `CURRENT` bump. A newer
   index than the build understands is refused, never downgraded.
 
-## Getting chapters (`crates/mangalize-fetch`)
+## Getting chapters (`crates/Leaf-fetch`)
 
 Three parts, all driven by a URL the user pastes, and nothing site-specific.
 
@@ -401,7 +401,7 @@ the app is broken. `/.cargo/config.toml` passes `-Wl,-z,max-page-size=16384` for
 the four Android targets. Check it with:
 
 ```sh
-llvm-readelf -l target/aarch64-linux-android/release/libmangalize_app.so | grep LOAD
+llvm-readelf -l target/aarch64-linux-android/release/libLeaf_app.so | grep LOAD
 ```
 
 The alignment column must read `0x4000`. The emulator image to test on is the
@@ -429,7 +429,7 @@ where back goes.
 Generated, but not entirely: `MainActivity.kt` and the manifest are ours and
 `tauri android init` leaves them alone. Committing the project means those edits
 survive a fresh checkout. Only build output is ignored. Everything under
-`app/src/main/java/dev/mangalize/app/generated/` is Tauri's and is rewritten on
+`app/src/main/java/dev/Leaf/app/generated/` is Tauri's and is rewritten on
 every build — do not edit it.
 
 ### Updating a sideloaded build
@@ -455,28 +455,28 @@ Two things learned from watching it run on a device:
 ### Building
 
 ```sh
-scripts/android.sh              # signed release APK at target/mangalize-release.apk
+scripts/android.sh              # signed release APK at target/Leaf-release.apk
 scripts/android.sh install      # … and push it to the running device
 scripts/android.sh logs         # follow the app's log, web console included
 ```
 
 Signing lives in that script rather than in `app/build.gradle.kts` because that
-file *is* regenerated. The keystore is outside the repo — `~/.mangalize/` by
-default, overridable with `MANGALIZE_KEYSTORE`.
+file *is* regenerated. The keystore is outside the repo — `~/.Leaf/` by
+default, overridable with `Leaf_KEYSTORE`.
 
 The default keystore is a local one with a throwaway password, good for putting
 a build on a device you own and nothing else. An Android app's signing key is
 its identity: publish with that one and anyone who reads `scripts/android.sh`
 can sign an update phones will accept as yours. Generate a real keystore, keep
 it somewhere it cannot be lost — a key that changes cannot update an installed
-app — and point `MANGALIZE_KEYSTORE` at it.
+app — and point `Leaf_KEYSTORE` at it.
 
 Needs `ANDROID_HOME`, an NDK, and a JDK; the script finds the newest NDK and
 build-tools installed rather than pinning a version. Android Studio's bundled
 JBR works as `JAVA_HOME`.
 
 CI runs the same script, which is the point of it being a script: the release
-job sets `MANGALIZE_KEYSTORE*` from repository secrets and nothing about how a
+job sets `Leaf_KEYSTORE*` from repository secrets and nothing about how a
 build is signed differs between a runner and a laptop. The APK is arm64 only —
 building the other three ABIs would triple the job for an APK nobody installs —
 and it is attached to the release the desktop job already created, which is why
@@ -498,7 +498,7 @@ Tests are named as sentences describing the behaviour
 ```sh
 cargo test                      # unit + end-to-end over a synthetic scrape
 cargo clippy --all-targets
-cargo build --release           # ./target/release/mangalize
+cargo build --release           # ./target/release/Leaf
 
 bun install
 bun run tauri dev
@@ -511,13 +511,13 @@ The whole library flow is drivable from the terminal, which is much the fastest
 way to check a real site's markup:
 
 ```sh
-mangalize library add "Ichi the Witch"
-mangalize library status 1
-mangalize library peek "https://…/chapter-7"     # list what a page offers
-mangalize library get 1 7 "https://…/chapter-7"
-mangalize library batch 1 "https://…/chapter-1" --dry-run   # show the plan only
-mangalize library batch 1 "https://…/chapter-1"
-mangalize library build 1 1 -o v01.epub
+Leaf library add "Ichi the Witch"
+Leaf library status 1
+Leaf library peek "https://…/chapter-7"     # list what a page offers
+Leaf library get 1 7 "https://…/chapter-7"
+Leaf library batch 1 "https://…/chapter-1" --dry-run   # show the plan only
+Leaf library batch 1 "https://…/chapter-1"
+Leaf library build 1 1 -o v01.epub
 ```
 
 `batch --dry-run` is the fastest way to find out whether a site's URL shape is
@@ -525,12 +525,12 @@ one the detector understands, and it downloads nothing.
 
 Three integration suites, none of which mock the thing they are testing:
 
-- `crates/mangalize-core/tests/pipeline.rs` — a fixture reproducing real scrape
+- `crates/Leaf-core/tests/pipeline.rs` — a fixture reproducing real scrape
   quirks (mixed filename schemes, site furniture, a spread, chapter 10),
   asserting on the resulting EPUB/CBZ structure.
-- `crates/mangalize-library/tests/library.rs` — a real library folder: add,
+- `crates/Leaf-library/tests/library.rs` — a real library folder: add,
   sync, download, delete, reopen, build.
-- `crates/mangalize-fetch/tests/fetch.rs` — a real `TcpListener` serving a
+- `crates/Leaf-fetch/tests/fetch.rs` — a real `TcpListener` serving a
   chapter page with lazy-loaded images, a spread, a banner and hotlink
   protection, plus a numbered chapter run that 404s past its last chapter. The
   failures that actually happen here (range requests, `Referer` checks,

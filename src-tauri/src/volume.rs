@@ -1,10 +1,10 @@
 //! Commands for the folder-in, file-out path: scan a folder, preview it, export
-//! it. Thin translation over `mangalize-core`; no pipeline logic lives here.
+//! it. Thin translation over `leaf-core`; no pipeline logic lives here.
 
 use std::path::{Path, PathBuf};
 
-use mangalize_core::project::Volume;
-use mangalize_core::{scan_volume, writers};
+use leaf_core::project::Volume;
+use leaf_core::{scan_volume, writers};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -180,7 +180,7 @@ pub(crate) fn build_path(
 pub(crate) fn apply_spread_policy(volume: &mut Volume, split: bool) {
     for chapter in &mut volume.chapters {
         for page in &mut chapter.pages {
-            if page.kind == mangalize_core::PageKind::Spread {
+            if page.kind == leaf_core::PageKind::Spread {
                 page.split = split;
             }
         }
@@ -213,7 +213,7 @@ pub(crate) fn safe_component(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mangalize_core::project::Metadata;
+    use leaf_core::project::Metadata;
 
     fn volume(series: &str, number: Option<u32>) -> Volume {
         Volume {

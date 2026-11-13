@@ -2,7 +2,7 @@ import type { PartialDictionary } from "@/lib/i18n/types";
 
 const dict: PartialDictionary = {
   en: {
-    "welcomeView.title": "Welcome to Mangalize",
+    "welcomeView.title": "Welcome to Leaf",
     "welcomeView.introPicker":
       "Where should finished volumes go? Build will write here without asking, filing each volume under its series. You can change this any time in Settings, and Build as… will always let you pick a one-off location.",
     "welcomeView.introNoPicker":
@@ -18,7 +18,7 @@ const dict: PartialDictionary = {
     "welcomeView.decideLaterHint": "Build will ask for a location each time",
   },
   "pt-BR": {
-    "welcomeView.title": "Bem-vindo ao Mangalize",
+    "welcomeView.title": "Bem-vindo ao Leaf",
     "welcomeView.introPicker":
       "Onde os volumes prontos devem ir? O Gerar vai salvar aqui sem perguntar, organizando cada volume pela sua série. Você pode mudar isso a qualquer momento em Configurações, e \"Gerar como…\" sempre vai deixar você escolher um local pontual.",
     "welcomeView.introNoPicker":

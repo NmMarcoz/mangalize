@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { SeriesMatch, Tag } from "@/lib/api";
 import type { Translator } from "@/lib/i18n/types";
 
-/** Mirrors `mangalize_meta::Sort`. */
+/** Mirrors `leaf_meta::Sort`. */
 export type Sort =
   | "latest-upload"
   | "follows"
@@ -12,7 +12,7 @@ export type Sort =
   | "title"
   | "relevance";
 
-/** Mirrors `mangalize_meta::ContentRating`. */
+/** Mirrors `leaf_meta::ContentRating`. */
 export type ContentRating = "safe" | "suggestive" | "erotica" | "pornographic";
 
 // `Tag` lives in api.ts, since a series carries its own; re-exported here so

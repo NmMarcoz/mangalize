@@ -123,7 +123,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src-tauri/tauri.conf.json Cargo.toml Cargo.lock
           git commit -m "chore: version $VERSION"
-          git tag -a "v$VERSION" -m "Mangalize $VERSION"
+          git tag -a "v$VERSION" -m "Leaf $VERSION"
           git push origin main
           git push origin "v$VERSION"
 
@@ -250,7 +250,7 @@ jobs:
           # Empty on a build-only run, which makes tauri-action build without
           # creating or touching a release.
           tagName: ${{ needs.prepare.outputs.tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
-          releaseName: "Mangalize ${{ needs.prepare.outputs.tag || github.ref_name }}"
+          releaseName: "Leaf ${{ needs.prepare.outputs.tag || github.ref_name }}"
           releaseBody: |
             Download the installer for your platform below.
 
@@ -281,7 +281,7 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/tags/v') && inputs.version == '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: mangalize-${{ matrix.platform }}
+          name: Leaf-${{ matrix.platform }}
           retention-days: 7
           if-no-files-found: error
           path: |
@@ -367,11 +367,11 @@ jobs:
       # through one path and cannot drift apart in how they are signed.
       - name: Build and sign
         env:
-          MANGALIZE_KEYSTORE: ${{ runner.temp }}/release.jks
-          MANGALIZE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          MANGALIZE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          Leaf_KEYSTORE: ${{ runner.temp }}/release.jks
+          Leaf_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          Leaf_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           # Nothing to read here; the credentials above are the whole of it.
-          MANGALIZE_KEYSTORE_PROPERTIES: /nonexistent
+          Leaf_KEYSTORE_PROPERTIES: /nonexistent
         run: scripts/android.sh
 
       - name: Name it after the version
@@ -379,8 +379,8 @@ jobs:
         run: |
           set -euo pipefail
           version=$(jq -r .version src-tauri/tauri.conf.json)
-          out="target/Mangalize_${version}_arm64.apk"
-          mv target/mangalize-release.apk "$out"
+          out="target/Leaf_${version}_arm64.apk"
+          mv target/Leaf-release.apk "$out"
           echo "path=$out" >> "$GITHUB_OUTPUT"
 
       # The desktop build's release is created by tauri-action, which runs in a
@@ -402,7 +402,7 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/tags/v') && inputs.version == '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: mangalize-android
+          name: Leaf-android
           retention-days: 7
           if-no-files-found: error
           path: ${{ steps.apk.outputs.path }}

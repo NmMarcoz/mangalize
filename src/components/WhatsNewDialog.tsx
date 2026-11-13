@@ -36,8 +36,8 @@ export function WhatsNewDialog({ open, entries, onClose }: WhatsNewDialogProps) 
           </div>
           <DialogDescription>
             {entries.length === 1
-              ? `Since you last opened Mangalize — v${entries[0].version}.`
-              : "Since you last opened Mangalize."}
+              ? `Since you last opened Leaf — v${entries[0].version}.`
+              : "Since you last opened Leaf."}
           </DialogDescription>
         </div>
 
