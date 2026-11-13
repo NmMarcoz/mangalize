@@ -1,15 +1,16 @@
 //! Image search for cover art.
 //!
 //! When metadata has no cover, the user needs a way to find one without leaving
-//! the app. This module searches for images using a web search engine and
-//! returns a list of image URLs the user can pick from.
+//! the app. This module provides two approaches:
 //!
-//! Google Images embeds image URLs directly in the initial HTML response inside
-//! JavaScript data blobs. Scanning the markup for URL patterns — the same
-//! approach `mangalize_fetch::extract` uses for reader pages — is enough to
-//! pull out a usable grid of results without a headless browser.
+//! 1. **Wikimedia Commons API** — a proper JSON API for searching images.
+//!    Reliable and won't get blocked, though coverage depends on what
+//!    contributors have uploaded.
+//! 2. **Direct URL import** — the user pastes an image URL (e.g. copied from
+//!    Google Images) and we download it. This is the most reliable fallback
+//!    since it works with any image on the web.
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{TIMEOUT, USER_AGENT};
@@ -19,19 +20,31 @@ use crate::{TIMEOUT, USER_AGENT};
 pub struct ImageResult {
     /// The full-size image URL.
     pub url: String,
-    /// A thumbnail URL for preview. Google returns smaller thumbnails inline;
-    /// we use the same URL when we cannot separate them.
+    /// A smaller thumbnail for the preview grid.
     pub thumbnail_url: String,
+    /// A title or description, when available.
+    pub title: Option<String>,
 }
 
-/// Search for images matching a query.
+/// Search Wikimedia Commons for images matching a query.
 ///
-/// Returns a list of image results. The scan is best-effort: a few unparseable
-/// entries are skipped rather than failing the whole search.
+/// Uses the Wikimedia Commons API which returns JSON — no HTML scraping needed.
+/// The API is free, key-less, and does not block automated requests.
 pub fn search_images(query: &str) -> Result<Vec<ImageResult>> {
     let encoded = url_encode(query);
+
+    // Search for images, asking for both the original URL and a thumbnail.
     let url = format!(
-        "https://www.google.com/search?tbm=isch&q={encoded}&safe=active"
+        "https://commons.wikimedia.org/w/api.php\
+         ?action=query\
+         &generator=search\
+         &gsrnamespace=6\
+         &gsrsearch={encoded}\
+         &gsrlimit=30\
+         &prop=imageinfo\
+         &iiprop=url|thumburl|mime\
+         &iiurlwidth=240\
+         &format=json"
     );
 
     let response = ureq::get(&url)
@@ -39,49 +52,92 @@ pub fn search_images(query: &str) -> Result<Vec<ImageResult>> {
         .timeout(TIMEOUT)
         .call()?;
 
-    let html = response.into_string()?;
+    let body: serde_json::Value = response.into_json()?;
 
-    // Google embeds image URLs inside JavaScript string literals in the HTML.
-    // They appear as `https://...` followed by common image extensions, wrapped
-    // in quotes or brackets. We scan for them with simple string matching.
     let mut results = Vec::new();
-    let mut seen = std::collections::HashSet::new();
 
-    let extensions = [".jpg", ".jpeg", ".png", ".webp"];
-    let mut search_from = 0;
+    // The response structure is:
+    // { "query": { "pages": { "123": { "title": "...", "imageinfo": [{ "url": "...", "thumburl": "...", "mime": "..." }] } } } }
+    if let Some(pages) = body.get("query").and_then(|q| q.get("pages")).and_then(|p| p.as_object()) {
+        for page in pages.values() {
+            let title = page.get("title").and_then(|t| t.as_str());
 
-    while let Some(https_pos) = html[search_from..].find("https://") {
-        let abs_pos = search_from + https_pos;
-        // Find the end of the URL: the next quote, bracket, space, or backslash.
-        let after_scheme = abs_pos + 8;
-        let end = html[after_scheme..]
-            .find(|c: char| c == '"' || c == '\'' || c == ']' || c == ')' || c == '\\' || c == ' ' || c.is_control())
-            .map(|i| after_scheme + i)
-            .unwrap_or(html.len());
-
-        let candidate = &html[abs_pos..end];
-
-        // Must end with an image extension (possibly followed by query params).
-        let path_end = candidate.find('?').unwrap_or(candidate.len());
-        let path = &candidate[..path_end];
-        let has_extension = extensions.iter().any(|ext| path.ends_with(ext));
-
-        if has_extension && candidate.len() > 30 && !candidate.contains("data:image") {
-            if seen.insert(candidate.to_string()) {
-                results.push(ImageResult {
-                    url: candidate.to_string(),
-                    thumbnail_url: candidate.to_string(),
-                });
+            // Only include actual image files, not other page types.
+            if let Some(t) = title {
+                if !is_image_page(t) {
+                    continue;
+                }
             }
-        }
 
-        search_from = end;
-        if results.len() >= 50 {
-            break;
+            if let Some(infos) = page.get("imageinfo").and_then(|i| i.as_array()) {
+                if let Some(info) = infos.first() {
+                    if let (Some(url), Some(thumb)) = (
+                        info.get("url").and_then(|u| u.as_str()),
+                        info.get("thumburl").or_else(|| info.get("url")).and_then(|u| u.as_str()),
+                    ) {
+                        // Skip tiny thumbnails and non-image files.
+                        let mime = info.get("mime").and_then(|m| m.as_str()).unwrap_or("");
+                        if !mime.starts_with("image/") && !url.ends_with(".jpg")
+                            && !url.ends_with(".jpeg") && !url.ends_with(".png")
+                            && !url.ends_with(".webp")
+                        {
+                            continue;
+                        }
+
+                        results.push(ImageResult {
+                            url: url.to_string(),
+                            thumbnail_url: thumb.to_string(),
+                            title: title.map(|t| t.strip_prefix("File:").unwrap_or(t).to_string()),
+                        });
+                    }
+                }
+            }
+
+            if results.len() >= 30 {
+                break;
+            }
         }
     }
 
     Ok(results)
+}
+
+/// Download an image from a URL and return its bytes.
+///
+/// Used both for search results and for user-pasted URLs.
+pub fn download_image(url: &str) -> Result<Vec<u8>> {
+    const MAX_BYTES: usize = 32 * 1024 * 1024;
+
+    let response = ureq::get(url)
+        .set("User-Agent", USER_AGENT)
+        .set("Referer", "https://www.google.com/")
+        .timeout(TIMEOUT)
+        .call()?;
+
+    let content_type = response.content_type().to_ascii_lowercase();
+    if !content_type.starts_with("image/") {
+        bail!("expected an image, got {content_type}");
+    }
+
+    let reader = response.into_reader();
+    let mut limited = std::io::Read::take(reader, MAX_BYTES as u64 + 1);
+
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(&mut limited, &mut bytes)?;
+
+    if bytes.len() > MAX_BYTES {
+        bail!("image is unexpectedly large (over {} MB)", MAX_BYTES / 1_048_576);
+    }
+    Ok(bytes)
+}
+
+/// A Wikimedia title is an image if it starts with "File:" and has an image extension.
+fn is_image_page(title: &str) -> bool {
+    if !title.starts_with("File:") {
+        return false;
+    }
+    let ext = title.rsplit('.').next().unwrap_or("").to_lowercase();
+    matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "webp" | "gif")
 }
 
 /// Minimal percent-encoding for a URL query parameter.

@@ -134,6 +134,7 @@ export const searchSeries = (query: string) =>
 export interface CoverImageResult {
   url: string;
   thumbnail_url: string;
+  title?: string;
 }
 
 export const searchCoverImages = (query: string) =>
