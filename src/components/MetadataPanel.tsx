@@ -67,27 +67,31 @@ export function MetadataPanel({
       <section className="flex flex-col gap-2">
         <Label>{t("metadataPanel.cover")}</Label>
         <CoverPreview path={cover} />
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="flex-1" onClick={onPickCover}>
-            <ImageIcon /> {t("metadataPanel.chooseFile")}
-          </Button>
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="flex-1" onClick={onPickCover}>
+              <ImageIcon /> {t("metadataPanel.chooseFile")}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClearCover}
+              disabled={!volume.cover}
+              title={t("metadataPanel.resetHint")}
+            >
+              {t("metadataPanel.reset")}
+            </Button>
+          </div>
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
+            className="w-full"
             onClick={() => setSearchOpen(true)}
             disabled={!metadata.series}
             title={t("metadataPanel.searchGoogleHint")}
           >
             <Search className="size-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onClearCover}
-            disabled={!volume.cover}
-            title={t("metadataPanel.resetHint")}
-          >
-            {t("metadataPanel.reset")}
+            {t("coverSearch.search")}
           </Button>
         </div>
         <p className="text-[11px] leading-snug text-muted-foreground">
