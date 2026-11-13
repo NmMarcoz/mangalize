@@ -30,6 +30,8 @@ interface MetadataPanelProps {
   onPickCover: () => void;
   onClearCover: () => void;
   onFetchMetadata: () => void;
+  /** Set the cover to a specific path (used by the image search dialog). */
+  onSetCover: (path: string) => void;
   /** What the user typed for the output name. Empty means "use the suggestion". */
   fileName: string;
   /** The name derived from the metadata, shown as the placeholder. */
@@ -43,6 +45,7 @@ export function MetadataPanel({
   onPickCover,
   onClearCover,
   onFetchMetadata,
+  onSetCover,
   fileName: exportName,
   suggestedFileName,
   onFileName,
@@ -195,6 +198,7 @@ export function MetadataPanel({
         open={searchOpen}
         onOpenChange={setSearchOpen}
         initialQuery={searchQuery}
+        onPick={onSetCover}
       />
     </aside>
   );

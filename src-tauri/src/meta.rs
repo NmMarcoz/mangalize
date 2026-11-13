@@ -13,6 +13,15 @@ pub async fn search_series(query: String) -> Result<Vec<SeriesMatch>, String> {
     blocking(move || mangalize_meta::search(&query, 8)).await
 }
 
+/// Search for images matching a query, for picking a volume cover.
+///
+/// Returns a list of image URLs the user can browse and pick from inside the
+/// app, without needing to open an external browser.
+#[tauri::command]
+pub async fn search_cover_images(query: String) -> Result<Vec<mangalize_meta::image_search::ImageResult>, String> {
+    blocking(move || mangalize_meta::image_search::search_images(&query)).await
+}
+
 /// Browse the catalogue by ordering and filters, with or without a search term.
 #[tauri::command]
 pub async fn browse_series(query: BrowseQuery) -> Result<BrowsePage, String> {

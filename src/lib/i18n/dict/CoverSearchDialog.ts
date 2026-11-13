@@ -4,20 +4,18 @@ const dict: PartialDictionary = {
   en: {
     "coverSearch.title": "Search cover on Google Images",
     "coverSearch.description":
-      "Search for the volume's cover art on Google Images. Save the image you want, then pick it with Choose file.",
+      "Search for the volume's cover art. Pick one from the results to set it as the cover.",
     "coverSearch.placeholder": "One Piece Volume 115 cover",
-    "coverSearch.hint":
-      "The image opens in your browser. Save it, then come back and pick it above.",
+    "coverSearch.noResults": "No images found. Try a different search.",
     "coverSearch.cancel": "Cancel",
     "coverSearch.search": "Search",
   },
   "pt-BR": {
     "coverSearch.title": "Buscar capa no Google Imagens",
     "coverSearch.description":
-      "Pesquise a capa do volume no Google Imagens. Salve a imagem que quiser e depois escolha-a com Escolher arquivo.",
+      "Pesquise a capa do volume. Escolha uma dos resultados para defini-la como capa.",
     "coverSearch.placeholder": "One Piece Volume 115 capa",
-    "coverSearch.hint":
-      "A imagem abre no seu navegador. Salve-a e depois volte para escolhê-la acima.",
+    "coverSearch.noResults": "Nenhuma imagem encontrada. Tente uma busca diferente.",
     "coverSearch.cancel": "Cancelar",
     "coverSearch.search": "Buscar",
   },
