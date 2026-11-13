@@ -125,21 +125,6 @@ export interface VolumeChapters {
 export const searchSeries = (query: string) =>
   invoke<SeriesMatch[]>("search_series", { query });
 
-/**
- * Search for images matching a query, for picking a volume cover.
- *
- * Returns a list of image URLs the user can browse and pick from inside the
- * app, without needing to open an external browser.
- */
-export interface CoverImageResult {
-  url: string;
-  thumbnail_url: string;
-  title?: string;
-}
-
-export const searchCoverImages = (query: string) =>
-  invoke<CoverImageResult[]>("search_cover_images", { query });
-
 export const seriesCovers = (source: MetaSource, id: string) =>
   invoke<VolumeCover[]>("series_covers", { source, id });
 

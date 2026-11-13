@@ -55,9 +55,6 @@ export function MetadataPanel({
   const { metadata } = volume;
   const [searchOpen, setSearchOpen] = useState(false);
 
-  // Build a sensible default query from the volume's metadata.
-  const searchQuery = buildCoverQuery(metadata.series, metadata.volume);
-
   return (
     <aside className="scrollbar-thin flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l border-border bg-card/40 p-4">
       <Button variant="secondary" size="sm" onClick={onFetchMetadata}>
@@ -201,26 +198,12 @@ export function MetadataPanel({
       <CoverSearchDialog
         open={searchOpen}
         onOpenChange={setSearchOpen}
-        initialQuery={searchQuery}
         onPick={onSetCover}
       />
     </aside>
   );
 }
 
-/**
- * Build a Google Images query for a volume's cover.
- *
- * Matches what a user would type by hand: "{Series} Volume {N} cover".
- * Returns an empty string when there is not enough to search for.
- */
-function buildCoverQuery(series: string, volume: number | null): string {
-  if (!series) return "";
-  const parts = [series];
-  if (volume !== null) parts.push(`Volume ${volume}`);
-  parts.push("cover");
-  return parts.join(" ");
-}
 
 function CoverPreview({ path }: { path: string | null }) {
   if (!path) {
