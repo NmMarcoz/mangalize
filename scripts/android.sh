@@ -34,12 +34,12 @@ export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH"
 # here: one committed next to the script it unlocks is not a password, and an
 # Android signing key *is* the app's identity — anyone holding it can sign an
 # update that phones will accept as yours.
-KEYSTORE_PROPERTIES="${MANGALIZE_KEYSTORE_PROPERTIES:-$HOME/.mangalize/android-keystore.properties}"
+KEYSTORE_PROPERTIES="${LEAF_KEYSTORE_PROPERTIES:-$HOME/.leaf/android-keystore.properties}"
 if [ -f "$KEYSTORE_PROPERTIES" ]; then
   # Only the three keys we expect, so a stray line cannot set anything else.
   while IFS='=' read -r key value; do
     case "$key" in
-      MANGALIZE_KEYSTORE|MANGALIZE_KEY_ALIAS|MANGALIZE_KEYSTORE_PASSWORD)
+      LEAF_KEYSTORE|LEAF_KEY_ALIAS|LEAF_KEYSTORE_PASSWORD)
         # Already set in the environment wins, so CI can override the file.
         [ -n "${!key:-}" ] || export "$key=$value"
         ;;
@@ -47,13 +47,13 @@ if [ -f "$KEYSTORE_PROPERTIES" ]; then
   done < "$KEYSTORE_PROPERTIES"
 fi
 
-KEYSTORE="${MANGALIZE_KEYSTORE:-$HOME/.mangalize/android-release.jks}"
-KEY_ALIAS="${MANGALIZE_KEY_ALIAS:-mangalize}"
-STORE_PASS="${MANGALIZE_KEYSTORE_PASSWORD:-}"
+KEYSTORE="${LEAF_KEYSTORE:-$HOME/.leaf/android-release.jks}"
+KEY_ALIAS="${LEAF_KEY_ALIAS:-leaf}"
+STORE_PASS="${LEAF_KEYSTORE_PASSWORD:-}"
 
 UNSIGNED="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
-SIGNED="target/mangalize-release.apk"
-PACKAGE="dev.mangalize.app"
+SIGNED="target/leaf-release.apk"
+PACKAGE="dev.leaf"
 
 require() {
   [ -n "${!1:-}" ] && [ -e "${!1}" ] || { echo "missing $1 (${!1:-unset})" >&2; exit 1; }
@@ -82,10 +82,10 @@ require JAVA_HOME
 # Tauri wraps a Gradle failure in a single unreadable line with every
 # environment variable in it. The actual cause is always an `ERROR:` or `e:`
 # line further up, so it gets pulled back out here.
-if ! bun run tauri android build --apk --target aarch64 2>&1 | tee /tmp/mangalize-android-build.log; then
+if ! bun run tauri android build --apk --target aarch64 2>&1 | tee /tmp/leaf-android-build.log; then
   echo
   echo "--- the part of that worth reading ---" >&2
-  grep -E "^(ERROR|e):|error:" /tmp/mangalize-android-build.log >&2 || true
+  grep -E "^(ERROR|e):|error:" /tmp/leaf-android-build.log >&2 || true
   exit 1
 fi
 
@@ -96,9 +96,9 @@ if [ ! -f "$KEYSTORE" ] || [ -z "$STORE_PASS" ]; then
   echo "    -keyalg RSA -keysize 4096 -validity 10000 -storetype PKCS12" >&2
   echo >&2
   echo "  cat > $KEYSTORE_PROPERTIES <<EOF" >&2
-  echo "  MANGALIZE_KEYSTORE=$KEYSTORE" >&2
-  echo "  MANGALIZE_KEY_ALIAS=$KEY_ALIAS" >&2
-  echo "  MANGALIZE_KEYSTORE_PASSWORD=..." >&2
+  echo "  LEAF_KEYSTORE=$KEYSTORE" >&2
+  echo "  LEAF_KEY_ALIAS=$KEY_ALIAS" >&2
+  echo "  LEAF_KEYSTORE_PASSWORD=..." >&2
   echo "  EOF" >&2
   exit 1
 fi

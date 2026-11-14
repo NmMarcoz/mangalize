@@ -1,4 +1,4 @@
-package dev.leaf.app
+package dev.leaf
 
 import android.os.Bundle
 import android.view.View

@@ -429,7 +429,7 @@ where back goes.
 Generated, but not entirely: `MainActivity.kt` and the manifest are ours and
 `tauri android init` leaves them alone. Committing the project means those edits
 survive a fresh checkout. Only build output is ignored. Everything under
-`app/src/main/java/dev/Leaf/app/generated/` is Tauri's and is rewritten on
+`app/src/main/java/dev/leaf/generated/` is Tauri's and is rewritten on
 every build — do not edit it.
 
 ### Updating a sideloaded build
@@ -461,22 +461,22 @@ scripts/android.sh logs         # follow the app's log, web console included
 ```
 
 Signing lives in that script rather than in `app/build.gradle.kts` because that
-file *is* regenerated. The keystore is outside the repo — `~/.Leaf/` by
-default, overridable with `Leaf_KEYSTORE`.
+file *is* regenerated. The keystore is outside the repo — `~/.leaf/` by
+default, overridable with `LEAF_KEYSTORE`.
 
 The default keystore is a local one with a throwaway password, good for putting
 a build on a device you own and nothing else. An Android app's signing key is
 its identity: publish with that one and anyone who reads `scripts/android.sh`
 can sign an update phones will accept as yours. Generate a real keystore, keep
 it somewhere it cannot be lost — a key that changes cannot update an installed
-app — and point `Leaf_KEYSTORE` at it.
+app — and point `LEAF_KEYSTORE` at it.
 
 Needs `ANDROID_HOME`, an NDK, and a JDK; the script finds the newest NDK and
 build-tools installed rather than pinning a version. Android Studio's bundled
 JBR works as `JAVA_HOME`.
 
 CI runs the same script, which is the point of it being a script: the release
-job sets `Leaf_KEYSTORE*` from repository secrets and nothing about how a
+job sets `LEAF_KEYSTORE*` from repository secrets and nothing about how a
 build is signed differs between a runner and a laptop. The APK is arm64 only —
 building the other three ABIs would triple the job for an APK nobody installs —
 and it is attached to the release the desktop job already created, which is why

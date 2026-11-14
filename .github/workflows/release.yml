@@ -367,11 +367,11 @@ jobs:
       # through one path and cannot drift apart in how they are signed.
       - name: Build and sign
         env:
-          Leaf_KEYSTORE: ${{ runner.temp }}/release.jks
-          Leaf_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          Leaf_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          LEAF_KEYSTORE: ${{ runner.temp }}/release.jks
+          LEAF_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          LEAF_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           # Nothing to read here; the credentials above are the whole of it.
-          Leaf_KEYSTORE_PROPERTIES: /nonexistent
+          LEAF_KEYSTORE_PROPERTIES: /nonexistent
         run: scripts/android.sh
 
       - name: Name it after the version
@@ -380,7 +380,7 @@ jobs:
           set -euo pipefail
           version=$(jq -r .version src-tauri/tauri.conf.json)
           out="target/Leaf_${version}_arm64.apk"
-          mv target/Leaf-release.apk "$out"
+          mv target/leaf-release.apk "$out"
           echo "path=$out" >> "$GITHUB_OUTPUT"
 
       # The desktop build's release is created by tauri-action, which runs in a
