@@ -1,6 +1,17 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
+    <!-- Decided before the first paint, from the same key `src/lib/theme.ts`
+         writes, so the window never flashes the wrong theme on launch. -->
+    <script>
+      (function () {
+        var pref = "system";
+        try { pref = localStorage.getItem("leaf:theme") || "system"; } catch (e) {}
+        var dark = pref === "dark" || (pref !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (dark) document.documentElement.classList.add("dark");
+        document.documentElement.style.colorScheme = dark ? "dark" : "light";
+      })();
+    </script>
     <meta charset="UTF-8" />
     <!-- viewport-fit=cover so the Android gesture bar and notch are ours to pad
          around; user-scalable=no because browser zoom on an app shell moves the
@@ -9,8 +20,8 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"
     />
-    <meta name="color-scheme" content="dark" />
-    <title>Mangalize</title>
+    <meta name="color-scheme" content="light dark" />
+    <title>Leaf</title>
   </head>
   <body>
     <div id="root"></div>

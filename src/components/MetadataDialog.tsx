@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
-import { Check, CircleAlert, ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
 
 import { SeriesDetail } from "@/components/SeriesDetail";
 import { SeriesSearch } from "@/components/SeriesSearch";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
 import { saveCover, type SeriesMatch, type VolumeChapters } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import { useSeriesDetail } from "@/hooks/useSeriesDetail";
 
 export interface AppliedMetadata {
@@ -124,15 +126,16 @@ export function MetadataDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85dvh] max-w-4xl">
-        <div className="border-b border-border px-4 py-3">
+        <DialogHeader>
           <DialogTitle>Fetch series metadata</DialogTitle>
           <DialogDescription>
             Searches MangaDex, falling back to Kitsu. Nothing is sent anywhere
             except the search term.
           </DialogDescription>
-        </div>
+        </DialogHeader>
 
-        <div className="flex min-h-0 flex-1">
+        {/* Same fixed-height split as AddSeriesDialog, for the same reason. */}
+        <DialogBody className="h-[480px] flex-auto flex-row gap-0 overflow-hidden border-t border-border p-0">
           <SeriesSearch
             initialQuery={initialQuery}
             session={session}
@@ -141,7 +144,7 @@ export function MetadataDialog({
             onError={setError}
           />
 
-          <div className="scrollbar-thin min-w-0 flex-1 overflow-y-auto p-4">
+          <div className="scrollbar-thin min-w-0 flex-1 overflow-y-auto p-6">
             <SeriesDetail
               selected={selected}
               detail={detail}
@@ -159,36 +162,31 @@ export function MetadataDialog({
               )}
             </SeriesDetail>
           </div>
-        </div>
+        </DialogBody>
 
-        <Separator />
-
-        <div className="flex items-center gap-3 px-4 py-3">
-          {error && (
-            <p className="flex-1 truncate text-xs text-destructive" title={error}>
-              {error}
-            </p>
-          )}
-          {!error && selected?.site_url && (
-            <a
-              href={selected.site_url}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <ExternalLink className="size-3" /> View source
-            </a>
-          )}
-          <div className="ml-auto flex gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void apply()} disabled={!selected || applying}>
-              {applying && <Loader2 className="animate-spin" />}
-              Apply
-            </Button>
-          </div>
-        </div>
+        <DialogFooter
+          error={error}
+          hint={
+            selected?.site_url && (
+              <a
+                href={selected.site_url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 hover:text-foreground"
+              >
+                <ExternalLink className="size-3" /> View source
+              </a>
+            )
+          }
+        >
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => void apply()} disabled={!selected || applying}>
+            {applying && <Loader2 className="animate-spin" />}
+            Apply
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -214,28 +212,16 @@ function ChapterCheck({
 
   const matches = expected.chapters.length === actual;
   return (
-    <div
-      className={cn(
-        "flex items-start gap-2 rounded-md border px-3 py-2 text-xs",
-        matches
-          ? "border-primary/30 bg-primary/5 text-foreground"
-          : "border-amber-500/40 bg-amber-500/5 text-foreground",
-      )}
-    >
-      {matches ? (
-        <Check className="mt-0.5 size-3.5 shrink-0 text-primary" />
-      ) : (
-        <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
-      )}
-      <div>
-        <p className="font-medium">
+    <Callout
+      tone={matches ? "success" : "warning"}
+      title={
+        <>
           Volume {volumeNumber} has {expected.chapters.length} chapters
           {matches ? " — matches your folder" : ` — your folder has ${actual}`}
-        </p>
-        <p className="mt-0.5 text-muted-foreground">
-          Chapters {expected.chapters.map((c) => c.number).join(", ")}
-        </p>
-      </div>
-    </div>
+        </>
+      }
+    >
+      Chapters {expected.chapters.map((c) => c.number).join(", ")}
+    </Callout>
   );
 }

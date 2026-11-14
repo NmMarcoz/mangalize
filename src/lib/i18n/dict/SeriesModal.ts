@@ -23,6 +23,7 @@ const dict: PartialDictionary = {
     "seriesModal.downloadHint": "Download into your library",
     "seriesModal.get": "Get",
     "seriesModal.urlOnly": "URL only",
+    "seriesModal.chapterTitle": "Chapter {number}",
   },
   "pt-BR": {
     "seriesModal.untitled": "Sem título",
@@ -46,6 +47,7 @@ const dict: PartialDictionary = {
     "seriesModal.downloadHint": "Baixar para a sua biblioteca",
     "seriesModal.get": "Obter",
     "seriesModal.urlOnly": "Somente URL",
+    "seriesModal.chapterTitle": "Capítulo {number}",
   },
 };
 

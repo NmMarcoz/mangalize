@@ -2,13 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { libraryRemoveSeries, type Series } from "@/lib/library";
 
@@ -60,22 +63,28 @@ export function RemoveSeriesDialog({
 
   const downloaded = series?.have_chapters ?? 0;
 
+  const folder = (
+    <span className="font-mono text-foreground" data-selectable>
+      {series?.folder}
+    </span>
+  );
+
   return (
     <Dialog
       open={series !== null}
       onOpenChange={(next) => !busy && onOpenChange(next)}
     >
       <DialogContent className="max-w-lg">
-        <div className="border-b border-border px-4 py-3">
+        <DialogHeader>
           <DialogTitle>Remove {series?.title}?</DialogTitle>
           <DialogDescription>
             {downloaded > 0
               ? `${downloaded} downloaded ${downloaded === 1 ? "chapter" : "chapters"} on disk.`
               : "Nothing has been downloaded for this series yet."}
           </DialogDescription>
-        </div>
+        </DialogHeader>
 
-        <div className="flex flex-col gap-3 px-4 py-4">
+        <DialogBody>
           {downloaded > 0 && (
             <label className="flex cursor-pointer items-start gap-3">
               <Switch
@@ -86,7 +95,7 @@ export function RemoveSeriesDialog({
               />
               <span className="text-xs">
                 <span className="font-medium">Delete the downloaded files too</span>
-                <span className="mt-0.5 block text-muted-foreground">
+                <span className="mt-0.5 block leading-relaxed text-muted-foreground">
                   Permanently removes the chapter images from disk. Anything you
                   have already exported is untouched.
                 </span>
@@ -94,49 +103,31 @@ export function RemoveSeriesDialog({
             </label>
           )}
 
-          <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            {deleteFiles ? (
-              <>
-                The series and its files will be deleted from{" "}
-                <span className="font-mono text-foreground" data-selectable>
-                  {series?.folder}
-                </span>
-                . This cannot be undone.
-              </>
-            ) : (
-              <>
-                Only the library entry goes. The files stay in{" "}
-                <span className="font-mono text-foreground" data-selectable>
-                  {series?.folder}
-                </span>
-                .
-              </>
-            )}
-          </p>
-        </div>
-
-        <Separator />
-
-        <div className="flex items-center gap-3 px-4 py-3">
-          {error && (
-            <p className="min-w-0 flex-1 truncate text-xs text-destructive" title={error}>
-              {error}
-            </p>
+          {deleteFiles ? (
+            <Callout tone="destructive">
+              The series and its files will be deleted from {folder}. This cannot
+              be undone.
+            </Callout>
+          ) : (
+            <Callout tone="info">
+              Only the library entry goes. The files stay in {folder}.
+            </Callout>
           )}
-          <div className="ml-auto flex gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-              Cancel
-            </Button>
-            <Button
-              variant={deleteFiles ? "destructive" : "default"}
-              onClick={() => void remove()}
-              disabled={busy}
-            >
-              {busy ? <Loader2 className="animate-spin" /> : <Trash2 />}
-              {deleteFiles ? "Delete series and files" : "Remove from library"}
-            </Button>
-          </div>
-        </div>
+        </DialogBody>
+
+        <DialogFooter error={error}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            variant={deleteFiles ? "destructive" : "default"}
+            onClick={() => void remove()}
+            disabled={busy}
+          >
+            {busy ? <Loader2 className="animate-spin" /> : <Trash2 />}
+            {deleteFiles ? "Delete series and files" : "Remove from library"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

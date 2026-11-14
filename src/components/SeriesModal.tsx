@@ -41,6 +41,7 @@ import {
   libraryAddSeries,
   type Series,
 } from "@/lib/library";
+import { useT } from "@/lib/i18n";
 import type { ReaderTarget } from "@/lib/reader";
 import { isMobile } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -82,9 +83,16 @@ export function SeriesModal({
   const [adding, setAdding] = useState(false);
   const [fetching, setFetching] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const t = useT();
 
   const title =
-    series.title_english ?? series.title_romaji ?? series.title_native ?? "Untitled";
+    series.title_english ??
+    series.title_romaji ??
+    series.title_native ??
+    t("seriesModal.untitled");
+  const altTitles = [series.title_romaji, series.title_native]
+    .filter((alt) => alt && alt !== title)
+    .join(" · ");
 
   /**
    * Which translation to show first.
@@ -218,11 +226,11 @@ export function SeriesModal({
           {/* ------------------------------------------------------ header */}
           {/* A 160px cover next to a text column leaves a phone barely 180px to
               set a description in, so there the cover goes above it instead. */}
-          <div className={cn("flex gap-4 p-5", isMobile && "flex-col")}>
+          <div className={cn("flex gap-6 p-6", isMobile && "flex-col gap-4")}>
             <div
               className={cn(
                 "flex items-center justify-center overflow-hidden rounded-lg bg-muted/40",
-                isMobile ? "h-52 w-36 self-start" : "h-56 w-40 shrink-0",
+                isMobile ? "h-52 w-36 self-start" : "h-[228px] w-40 shrink-0",
               )}
             >
               {series.thumbnail_url ? (
@@ -232,27 +240,26 @@ export function SeriesModal({
               )}
             </div>
 
-            <div className="flex min-w-0 flex-1 flex-col gap-2">
-              <DialogTitle className="text-base leading-tight">{title}</DialogTitle>
-
-              {/* Alternate titles only when they add something. */}
-              <p className="text-[11px] text-muted-foreground">
-                {[series.title_romaji, series.title_native]
-                  .filter((t) => t && t !== title)
-                  .join(" · ")}
-              </p>
-
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                <span>{series.author ?? "Unknown author"}</span>
-                {series.artist && series.artist !== series.author && (
-                  <span>· {series.artist}</span>
-                )}
-                {series.year && <span>· {series.year}</span>}
-                {series.status && <span className="capitalize">· {series.status}</span>}
-                {series.demographic && (
-                  <span className="capitalize">· {series.demographic}</span>
-                )}
+            <div className="flex min-w-0 flex-1 flex-col gap-3 pr-8">
+              <div className="flex flex-col gap-1">
+                <DialogTitle className="leading-tight">{title}</DialogTitle>
+                {/* Alternate titles only when they add something. */}
+                {altTitles && <p className="text-[11px] text-muted-foreground">{altTitles}</p>}
               </div>
+
+              <p className="text-xs text-muted-foreground">
+                {[
+                  series.author ?? t("seriesModal.unknownAuthor"),
+                  series.artist && series.artist !== series.author ? series.artist : null,
+                  series.year,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                {series.status && <span className="capitalize"> · {series.status}</span>}
+                {series.demographic && (
+                  <span className="capitalize"> · {series.demographic}</span>
+                )}
+              </p>
 
               <div className="flex flex-wrap items-center gap-2">
                 {stats?.rating != null && (
@@ -276,33 +283,27 @@ export function SeriesModal({
                   </Badge>
                 )}
                 {series.site_url && (
-                  <a
-                    href={series.site_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-                  >
-                    <ExternalLink className="size-3" />
-                    {sourceLabel(series.source)}
-                  </a>
+                  <Button variant="link" size="sm" asChild className="ml-1 text-xs">
+                    <a href={series.site_url} target="_blank" rel="noreferrer">
+                      <ExternalLink className="size-3!" />
+                      {sourceLabel(series.source)}
+                    </a>
+                  </Button>
                 )}
               </div>
 
               {series.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1.5">
                   {series.tags.map((tag) => (
-                    <span
-                      key={tag.id}
-                      className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground"
-                    >
+                    <Badge key={tag.id} variant="secondary" className="font-normal">
                       {tag.name}
-                    </span>
+                    </Badge>
                   ))}
                 </div>
               )}
 
               {series.description && (
-                <div>
+                <div className="flex flex-col items-start gap-1">
                   <p
                     className={cn(
                       "text-xs leading-relaxed text-muted-foreground",
@@ -312,12 +313,14 @@ export function SeriesModal({
                     {series.description}
                   </p>
                   {series.description.length > 300 && (
-                    <button
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="text-[11px]"
                       onClick={() => setExpanded((v) => !v)}
-                      className="mt-0.5 text-[11px] text-primary hover:underline"
                     >
-                      {expanded ? "Show less" : "Show more"}
-                    </button>
+                      {expanded ? t("seriesModal.showLess") : t("seriesModal.showMore")}
+                    </Button>
                   )}
                 </div>
               )}
@@ -329,19 +332,24 @@ export function SeriesModal({
           {/* ---------------------------------------------------- chapters */}
           <div
             className={cn(
-              "gap-3 px-5 py-3",
+              "gap-4 px-6 py-4",
               isMobile ? "flex flex-col items-stretch" : "flex items-end",
             )}
           >
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="language">Translation</Label>
+              <Label
+                htmlFor="language"
+                className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                {t("seriesModal.translation")}
+              </Label>
               <Select
                 value={language ?? ""}
                 onValueChange={(v) => setLanguage(v)}
                 disabled={series.available_languages.length === 0}
               >
                 <SelectTrigger id="language" className={isMobile ? "w-full" : "w-56"}>
-                  <SelectValue placeholder="No translations listed" />
+                  <SelectValue placeholder={t("seriesModal.noTranslationsListed")} />
                 </SelectTrigger>
                 <SelectContent>
                   {series.available_languages.map((code) => (
@@ -353,41 +361,51 @@ export function SeriesModal({
               </Select>
             </div>
 
-            <p className={cn("text-[11px] text-muted-foreground", isMobile ? "-mt-1" : "flex-1 pb-2")}>
+            <p
+              className={cn(
+                "text-[11px] text-muted-foreground",
+                isMobile ? "-mt-1" : "flex-1 pb-2.5",
+              )}
+            >
               {series.available_languages.length > 1 &&
-                `${series.available_languages.length} translations available. `}
-              {layout && `${flat.length} chapters in this one.`}
+                t("seriesModal.translationsAvailable", {
+                  count: series.available_languages.length,
+                })}
+              {layout && t("seriesModal.chaptersInThis", { count: flat.length })}
             </p>
 
             {owned ? (
               <Button variant="outline" onClick={() => onOpenSeries(owned.id)}>
                 <Check />
-                In your library
+                {t("seriesModal.inYourLibrary")}
               </Button>
             ) : (
               <Button onClick={() => void add()} disabled={adding}>
                 {adding ? <Loader2 className="animate-spin" /> : <Plus />}
-                Add to library
+                {t("seriesModal.addToLibrary")}
               </Button>
             )}
           </div>
 
-          <div className="px-5 pb-4">
+          <div className="px-6 pb-6">
             {layout === null ? (
               <p className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" /> Loading chapters…
+                <Loader2 className="size-3.5 animate-spin" /> {t("seriesModal.loadingChapters")}
               </p>
             ) : flat.length === 0 ? (
               <p className="py-4 text-xs text-muted-foreground">
-                No chapters in this translation.
-                {series.available_languages.length > 1 && " Try another one."}
+                {t("seriesModal.noChaptersInTranslation")}
+                {series.available_languages.length > 1 && t("seriesModal.tryAnotherOne")}
               </p>
             ) : (
-              <div className="max-h-72 overflow-y-auto rounded-md border border-border">
+              <div className="-mx-6 max-h-80 overflow-y-auto border-y border-border">
                 {layout.map((volume) => (
                   <div key={volume.volume}>
-                    <p className="sticky top-0 bg-card/95 px-2.5 py-1 text-[10px] font-medium text-muted-foreground backdrop-blur">
-                      Volume {volume.volume} · {volume.chapters.length}
+                    <p className="sticky top-0 z-10 bg-muted px-6 py-2 text-[10px] font-medium text-muted-foreground">
+                      {t("seriesModal.volumeHeader", {
+                        volume: volume.volume,
+                        count: volume.chapters.length,
+                      })}
                     </p>
                     {volume.chapters.map((chapter) => (
                       <ChapterRow
@@ -406,41 +424,38 @@ export function SeriesModal({
 
           {/* ----------------------------------------------------- similar */}
           {similar.length > 0 && (
-            <>
-              <Separator />
-              <div className="px-5 py-4">
-                <p className="mb-2 text-[11px] font-medium text-muted-foreground">
-                  {/* Deliberately not called "similar": this is a tag search,
-                      and MangaDex publishes no similarity ranking. */}
-                  More with these tags
-                </p>
-                <div className="scrollbar-thin flex gap-3 overflow-x-auto pb-1">
-                  {similar.map((other) => (
-                    <button
-                      key={other.id}
-                      onClick={() => onPick(other)}
-                      className="w-24 shrink-0 text-left"
-                    >
-                      <div className="flex aspect-[10/15] items-center justify-center overflow-hidden rounded bg-muted/40">
-                        {other.thumbnail_url ? (
-                          <RemoteImage
-                            url={other.thumbnail_url}
-                            max={256}
-                            className="h-full w-full"
-                            imageClassName="transition-opacity hover:opacity-80"
-                          />
-                        ) : (
-                          <BookOpen className="size-4 text-muted-foreground" />
-                        )}
-                      </div>
-                      <p className="mt-1 line-clamp-2 text-[10px] leading-tight">
-                        {other.title_english ?? other.title_romaji ?? other.title_native}
-                      </p>
-                    </button>
-                  ))}
-                </div>
+            <div className="flex flex-col gap-3 px-6 pb-6">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {/* Deliberately not called "similar": this is a tag search,
+                    and MangaDex publishes no similarity ranking. */}
+                {t("seriesModal.moreWithTheseTags")}
+              </p>
+              <div className="scrollbar-thin flex gap-3 overflow-x-auto pb-1">
+                {similar.map((other) => (
+                  <button
+                    key={other.id}
+                    onClick={() => onPick(other)}
+                    className="w-24 shrink-0 text-left"
+                  >
+                    <div className="flex aspect-[10/15] items-center justify-center overflow-hidden rounded-md bg-muted/40">
+                      {other.thumbnail_url ? (
+                        <RemoteImage
+                          url={other.thumbnail_url}
+                          max={256}
+                          className="h-full w-full"
+                          imageClassName="transition-opacity hover:opacity-80"
+                        />
+                      ) : (
+                        <BookOpen className="size-4 text-muted-foreground" />
+                      )}
+                    </div>
+                    <p className="mt-1.5 line-clamp-2 text-[10px] leading-tight">
+                      {other.title_english ?? other.title_romaji ?? other.title_native}
+                    </p>
+                  </button>
+                ))}
               </div>
-            </>
+            </div>
           )}
         </div>
       </DialogContent>
@@ -459,45 +474,42 @@ function ChapterRow({
   onRead: () => void;
   onGet: () => void;
 }) {
+  const t = useT();
   const fetchable = chapter.id !== null && !chapter.unavailable;
 
   return (
     <div
       className={cn(
-        "flex items-center gap-2 border-b border-border/50 px-2.5 py-1 text-[11px] last:border-b-0",
-        !fetchable && "bg-amber-500/[0.03]",
+        "flex items-center gap-3 border-b border-border px-6 py-2 last:border-b-0",
+        !fetchable && "bg-amber-500/5",
       )}
     >
-      <span className="w-12 shrink-0 font-mono">{chapter.number}</span>
-      <span className="min-w-0 flex-1 truncate text-muted-foreground">
+      <span className="min-w-0 flex-1 truncate text-xs font-medium">
+        {t("seriesModal.chapterTitle", { number: chapter.number })}
         {!fetchable && (
-          <span className="text-amber-500/80">not hosted by the source</span>
+          <span className="ml-2 text-[11px] font-normal text-amber-500">
+            {t("seriesModal.notHostedBySource")}
+          </span>
         )}
       </span>
 
       {fetchable ? (
-        <>
-          <Hint label="Read now, streaming from the source">
+        <div className="flex items-center gap-1">
+          <Hint label={t("seriesModal.readNowHint")}>
             <Button variant="ghost" size="sm" onClick={onRead} disabled={busy}>
-              <Cloud className="size-3" />
-              Read
+              <Cloud />
+              {t("seriesModal.read")}
             </Button>
           </Hint>
-          <Hint label="Download into your library">
+          <Hint label={t("seriesModal.downloadHint")}>
             <Button variant="ghost" size="sm" onClick={onGet} disabled={busy}>
-              {busy ? (
-                <Loader2 className="size-3 animate-spin" />
-              ) : (
-                <Download className="size-3" />
-              )}
-              Get
+              {busy ? <Loader2 className="animate-spin" /> : <Download />}
+              {t("seriesModal.get")}
             </Button>
           </Hint>
-        </>
+        </div>
       ) : (
-        <Badge variant="outline" className="text-[9px]">
-          URL only
-        </Badge>
+        <Badge variant="outline">{t("seriesModal.urlOnly")}</Badge>
       )}
     </div>
   );

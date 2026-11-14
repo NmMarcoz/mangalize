@@ -3,14 +3,17 @@ import { Loader2, Plus, Search } from "lucide-react";
 
 import { RemoteImage } from "@/components/RemoteImage";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -18,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { useT } from "@/lib/i18n";
 import { listSources, searchSource, type SourceInfo, type SourceManga } from "@/lib/api";
 import { addSeriesFromSource, type Series } from "@/lib/library";
@@ -100,14 +102,14 @@ export function AddFromSourceDialog({ open, onOpenChange, onAdded }: AddFromSour
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85dvh] max-w-lg">
-        <div className="border-b border-border px-4 py-3">
+        <DialogHeader>
           <DialogTitle>{t("addFromSourceDialog.title")}</DialogTitle>
           <DialogDescription>{t("addFromSourceDialog.description")}</DialogDescription>
-        </div>
+        </DialogHeader>
 
-        <div className="flex flex-col gap-3 px-4 py-3">
+        <DialogBody>
           {sources !== null && sources.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
+            <Callout tone="info">
               {(() => {
                 const [before, rest] = t("addFromSourceDialog.noSources").split("{ext}");
                 const [middle, after] = rest.split("{folder}");
@@ -121,11 +123,16 @@ export function AddFromSourceDialog({ open, onOpenChange, onAdded }: AddFromSour
                   </>
                 );
               })()}
-            </p>
+            </Callout>
           ) : (
             <>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="source">{t("addFromSourceDialog.sourceLabel")}</Label>
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="source"
+                  className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                >
+                  {t("addFromSourceDialog.sourceLabel")}
+                </label>
                 <Select value={sourceId ?? undefined} onValueChange={setSourceId}>
                   <SelectTrigger id="source">
                     <SelectValue placeholder={t("addFromSourceDialog.sourcePlaceholder")} />
@@ -155,9 +162,9 @@ export function AddFromSourceDialog({ open, onOpenChange, onAdded }: AddFromSour
                 </Button>
               </div>
 
-              <div className="scrollbar-thin max-h-72 min-h-0 overflow-y-auto rounded-md border border-border">
+              <div className="scrollbar-thin flex max-h-72 min-h-0 flex-col gap-1 overflow-y-auto rounded-lg border border-border p-1">
                 {results === null && !searching && (
-                  <p className="p-4 text-xs text-muted-foreground">
+                  <p className="p-3 text-xs text-muted-foreground">
                     {t("addFromSourceDialog.pressEnter")}
                   </p>
                 )}
@@ -166,47 +173,38 @@ export function AddFromSourceDialog({ open, onOpenChange, onAdded }: AddFromSour
                     key={manga.id}
                     onClick={() => setSelected(manga)}
                     className={cn(
-                      "flex w-full gap-2.5 border-b border-border/50 p-2.5 text-left transition-colors last:border-b-0",
-                      selected?.id === manga.id ? "bg-primary/10" : "hover:bg-accent",
+                      "flex w-full shrink-0 items-center gap-3 rounded-lg p-2.5 text-left transition-colors",
+                      selected?.id === manga.id
+                        ? "bg-primary/10 ring-1 ring-inset ring-primary"
+                        : "hover:bg-accent",
                     )}
                   >
                     {manga.cover_url ? (
                       <RemoteImage
                         url={manga.cover_url}
                         max={96}
-                        className="h-16 w-12 shrink-0 rounded"
+                        className="h-16 w-11 shrink-0 rounded"
                       />
                     ) : (
-                      <div className="h-16 w-12 shrink-0 rounded bg-muted" />
+                      <div className="h-16 w-11 shrink-0 rounded bg-muted" />
                     )}
-                    <p className="min-w-0 flex-1 truncate self-center text-xs font-medium">
-                      {manga.title}
-                    </p>
+                    <p className="min-w-0 flex-1 truncate text-xs font-medium">{manga.title}</p>
                   </button>
                 ))}
               </div>
             </>
           )}
-        </div>
+        </DialogBody>
 
-        <Separator />
-
-        <div className="flex items-center gap-3 px-4 py-3">
-          {error && (
-            <p className="flex-1 truncate text-xs text-destructive" title={error}>
-              {error}
-            </p>
-          )}
-          <div className="ml-auto flex gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>
-              {t("addFromSourceDialog.cancel")}
-            </Button>
-            <Button onClick={() => void add()} disabled={!selected || adding}>
-              {adding ? <Loader2 className="animate-spin" /> : <Plus />}
-              {t("addFromSourceDialog.addToLibrary")}
-            </Button>
-          </div>
-        </div>
+        <DialogFooter error={error}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            {t("addFromSourceDialog.cancel")}
+          </Button>
+          <Button onClick={() => void add()} disabled={!selected || adding}>
+            {adding ? <Loader2 className="animate-spin" /> : <Plus />}
+            {t("addFromSourceDialog.addToLibrary")}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

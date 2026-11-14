@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import type { UpdateStage } from "@/hooks/useUpdater";
+import { LogoMark } from "@/components/Logo";
 import { useT } from "@/lib/i18n";
 import type { Translator } from "@/lib/i18n/types";
 import { canSendToDevice } from "@/lib/platform";
@@ -119,6 +120,18 @@ export function Sidebar({
         expanded ? "w-44" : "w-14",
       )}
     >
+      <div
+        className={cn(
+          "flex items-center gap-2 pb-3 pt-1",
+          expanded ? "px-3" : "justify-center px-2",
+        )}
+      >
+        <LogoMark width={36} title="Leaf" />
+        {expanded && (
+          <span className="font-brand text-xl font-medium leading-none tracking-[0.04em]">leaf</span>
+        )}
+      </div>
+
       <div className="flex flex-col gap-1 px-2">
         {destinations(t).map((d) => (
           <Item

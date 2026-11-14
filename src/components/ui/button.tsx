@@ -26,6 +26,9 @@ const buttonVariants = cva(
         "icon-sm": "h-7 w-7 rounded-md",
       },
     },
+    // A link sits inline with body text, so side padding would only indent it
+    // away from the text it belongs to.
+    compoundVariants: [{ variant: "link", className: "h-auto px-0 py-0" }],
     defaultVariants: { variant: "default", size: "default" },
   },
 );

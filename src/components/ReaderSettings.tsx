@@ -1,11 +1,11 @@
 import { Loader2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Chip, OptionCard } from "@/components/ui/chip";
 import { Label } from "@/components/ui/label";
 import { useT } from "@/lib/i18n";
 import { languageName } from "@/lib/api";
 import { readerFits, readerModes, type ReaderPrefs } from "@/lib/reader";
-import { cn } from "@/lib/utils";
 
 interface ReaderSettingsProps {
   /** Every translation the source has, or empty when there is nothing to pick. */
@@ -43,141 +43,129 @@ export function ReaderSettings({
       ? t("readerSettings.directionRightToLeft")
       : t("readerSettings.directionLeftToRight");
 
+  const overline = "text-xs font-medium uppercase tracking-wide text-muted-foreground";
+  const shadeLabel = {
+    black: t("common.black"),
+    grey: t("common.grey"),
+    white: t("common.white"),
+  } as const;
+
   return (
-    <aside className="absolute right-3 top-16 z-30 flex w-72 flex-col gap-4 rounded-lg border border-white/15 bg-neutral-900/95 p-4 text-white shadow-xl backdrop-blur">
-      <div className="flex items-center gap-2">
+    // Always dark, whatever the app theme: it floats over the page being read,
+    // and a light panel there flashes. The `dark` class swaps the tokens for
+    // this subtree only.
+    <aside className="dark absolute right-3 top-16 z-30 flex max-h-[calc(100dvh-5rem)] w-[304px] flex-col overflow-hidden rounded-xl border border-border bg-popover/95 text-popover-foreground shadow-2xl backdrop-blur">
+      <div className="flex shrink-0 items-center gap-2 px-4 py-2.5">
         <h2 className="flex-1 text-sm font-medium">{t("readerSettings.title")}</h2>
-        <Button variant="ghost" size="icon-sm" className="text-white" onClick={onClose}>
-          <X className="size-3.5" />
+        <Button variant="ghost" size="icon-sm" onClick={onClose}>
+          <X />
         </Button>
       </div>
 
-      {/* Only when there is a choice. Swapping keeps the chapter and the page
-          and changes nothing but which images are fetched. */}
-      {translations.length > 1 && (
-        <section className="flex flex-col gap-1.5">
-          <Label className="text-white/70">{t("readerSettings.translation")}</Label>
-          <div className="flex items-center gap-2">
-            <select
-              value={language}
-              disabled={switching}
-              onChange={(e) => onLanguage(e.target.value)}
-              className="min-w-0 flex-1 rounded-md border border-white/15 bg-white/5 px-2 py-1.5 text-xs text-white disabled:opacity-50"
-            >
-              {translations.map((code) => (
-                <option key={code} value={code} className="bg-neutral-900">
-                  {languageName(code)}
-                </option>
-              ))}
-            </select>
-            {switching && <Loader2 className="size-3.5 animate-spin text-white/60" />}
+      <div className="scrollbar-thin flex min-h-0 flex-col gap-5 overflow-y-auto px-4 pb-4">
+        {/* Only when there is a choice. Swapping keeps the chapter and the page
+            and changes nothing but which images are fetched. */}
+        {translations.length > 1 && (
+          <section className="flex flex-col gap-2">
+            <Label className={overline}>{t("readerSettings.translation")}</Label>
+            <div className="flex items-center gap-2">
+              <select
+                value={language}
+                disabled={switching}
+                onChange={(e) => onLanguage(e.target.value)}
+                className="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-xs text-foreground disabled:opacity-50"
+              >
+                {translations.map((code) => (
+                  <option key={code} value={code} className="bg-popover">
+                    {languageName(code)}
+                  </option>
+                ))}
+              </select>
+              {switching && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {t("readerSettings.translationHint")}
+            </p>
+          </section>
+        )}
+
+        <section className="flex flex-col gap-2">
+          <Label className={overline}>{t("readerSettings.layout")}</Label>
+          <div role="radiogroup" className="flex flex-col gap-1.5">
+            {readerModes(t).map((mode) => (
+              <OptionCard
+                key={mode.value}
+                selected={prefs.mode === mode.value}
+                title={mode.label}
+                detail={mode.detail}
+                onClick={() => onChange({ mode: mode.value })}
+              />
+            ))}
           </div>
-          <p className="text-[11px] text-white/45">{t("readerSettings.translationHint")}</p>
         </section>
-      )}
 
-      <section className="flex flex-col gap-1.5">
-        <Label className="text-white/70">{t("readerSettings.layout")}</Label>
-        <div className="flex flex-col gap-1">
-          {readerModes(t).map((mode) => (
-            <button
-              key={mode.value}
-              onClick={() => onChange({ mode: mode.value })}
-              className={cn(
-                "rounded-md border px-2.5 py-1.5 text-left text-xs transition-colors",
-                prefs.mode === mode.value
-                  ? "border-primary bg-primary/20"
-                  : "border-white/15 hover:bg-white/10",
-              )}
+        <section className="flex flex-col gap-2">
+          <Label className={overline}>{t("readerSettings.fit")}</Label>
+          <div role="radiogroup" className="flex flex-wrap gap-1.5">
+            {readerFits(t).map((fit) => (
+              <Chip
+                key={fit.value}
+                selected={prefs.fit === fit.value}
+                onClick={() => onChange({ fit: fit.value })}
+              >
+                {fit.label}
+              </Chip>
+            ))}
+          </div>
+        </section>
+
+        <section className="flex flex-col gap-2">
+          <Label className={overline}>{t("readerSettings.direction")}</Label>
+          <div role="radiogroup" className="flex flex-wrap gap-1.5">
+            <Chip
+              selected={prefs.direction === null}
+              onClick={() => onChange({ direction: null })}
             >
-              <span className="font-medium">{mode.label}</span>
-              <span className="mt-0.5 block text-[10px] text-white/50">
-                {mode.detail}
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="flex flex-col gap-1.5">
-        <Label className="text-white/70">{t("readerSettings.fit")}</Label>
-        <div className="flex flex-wrap gap-1.5">
-          {readerFits(t).map((fit) => (
+              {t("readerSettings.directionAuto", { direction: directionLabel })}
+            </Chip>
             <Chip
-              key={fit.value}
-              label={fit.label}
-              active={prefs.fit === fit.value}
-              onClick={() => onChange({ fit: fit.value })}
-            />
-          ))}
-        </div>
-      </section>
-
-      <section className="flex flex-col gap-1.5">
-        <Label className="text-white/70">{t("readerSettings.direction")}</Label>
-        <div className="flex flex-wrap gap-1.5">
-          <Chip
-            label={t("readerSettings.directionAuto", { direction: directionLabel })}
-            active={prefs.direction === null}
-            onClick={() => onChange({ direction: null })}
-          />
-          <Chip
-            label={t("readerSettings.directionOptionRightToLeft")}
-            active={prefs.direction === "right-to-left"}
-            onClick={() => onChange({ direction: "right-to-left" })}
-          />
-          <Chip
-            label={t("readerSettings.directionOptionLeftToRight")}
-            active={prefs.direction === "left-to-right"}
-            onClick={() => onChange({ direction: "left-to-right" })}
-          />
-        </div>
-        <p className="text-[10px] leading-snug text-white/50">
-          {t("readerSettings.directionHint")}
-        </p>
-      </section>
-
-      <section className="flex flex-col gap-1.5">
-        <Label className="text-white/70">{t("readerSettings.background")}</Label>
-        <div className="flex flex-wrap gap-1.5">
-          {(["black", "grey", "white"] as const).map((shade) => (
+              selected={prefs.direction === "right-to-left"}
+              onClick={() => onChange({ direction: "right-to-left" })}
+            >
+              {t("readerSettings.directionOptionRightToLeft")}
+            </Chip>
             <Chip
-              key={shade}
-              label={shade}
-              active={prefs.background === shade}
-              onClick={() => onChange({ background: shade })}
-            />
-          ))}
-        </div>
-      </section>
+              selected={prefs.direction === "left-to-right"}
+              onClick={() => onChange({ direction: "left-to-right" })}
+            >
+              {t("readerSettings.directionOptionLeftToRight")}
+            </Chip>
+          </div>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {t("readerSettings.directionHint")}
+          </p>
+        </section>
 
-      <p className="border-t border-white/10 pt-3 text-[10px] leading-relaxed text-white/40">
+        <section className="flex flex-col gap-2">
+          <Label className={overline}>{t("readerSettings.background")}</Label>
+          <div role="radiogroup" className="flex flex-wrap gap-1.5">
+            {(["black", "grey", "white"] as const).map((shade) => (
+              <Chip
+                key={shade}
+                selected={prefs.background === shade}
+                className="capitalize"
+                onClick={() => onChange({ background: shade })}
+              >
+                {shadeLabel[shade]}
+              </Chip>
+            ))}
+          </div>
+        </section>
+      </div>
+
+      <p className="shrink-0 border-t border-border px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">
         {t("readerSettings.help")}
       </p>
     </aside>
-  );
-}
-
-function Chip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "rounded-full border px-2.5 py-1 text-[11px] capitalize transition-colors",
-        active
-          ? "border-primary bg-primary/20 text-white"
-          : "border-white/15 text-white/70 hover:bg-white/10",
-      )}
-    >
-      {label}
-    </button>
   );
 }

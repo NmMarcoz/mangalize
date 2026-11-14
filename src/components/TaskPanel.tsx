@@ -56,22 +56,22 @@ export function TaskPanel({
   const finished = tasks.filter((task) => !isActive(task));
 
   return (
-    <aside className="absolute right-3 top-14 z-40 flex max-h-[70dvh] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border border-border bg-card shadow-2xl">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <h2 className="flex-1 text-xs font-semibold">{t("taskPanel.title")}</h2>
+    <aside className="absolute right-3 top-14 z-40 flex max-h-[70dvh] w-[min(400px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+        <h2 className="flex-1 text-sm font-medium">{t("taskPanel.title")}</h2>
         {finished.length > 0 && (
           <Button variant="ghost" size="sm" onClick={() => void clearFinishedTasks()}>
             {t("taskPanel.clearFinished")}
           </Button>
         )}
         <Button variant="ghost" size="icon-sm" onClick={onClose}>
-          <X className="size-3" />
+          <X />
         </Button>
       </div>
 
       <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
         {tasks.length === 0 ? (
-          <p className="px-3 py-6 text-center text-[11px] text-muted-foreground">
+          <p className="px-4 py-8 text-center text-[11px] text-muted-foreground">
             {t("taskPanel.empty")}
           </p>
         ) : (
@@ -87,24 +87,24 @@ function Row({ task }: { task: Task }) {
   const running = task.state === "running";
 
   return (
-    <div className="flex items-start gap-2.5 border-b border-border/50 px-3 py-2 last:border-b-0">
-      <span className="mt-0.5 shrink-0">
+    <div className="flex items-start gap-3 border-b border-border px-4 py-3 last:border-b-0">
+      <span className="mt-px shrink-0">
         {running ? (
-          <Loader2 className="size-3.5 animate-spin text-primary" />
+          <Loader2 className="size-4 animate-spin text-primary" />
         ) : task.state === "done" ? (
-          <Check className="size-3.5 text-primary" />
+          <Check className="size-4 text-primary" />
         ) : task.state === "failed" ? (
-          <AlertTriangle className="size-3.5 text-destructive" />
+          <AlertTriangle className="size-4 text-destructive" />
         ) : task.state === "cancelled" ? (
-          <X className="size-3.5 text-muted-foreground" />
+          <X className="size-4 text-muted-foreground" />
         ) : task.kind === "build" ? (
-          <PackageCheck className="size-3.5 text-muted-foreground" />
+          <PackageCheck className="size-4 text-muted-foreground" />
         ) : (
-          <Download className="size-3.5 text-muted-foreground" />
+          <Download className="size-4 text-muted-foreground" />
         )}
       </span>
 
-      <div className="min-w-0 flex-1">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <p className="truncate text-xs font-medium">{task.title}</p>
         <p
           className={cn(
@@ -123,7 +123,7 @@ function Row({ task }: { task: Task }) {
         </p>
 
         {running && task.total > 0 && (
-          <div className="mt-1 flex items-center gap-2">
+          <div className="mt-1.5 flex items-center gap-2">
             <Progress value={(task.done / task.total) * 100} className="h-1 flex-1" />
             <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
               {task.done}/{task.total}
@@ -138,8 +138,9 @@ function Row({ task }: { task: Task }) {
           size="icon-sm"
           title={t("taskPanel.stop")}
           onClick={() => void cancelTask(task.id)}
+          className="-my-1"
         >
-          <X className="size-3" />
+          <X />
         </Button>
       )}
     </div>

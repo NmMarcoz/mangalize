@@ -5,11 +5,13 @@ const dict: PartialDictionary = {
     "app.dropToOpen": "Drop to open this folder",
     "app.tasks": "Tasks",
     "app.tasksRunning": "{count} running",
+    "app.opening": "Opening your library…",
   },
   "pt-BR": {
     "app.dropToOpen": "Solte para abrir esta pasta",
     "app.tasks": "Tarefas",
     "app.tasksRunning": "{count} em andamento",
+    "app.opening": "Abrindo sua biblioteca…",
   },
 };
 

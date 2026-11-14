@@ -4,6 +4,9 @@ import {
   ArrowLeft,
   BookOpen,
   Check,
+  ChevronDown,
+  CircleCheck,
+  CircleDashed,
   Download,
   FolderInput,
   Layers,
@@ -35,6 +38,8 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
@@ -789,15 +794,15 @@ export function SeriesView({
 
       <Dialog open={forgetting} onOpenChange={setForgetting}>
         <DialogContent className="max-w-md">
-          <div className="border-b border-border px-4 py-3">
+          <DialogHeader>
             <DialogTitle>{t("seriesView.forgetTitle")}</DialogTitle>
             <DialogDescription>
               {t("seriesView.forgetDescription", {
                 title: series?.title ?? t("seriesView.thisSeries"),
               })}
             </DialogDescription>
-          </div>
-          <div className="flex items-center justify-end gap-2 px-4 py-3">
+          </DialogHeader>
+          <DialogFooter>
             <Button variant="ghost" onClick={() => setForgetting(false)}>
               {t("seriesView.cancel")}
             </Button>
@@ -813,7 +818,7 @@ export function SeriesView({
               <Trash2 />
               {t("seriesView.forget")}
             </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -821,7 +826,7 @@ export function SeriesView({
           already exists, so the choice is offered rather than assumed. */}
       <Dialog open={rebuild !== null} onOpenChange={(next) => !next && setRebuild(null)}>
         <DialogContent className="max-w-md">
-          <div className="border-b border-border px-4 py-3">
+          <DialogHeader>
             <DialogTitle>
               {t("seriesView.alreadyBuilt", { label: rebuild ? volumeLabel(rebuild) : "" })}
             </DialogTitle>
@@ -830,8 +835,8 @@ export function SeriesView({
                 <span className="break-all">{rebuild.built.path}</span>
               )}
             </DialogDescription>
-          </div>
-          <div className="flex items-center justify-end gap-2 px-4 py-3">
+          </DialogHeader>
+          <DialogFooter>
             <Button variant="ghost" onClick={() => setRebuild(null)}>
               {t("seriesView.cancel")}
             </Button>
@@ -858,7 +863,7 @@ export function SeriesView({
             >
               {DELIVER_LABEL}
             </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -938,7 +943,7 @@ function VolumeCard({
       <button onClick={onPick} className="flex w-full flex-col text-left">
         <VolumeArt volume={volume} dimmed={have === 0} />
 
-        <div className="flex flex-col gap-1 p-2">
+        <div className="flex flex-col gap-1.5 px-3 pb-3 pt-2.5">
           <p className="truncate text-xs font-medium">{volumeLabel(volume)}</p>
           <div className="flex items-center gap-1.5">
             {complete ? (
@@ -1084,7 +1089,7 @@ function VolumePanel({
           : "w-96 shrink-0 border-l",
       )}
     >
-      <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+      <div className="flex items-center gap-2 border-b border-border py-3.5 pl-5 pr-3">
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-medium">{volumeLabel(volume)}</h2>
           <p className="truncate text-[11px] text-muted-foreground">
@@ -1120,7 +1125,7 @@ function VolumePanel({
         <>
           <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
             {volume.chapters.length === 0 ? (
-              <p className="px-4 py-3 text-[11px] text-muted-foreground">
+              <p className="px-5 py-4 text-[11px] text-muted-foreground">
                 {t("seriesView.noChaptersListed")}
               </p>
             ) : (
@@ -1140,7 +1145,7 @@ function VolumePanel({
             )}
           </div>
 
-          <div className="flex flex-col gap-2 border-t border-border p-3">
+          <div className="flex flex-col gap-2 border-t border-border p-4">
             {/* Offered without having to build again: the work is already done, and
                 on a phone this is the only way a volume leaves the app at all. */}
             {volume.built && (
@@ -1206,137 +1211,186 @@ function ChapterRow({
   const t = useT();
   const have = chapter.folder !== null;
   const direct = canFetchDirectly(chapter);
+  // Two layers: what you need to decide at a glance (is it here, and the one
+  // thing to do with it), and everything else on demand. With every action and
+  // the source host on one line, a 384px panel truncated the part that mattered.
+  const [open, setOpen] = useState(false);
+  const source = have ? chapterSource(chapter) : null;
+
+  const detail = have
+    ? t("seriesView.pagesCount", { count: chapter.page_count }) +
+      (chapter.read_at
+        ? t("seriesView.readSuffix")
+        : chapter.last_page > 0
+          ? t("seriesView.pageSuffix", { page: chapter.last_page + 1 })
+          : "")
+    : chapter.unavailable
+      ? t("seriesView.notHostedBySource")
+      : t("seriesView.notDownloaded");
+
+  const primary = have ? (
+    <Hint
+      label={
+        chapter.last_page > 0 && !chapter.read_at
+          ? t("seriesView.resumeOnPage", { page: chapter.last_page + 1 })
+          : t("seriesView.readThisChapter")
+      }
+    >
+      <Button variant="ghost" size="sm" onClick={onRead}>
+        <BookOpen />
+        {chapter.read_at
+          ? t("seriesView.reRead")
+          : chapter.last_page > 0
+            ? t("seriesView.resume")
+            : t("seriesView.read")}
+      </Button>
+    </Hint>
+  ) : (
+    <Hint
+      label={
+        direct
+          ? t("seriesView.downloadDirectHint")
+          : chapter.unavailable
+            ? t("seriesView.notHostedHint")
+            : t("seriesView.pastePageHint")
+      }
+    >
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={direct ? onFetchDirect : onGet}
+        disabled={busy}
+      >
+        {busy ? <Loader2 className="animate-spin" /> : <Download />}
+        {t("seriesView.get")}
+      </Button>
+    </Hint>
+  );
 
   return (
     <div
       className={cn(
-        "flex items-center gap-2 border-b border-border/50 px-3 py-1.5 last:border-b-0",
-        !have && "bg-amber-500/[0.03]",
+        "border-b border-border last:border-b-0",
+        !have && "bg-amber-500/5",
       )}
     >
-      <span
-        className={cn(
-          "w-12 shrink-0 font-mono text-xs",
-          have ? "text-foreground" : "text-muted-foreground",
+      <div className="flex items-center gap-3 py-2.5 pl-4 pr-3">
+        {have ? (
+          <CircleCheck className="size-4 shrink-0 text-primary" />
+        ) : (
+          <CircleDashed className="size-4 shrink-0 text-amber-500" />
         )}
-      >
-        {chapter.number}
-      </span>
-
-      <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-        {have ? t("seriesView.pagesCount", { count: chapter.page_count }) : t("seriesView.missingLabel")}
-        {have && chapter.read_at && t("seriesView.readSuffix")}
-        {have && !chapter.read_at && chapter.last_page > 0 &&
-          t("seriesView.pageSuffix", { page: chapter.last_page + 1 })}
-        {chapter.title ? ` · ${chapter.title}` : ""}
-        {have && chapterSource(chapter) && ` · ${chapterSource(chapter)}`}
-        {!have && chapter.unavailable && (
-          // Not an error: the source indexes the chapter but the publisher
-          // hosts it. Saying so stops this looking like a broken download.
-          <span className="ml-1.5 text-amber-500/80">· {t("seriesView.notHostedBySource")}</span>
-        )}
-      </span>
-
-      {have ? (
-        <>
-          <Hint label={t("seriesView.deleteChapterHint")}>
-            <Button variant="ghost" size="icon-sm" onClick={onRemove}>
-              <Trash2 className="size-3" />
-            </Button>
-          </Hint>
-          <Hint label={t("seriesView.replaceHint")}>
-            <Button variant="ghost" size="sm" onClick={onGet}>
-              {t("seriesView.replace")}
-            </Button>
-          </Hint>
-          <Hint
-            label={
-              chapter.last_page > 0 && !chapter.read_at
-                ? t("seriesView.resumeOnPage", { page: chapter.last_page + 1 })
-                : t("seriesView.readThisChapter")
-            }
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">
+            {t("seriesView.chapterNumber", { number: chapter.number })}
+            {chapter.title && (
+              <span className="font-normal text-muted-foreground"> · {chapter.title}</span>
+            )}
+          </p>
+          <p
+            className={cn(
+              "truncate text-[11px]",
+              !have && chapter.unavailable ? "text-amber-500" : "text-muted-foreground",
+            )}
           >
-            <Button variant="outline" size="sm" onClick={onRead}>
-              <BookOpen className="size-3" />
-              {chapter.read_at
-                ? t("seriesView.reRead")
-                : chapter.last_page > 0
-                  ? t("seriesView.resume")
-                  : t("seriesView.read")}
-            </Button>
-          </Hint>
-        </>
-      ) : (
-        <>
-          <Hint label={t("seriesView.importFolderHint")}>
-            <Button variant="ghost" size="icon-sm" onClick={onImport} disabled={busy}>
-              <FolderInput className="size-3" />
-            </Button>
-          </Hint>
-          {/* A chapter you do not hold is still readable when the source serves
-              it. That is what streaming is for, and the library had no way in. */}
-          {direct && (
-            <Hint label={t("seriesView.readFromSourceHint")}>
-              <Button variant="ghost" size="sm" onClick={onRead} disabled={busy}>
-                <Cloud className="size-3" />
-                {t("seriesView.read")}
-              </Button>
-            </Hint>
-          )}
-          {direct ? (
-            <>
-              <Hint label={t("seriesView.pasteUrlHint")}>
-                <Button variant="ghost" size="sm" onClick={onGet} disabled={busy}>
-                  {t("seriesView.url")}
-                </Button>
-              </Hint>
-              <Hint label={t("seriesView.downloadDirectHint")}>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onFetchDirect}
-                  disabled={busy}
-                >
-                  {busy ? (
-                    <Loader2 className="size-3 animate-spin" />
-                  ) : (
-                    <Download className="size-3" />
-                  )}
-                  {t("seriesView.get")}
-                </Button>
-              </Hint>
-            </>
-          ) : (
-            <Hint
-              label={
-                chapter.unavailable
-                  ? t("seriesView.notHostedHint")
-                  : t("seriesView.pastePageHint")
-              }
-            >
-              <Button variant="outline" size="sm" onClick={onGet} disabled={busy}>
-                <Download className="size-3" />
-                {t("seriesView.get")}
-              </Button>
-            </Hint>
-          )}
-        </>
-      )}
+            {detail}
+          </p>
+        </div>
+        {primary}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label={open ? t("seriesView.hideDetails") : t("seriesView.showDetails")}
+        >
+          <ChevronDown className={cn("transition-transform", open && "rotate-180")} />
+        </Button>
+      </div>
 
-      {/* Sorted into this volume by hand (`OrganizeChaptersPanel`), so a sync
-          will leave it here rather than re-deriving it — offered as a way
-          back for whoever changes their mind or fixed it wrong. */}
-      {chapter.volume_locked && (
-        <Hint label={t("seriesView.undoAssignmentHint")}>
-          <Button variant="ghost" size="icon-sm" onClick={onResetToSource}>
-            <Pin className="size-3" />
-          </Button>
-        </Hint>
+      {open && (
+        <div className="flex flex-col gap-3 pb-4 pl-11 pr-4">
+          {(source || chapter.source_url) && (
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="w-14 shrink-0 text-muted-foreground">{t("seriesView.sourceLabel")}</span>
+              <span className="min-w-0 truncate" title={chapter.source_url ?? undefined} data-selectable>
+                {source ?? chapter.source_url}
+              </span>
+            </div>
+          )}
+          {!have && (
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              {chapter.unavailable ? t("seriesView.notHostedHint") : t("seriesView.missingExplainer")}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {have ? (
+              <>
+                <Hint label={t("seriesView.replaceHint")}>
+                  <Button variant="outline" size="sm" onClick={onGet}>
+                    <RefreshCw />
+                    {t("seriesView.replace")}
+                  </Button>
+                </Hint>
+                <Hint label={t("seriesView.deleteChapterHint")}>
+                  <Button variant="ghost" size="sm" onClick={onRemove}>
+                    <Trash2 />
+                    {t("seriesView.delete")}
+                  </Button>
+                </Hint>
+                {chapter.source_url && (
+                  <Button variant="link" size="sm" asChild>
+                    <a href={chapter.source_url} target="_blank" rel="noreferrer">
+                      <ExternalLink />
+                      {t("seriesView.openSource")}
+                    </a>
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <Hint label={t("seriesView.importFolderHint")}>
+                  <Button variant="outline" size="sm" onClick={onImport} disabled={busy}>
+                    <FolderInput />
+                    {t("seriesView.importFolder")}
+                  </Button>
+                </Hint>
+                {/* A chapter you do not hold is still readable when the source
+                    serves it. That is what streaming is for. */}
+                {direct && (
+                  <Hint label={t("seriesView.readFromSourceHint")}>
+                    <Button variant="ghost" size="sm" onClick={onRead} disabled={busy}>
+                      <Cloud />
+                      {t("seriesView.read")}
+                    </Button>
+                  </Hint>
+                )}
+                {direct && (
+                  <Hint label={t("seriesView.pasteUrlHint")}>
+                    <Button variant="ghost" size="sm" onClick={onGet} disabled={busy}>
+                      {t("seriesView.url")}
+                    </Button>
+                  </Hint>
+                )}
+              </>
+            )}
+            {/* Sorted into this volume by hand (`OrganizeChaptersPanel`), so a
+                sync leaves it here rather than re-deriving it — offered as a way
+                back for whoever changes their mind. */}
+            {chapter.volume_locked && (
+              <Hint label={t("seriesView.undoAssignmentHint")}>
+                <Button variant="ghost" size="sm" onClick={onResetToSource}>
+                  <Pin />
+                  {t("seriesView.unpin")}
+                </Button>
+              </Hint>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
 }
-
 /**
  * Where a downloaded chapter's pages came from.
  *
@@ -1410,7 +1464,7 @@ function SeriesDetails({
     .join(" · ");
 
   return (
-    <div ref={ref as React.Ref<HTMLDivElement>} className={cn("mb-6 flex gap-4", isMobile && "flex-col")}>
+    <div ref={ref as React.Ref<HTMLDivElement>} className={cn("mb-8 flex gap-6", isMobile && "flex-col gap-4")}>
       <div
         className={cn(
           "flex items-center justify-center overflow-hidden rounded-lg bg-muted/40",
@@ -1424,7 +1478,7 @@ function SeriesDetails({
         )}
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
         <div>
           <h2 className="text-base font-semibold">{series.title}</h2>
           {subtitle && (
@@ -1451,18 +1505,18 @@ function SeriesDetails({
               href={series.site_url}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+              className="flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
             >
-              <ExternalLink className="size-3" />
+              <ExternalLink className="size-3.5" />
               {sourceLabel(series.source, t)}
             </a>
           )}
         </div>
 
         {series.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {series.tags.map((tag) => (
-              <Badge key={tag} variant="outline" className="opacity-75">
+              <Badge key={tag} variant="secondary">
                 {tag}
               </Badge>
             ))}
@@ -1471,8 +1525,10 @@ function SeriesDetails({
 
         {/* The translation decides which chapters exist and how they are
             numbered, so it belongs next to the chapter list rather than buried
-            in settings. */}
-        <div className="flex items-center gap-2">
+            in settings. The hint goes underneath: beside the select it was
+            squeezed into a sliver on any window narrower than a monitor. */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
           <Select
             value={series.language}
             onValueChange={onLanguage}
@@ -1494,6 +1550,7 @@ function SeriesDetails({
             </SelectContent>
           </Select>
           {switching && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+          </div>
           <span className="text-[11px] text-muted-foreground">
             {t("seriesView.translationHint")}
           </span>
@@ -1548,7 +1605,7 @@ function SeriesDetails({
             </p>
             <button
               onClick={() => setExpanded((v) => !v)}
-              className="mt-0.5 text-[11px] text-primary hover:underline"
+              className="mt-1.5 text-xs text-primary underline-offset-4 hover:underline"
             >
               {expanded ? t("seriesView.showLess") : t("seriesView.showMore")}
             </button>

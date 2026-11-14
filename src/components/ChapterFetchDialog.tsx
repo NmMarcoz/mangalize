@@ -11,15 +11,18 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 import { usePreview } from "@/hooks/useThumbnail";
 import { formatBytes } from "@/lib/api";
 import { useT } from "@/lib/i18n";
@@ -184,67 +187,64 @@ export function ChapterFetchDialog({
   return (
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <DialogContent className="max-h-[88dvh] max-w-5xl">
-        <div className="border-b border-border px-4 py-3">
+        <DialogHeader>
           <DialogTitle>{t("chapterFetchDialog.title", { chapter })}</DialogTitle>
           <DialogDescription>{t("chapterFetchDialog.description")}</DialogDescription>
-        </div>
+        </DialogHeader>
 
-        <div className="flex items-center gap-2 px-4 py-3">
-          <Input
-            autoFocus
-            value={url}
-            placeholder={t("chapterFetchDialog.urlPlaceholder")}
-            disabled={busy}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void readMarkup();
-            }}
-          />
-          <Button onClick={() => void readMarkup()} disabled={busy || !url.trim()}>
-            {stage === "looking" ? <Loader2 className="animate-spin" /> : <Search />}
-            {t("chapterFetchDialog.findImages")}
-          </Button>
-          {canRenderPages && (
+        <DialogBody>
+          <div className="flex items-center gap-2">
+            <Input
+              autoFocus
+              value={url}
+              placeholder={t("chapterFetchDialog.urlPlaceholder")}
+              disabled={busy}
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void readMarkup();
+              }}
+            />
+            {/* Secondary so the footer's Download stays the one primary action. */}
             <Button
-              variant="outline"
-              onClick={() => void openInWindow()}
+              variant="secondary"
+              onClick={() => void readMarkup()}
               disabled={busy || !url.trim()}
-              title={t("chapterFetchDialog.openPageHint")}
             >
-              <Globe />
-              {t("chapterFetchDialog.openPage")}
+              {stage === "looking" ? <Loader2 className="animate-spin" /> : <Search />}
+              {t("chapterFetchDialog.findImages")}
             </Button>
-          )}
-        </div>
+            {canRenderPages && (
+              <Button
+                variant="outline"
+                onClick={() => void openInWindow()}
+                disabled={busy || !url.trim()}
+                title={t("chapterFetchDialog.openPageHint")}
+              >
+                <Globe />
+                {t("chapterFetchDialog.openPage")}
+              </Button>
+            )}
+          </div>
 
-        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto border-t border-border p-4">
           {emptyResult && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
-              <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
-              <div>
-                <p className="font-medium">{t("chapterFetchDialog.noImagesTitle")}</p>
-                <p className="mt-0.5 text-muted-foreground">
-                  {canRenderPages ? (
-                    (() => {
-                      const [before, after] = t("chapterFetchDialog.jsBuiltHint").split(
-                        "{link}",
-                      );
-                      return (
-                        <>
-                          {before}
-                          <span className="font-medium text-foreground">
-                            {t("chapterFetchDialog.openPage")}
-                          </span>
-                          {after}
-                        </>
-                      );
-                    })()
-                  ) : (
-                    <>{t("chapterFetchDialog.jsBuiltNoWindow")}</>
-                  )}
-                </p>
-              </div>
-            </div>
+            <Callout tone="warning" title={t("chapterFetchDialog.noImagesTitle")}>
+              {canRenderPages ? (
+                (() => {
+                  const [before, after] = t("chapterFetchDialog.jsBuiltHint").split("{link}");
+                  return (
+                    <>
+                      {before}
+                      <span className="font-medium text-foreground">
+                        {t("chapterFetchDialog.openPage")}
+                      </span>
+                      {after}
+                    </>
+                  );
+                })()
+              ) : (
+                <>{t("chapterFetchDialog.jsBuiltNoWindow")}</>
+              )}
+            </Callout>
           )}
 
           {stage === "idle" && !emptyResult && (
@@ -269,83 +269,73 @@ export function ChapterFetchDialog({
           )}
 
           {candidates.length > 0 && (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-3">
-              {candidates.map((candidate, index) => (
-                <CandidateCard
-                  key={candidate.url}
-                  candidate={candidate}
-                  referer={referer}
-                  position={selectedUrls.indexOf(candidate.url) + 1}
-                  chosen={chosen.has(candidate.url)}
-                  onToggle={() => toggle(candidate.url)}
-                  index={index}
-                />
-              ))}
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+                  {t("chapterFetchDialog.selectionSummary", {
+                    count: candidates.length,
+                    chosen: selectedUrls.length,
+                  })}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => setChosen(new Set(candidates.map((c) => c.url)))}
+                >
+                  {t("chapterFetchDialog.allButton")}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => setChosen(new Set())}
+                >
+                  {t("chapterFetchDialog.noneButton")}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() =>
+                    setChosen(new Set(candidates.filter((c) => c.selected).map((c) => c.url)))
+                  }
+                >
+                  {t("chapterFetchDialog.resetButton")}
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-4">
+                {candidates.map((candidate, index) => (
+                  <CandidateCard
+                    key={candidate.url}
+                    candidate={candidate}
+                    referer={referer}
+                    position={selectedUrls.indexOf(candidate.url) + 1}
+                    chosen={chosen.has(candidate.url)}
+                    onToggle={() => toggle(candidate.url)}
+                    index={index}
+                  />
+                ))}
+              </div>
             </div>
           )}
-        </div>
+        </DialogBody>
 
-        <Separator />
-
-        <div className="flex items-center gap-3 px-4 py-3">
-          {candidates.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={busy}
-                onClick={() => setChosen(new Set(candidates.map((c) => c.url)))}
-              >
-                {t("chapterFetchDialog.allButton")}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={busy}
-                onClick={() => setChosen(new Set())}
-              >
-                {t("chapterFetchDialog.noneButton")}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={busy}
-                onClick={() =>
-                  setChosen(new Set(candidates.filter((c) => c.selected).map((c) => c.url)))
-                }
-              >
-                {t("chapterFetchDialog.resetButton")}
-              </Button>
-            </div>
-          )}
-
-          {error && (
-            <p className="min-w-0 flex-1 truncate text-xs text-destructive" title={error}>
-              {error}
-            </p>
-          )}
-
-          <div className="ml-auto flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">
-              {selectedUrls.length > 0 &&
-                t("chapterFetchDialog.pagesCount", { count: selectedUrls.length })}
-            </span>
-            <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-              {t("chapterFetchDialog.cancel")}
-            </Button>
-            <Button
-              onClick={() => void download()}
-              disabled={busy || selectedUrls.length === 0}
-            >
-              {stage === "downloading" ? (
-                <Loader2 className="animate-spin" />
-              ) : (
-                <Download />
-              )}
-              {t("chapterFetchDialog.download")}
-            </Button>
-          </div>
-        </div>
+        <DialogFooter error={error}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
+            {t("chapterFetchDialog.cancel")}
+          </Button>
+          <Button
+            onClick={() => void download()}
+            disabled={busy || selectedUrls.length === 0}
+          >
+            {stage === "downloading" ? <Loader2 className="animate-spin" /> : <Download />}
+            {selectedUrls.length > 0
+              ? t("chapterFetchDialog.downloadCount", { count: selectedUrls.length })
+              : t("chapterFetchDialog.download")}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -376,8 +366,8 @@ function CandidateCard({
       ref={ref as React.Ref<HTMLButtonElement>}
       onClick={onToggle}
       className={cn(
-        "group relative overflow-hidden rounded-md border-2 bg-card text-left transition-colors",
-        chosen ? "border-primary" : "border-border hover:border-muted-foreground/40",
+        "group relative overflow-hidden rounded-lg border border-border bg-card text-left transition-colors",
+        chosen ? "ring-2 ring-primary" : "hover:border-muted-foreground/40",
       )}
     >
       <div className="flex aspect-[2/3] items-center justify-center bg-muted/40">
@@ -390,17 +380,15 @@ function CandidateCard({
         )}
       </div>
 
-      <div className="flex items-center gap-1 px-1.5 py-1">
+      <div className="flex items-center gap-1.5 px-2.5 py-2">
         <span className="font-mono text-[10px] text-muted-foreground">
           {candidate.width}×{candidate.height}
         </span>
         {candidate.verdict === "spread" && (
-          <Badge className="text-[9px]">{t("chapterFetchDialog.spreadBadge")}</Badge>
+          <Badge>{t("chapterFetchDialog.spreadBadge")}</Badge>
         )}
         {candidate.verdict === "off-size" && (
-          <Badge variant="outline" className="text-[9px]">
-            {t("chapterFetchDialog.offSizeBadge")}
-          </Badge>
+          <Badge variant="outline">{t("chapterFetchDialog.offSizeBadge")}</Badge>
         )}
         {candidate.bytes > 0 && (
           <span className="ml-auto text-[10px] text-muted-foreground">

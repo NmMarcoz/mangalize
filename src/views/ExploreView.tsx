@@ -279,7 +279,7 @@ function MangaDexExplore({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card/60 px-4 py-2.5">
+      <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card/60 px-5 py-3">
         <h1 className="mr-2 text-sm font-semibold">{t("exploreView.title")}</h1>
         {sourcePicker}
         <Input
@@ -405,16 +405,16 @@ function ResultCard({
           <BookOpen className="size-5 text-muted-foreground" />
         )}
         {owned && (
-          <span className="absolute right-1 top-1 rounded-full bg-primary p-1">
+          <span className="absolute right-2 top-2 rounded-full bg-primary p-1">
             <Check className="size-2.5 text-primary-foreground" />
           </span>
         )}
       </div>
-      <div className="flex flex-col gap-0.5 p-2">
+      <div className="flex flex-col gap-1 px-3 pb-3 pt-2.5">
         <p className="truncate text-xs font-medium">
           {match.title_english ?? match.title_romaji ?? match.title_native}
         </p>
-        <p className="truncate text-[10px] text-muted-foreground">
+        <p className="truncate text-[11px] text-muted-foreground">
           {match.author ?? t("exploreView.unknownAuthor")}
           {match.year ? ` · ${match.year}` : ""}
         </p>
@@ -517,7 +517,7 @@ function RegisteredSourceExplore({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card/60 px-4 py-2.5">
+      <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card/60 px-5 py-3">
         <h1 className="mr-2 text-sm font-semibold">{t("exploreView.title")}</h1>
         <SourcePicker value={sourceId} sources={sources} onChange={onSourceChange} />
 
@@ -629,12 +629,12 @@ function SourceResultCard({
           <BookOpen className="size-5 text-muted-foreground" />
         )}
         {owned && (
-          <span className="absolute right-1 top-1 rounded-full bg-primary p-1">
+          <span className="absolute right-2 top-2 rounded-full bg-primary p-1">
             <Check className="size-2.5 text-primary-foreground" />
           </span>
         )}
       </div>
-      <div className="flex flex-col gap-0.5 p-2">
+      <div className="flex flex-col gap-1 px-3 pb-3 pt-2.5">
         <p className="truncate text-xs font-medium">{manga.title}</p>
       </div>
     </button>

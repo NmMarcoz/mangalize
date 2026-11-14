@@ -8,7 +8,6 @@ import {
   Upload,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -80,75 +79,72 @@ export function Toolbar({
   const t = useT();
   const pages = volumePageCount(volume);
   const spreads = volumeSpreadCount(volume);
+  const series = volume.metadata.series || t("toolbar.untitledVolume");
+  const title =
+    volume.metadata.series && volume.metadata.volume !== null
+      ? t("toolbar.title", { series, volume: volume.metadata.volume })
+      : series;
+  const meta = [
+    t("toolbar.chapters", { count: volume.chapters.length }),
+    t("toolbar.pages", { count: pages }),
+    ...(spreads > 0 ? [t("toolbar.spreads", { count: spreads })] : []),
+  ].join(" · ");
 
   return (
     <header className="flex shrink-0 flex-col border-b border-border bg-card/60">
       <div
         className={cn(
-          "flex gap-3 px-4 py-2.5",
+          "flex gap-3 px-4 py-3",
           // The title and the build controls together are wider than a phone,
           // and flex resolves that by squeezing the title to nothing. Stacking
           // costs a row and keeps both readable.
           isMobile ? "flex-col items-stretch" : "items-center",
         )}
       >
-        <div className={cn("flex items-center gap-3", isMobile && "min-w-0")}>
-        <Hint label={t("toolbar.backToLibrary")}>
-          <Button variant="ghost" size="icon" onClick={onBack}>
-            <ArrowLeft />
-          </Button>
-        </Hint>
+        <div className={cn("flex min-w-0 items-center gap-3", !isMobile && "flex-1")}>
+          <Hint label={t("toolbar.backToLibrary")}>
+            <Button variant="ghost" size="icon" onClick={onBack}>
+              <ArrowLeft />
+            </Button>
+          </Hint>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h1 className="truncate text-sm font-semibold">
-              {volume.metadata.series || t("toolbar.untitledVolume")}
-            </h1>
-            {!isMobile && (
-              <>
-                <Badge variant="outline">
-                  {t("toolbar.chapters", { count: volume.chapters.length })}
-                </Badge>
-                <Badge variant="outline">{t("toolbar.pages", { count: pages })}</Badge>
-                {spreads > 0 && <Badge>{t("toolbar.spreads", { count: spreads })}</Badge>}
-              </>
-            )}
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <h1 className="truncate text-sm font-semibold">{title}</h1>
+            {/* One quiet line rather than a row of badges: these are facts about
+                the volume, not things to act on. The folder path lives in the
+                open-folder button's tooltip, beside the action that changes it. */}
+            <p className="truncate text-[11px] text-muted-foreground">{meta}</p>
           </div>
-          <p
-            className="truncate text-[11px] text-muted-foreground"
-            data-selectable
-            title={volume.root}
-          >
-            {/* The folder is a desktop-sized path and nothing a phone can act
-                on, so there the counts take the line instead. */}
-            {isMobile
-              ? `${t("toolbar.chapters", { count: volume.chapters.length })} · ${t("toolbar.pages", { count: pages })}${spreads > 0 ? ` · ${t("toolbar.spreads", { count: spreads })}` : ""}`
-              : volume.root}
-          </p>
-        </div>
         </div>
 
         <div className={cn("flex items-center gap-2", isMobile && "justify-end")}>
           {canPickFolders && (
-          <Hint label={t("toolbar.reloadFolder")}>
-            <Button variant="ghost" size="icon" onClick={onRescan} disabled={scanning}>
-              {scanning ? (
-                <Loader2 className="animate-spin" />
-              ) : (
-                <RefreshCw />
-              )}
-            </Button>
-          </Hint>
-          )}
-          {canPickFolders && (
-            <Hint label={t("toolbar.openFolder")}>
-              <Button variant="ghost" size="icon" onClick={onOpenFolder}>
-                <FolderOpen />
-              </Button>
-            </Hint>
-          )}
+            <>
+              <div className="flex items-center gap-1">
+                <Hint label={t("toolbar.reloadFolder")}>
+                  <Button variant="ghost" size="icon" onClick={onRescan} disabled={scanning}>
+                    {scanning ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                  </Button>
+                </Hint>
+                <Hint
+                  label={
+                    <span className="flex max-w-80 flex-col gap-0.5">
+                      <span>{t("toolbar.openFolder")}</span>
+                      <span className="break-all font-mono text-[10px] opacity-70">
+                        {volume.root}
+                      </span>
+                    </span>
+                  }
+                >
+                  <Button variant="ghost" size="icon" onClick={onOpenFolder}>
+                    <FolderOpen />
+                  </Button>
+                </Hint>
+              </div>
 
-          <Separator orientation="vertical" className="mx-1 h-6" />
+              <Separator orientation="vertical" className="mx-1 h-6" />
+            </>
+          )}
 
           <Select value={format} onValueChange={(v) => onFormat(v as Format)}>
             <SelectTrigger className="w-36">
@@ -190,7 +186,7 @@ export function Toolbar({
         </div>
       </div>
 
-      <div className="flex items-center gap-4 border-t border-border/60 px-4 py-1.5">
+      <div className="flex items-center gap-4 border-t border-border/60 px-5 py-2">
         <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
           <Switch checked={showExcluded} onCheckedChange={onShowExcluded} />
           {t("toolbar.showExcluded")}

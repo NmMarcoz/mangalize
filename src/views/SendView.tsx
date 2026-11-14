@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Check, ExternalLink, Loader2, Send, TriangleAlert } from "lucide-react";
+import { Check, ExternalLink, Loader2, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -109,7 +110,7 @@ export function SendView({ onSaved, onError }: SendViewProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-4 py-2.5">
+      <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-5 py-3">
         <h1 className="flex-1 text-sm font-semibold">{t("sendView.title")}</h1>
         <Button
           variant="outline"
@@ -137,32 +138,28 @@ export function SendView({ onSaved, onError }: SendViewProps) {
             <Loader2 className="size-3.5 animate-spin" /> {t("sendView.loading")}
           </div>
         ) : (
-          <div className="mx-auto flex max-w-2xl flex-col gap-6 p-6">
+          <div className="mx-auto flex max-w-2xl flex-col gap-7 px-6 py-8">
             {/* The failure nothing can detect, stated before it happens. */}
-            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2.5 text-xs">
-              <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
-              <div>
-                <p className="font-medium">{t("sendView.approvalWarningTitle")}</p>
-                <p className="mt-0.5 leading-relaxed text-muted-foreground">
-                  {t("sendView.approvedBefore")}{" "}
-                  <span className="text-foreground">
-                    {t("sendView.approvedEmphasis")}
-                  </span>{" "}
-                  {t("sendView.approvedAfter")}
-                </p>
-                <a
-                  href="https://www.amazon.com/hz/mycd/digital-console/alldevices"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
-                >
-                  <ExternalLink className="size-3" />
-                  {t("sendView.manageDevicesLink")}
-                </a>
-              </div>
-            </div>
+            <Callout tone="warning" title={t("sendView.approvalWarningTitle")}>
+              <p>
+                {t("sendView.approvedBefore")}{" "}
+                <span className="text-foreground">
+                  {t("sendView.approvedEmphasis")}
+                </span>{" "}
+                {t("sendView.approvedAfter")}
+              </p>
+              <a
+                href="https://www.amazon.com/hz/mycd/digital-console/alldevices"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+              >
+                <ExternalLink className="size-3" />
+                {t("sendView.manageDevicesLink")}
+              </a>
+            </Callout>
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
               <Label htmlFor="kindle">{t("sendView.deviceAddress")}</Label>
               <Input
                 id="kindle"
@@ -175,7 +172,7 @@ export function SendView({ onSaved, onError }: SendViewProps) {
               </p>
             </div>
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
               <Label htmlFor="from">{t("sendView.senderAddress")}</Label>
               <Input
                 id="from"
@@ -190,7 +187,7 @@ export function SendView({ onSaved, onError }: SendViewProps) {
 
             <Separator />
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
               <Label>{t("sendView.mailProvider")}</Label>
               <Select value={preset?.label ?? ""} onValueChange={applyPreset}>
                 <SelectTrigger className="w-60">
@@ -209,8 +206,8 @@ export function SendView({ onSaved, onError }: SendViewProps) {
               )}
             </div>
 
-            <div className="flex gap-2">
-              <div className="flex flex-1 flex-col gap-1.5">
+            <div className="flex gap-3">
+              <div className="flex flex-1 flex-col gap-2">
                 <Label htmlFor="host">{t("sendView.server")}</Label>
                 <Input
                   id="host"
@@ -219,7 +216,7 @@ export function SendView({ onSaved, onError }: SendViewProps) {
                   onChange={(e) => patch({ host: e.target.value })}
                 />
               </div>
-              <div className="flex w-24 flex-col gap-1.5">
+              <div className="flex w-24 flex-col gap-2">
                 <Label htmlFor="port">{t("sendView.port")}</Label>
                 <Input
                   id="port"
@@ -228,7 +225,7 @@ export function SendView({ onSaved, onError }: SendViewProps) {
                   onChange={(e) => patch({ port: Number(e.target.value) || 0 })}
                 />
               </div>
-              <div className="flex w-40 flex-col gap-1.5">
+              <div className="flex w-40 flex-col gap-2">
                 <Label htmlFor="security">{t("sendView.encryption")}</Label>
                 <Select
                   value={config.security}
@@ -248,39 +245,40 @@ export function SendView({ onSaved, onError }: SendViewProps) {
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <div className="flex flex-1 flex-col gap-1.5">
-                <Label htmlFor="username">{t("sendView.username")}</Label>
-                <Input
-                  id="username"
-                  value={config.username}
-                  placeholder={t("sendView.exampleAddress")}
-                  onChange={(e) => patch({ username: e.target.value })}
-                />
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-3">
+                <div className="flex flex-1 flex-col gap-2">
+                  <Label htmlFor="username">{t("sendView.username")}</Label>
+                  <Input
+                    id="username"
+                    value={config.username}
+                    placeholder={t("sendView.exampleAddress")}
+                    onChange={(e) => patch({ username: e.target.value })}
+                  />
+                </div>
+                <div className="flex flex-1 flex-col gap-2">
+                  <Label htmlFor="password">{t("sendView.password")}</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password ?? ""}
+                    placeholder={
+                      status?.has_password
+                        ? t("sendView.passwordStored")
+                        : t("sendView.passwordPlaceholder")
+                    }
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="flex flex-1 flex-col gap-1.5">
-                <Label htmlFor="password">{t("sendView.password")}</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password ?? ""}
-                  placeholder={
-                    status?.has_password
-                      ? t("sendView.passwordStored")
-                      : t("sendView.passwordPlaceholder")
-                  }
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                {t("sendView.passwordHint", {
+                  keychain: navigator.platform.startsWith("Win")
+                    ? t("sendView.windowsCredentialManager")
+                    : t("sendView.macKeychain"),
+                })}
+              </p>
             </div>
-
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
-              {t("sendView.passwordHint", {
-                keychain: navigator.platform.startsWith("Win")
-                  ? t("sendView.windowsCredentialManager")
-                  : t("sendView.macKeychain"),
-              })}
-            </p>
 
             {tested && (
               <p className="flex items-center gap-1.5 text-xs text-primary">
