@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Check, Loader2 } from "lucide-react";
 
 import { RemoteImage } from "@/components/RemoteImage";
-import { Label } from "@/components/ui/label";
+import { Chip } from "@/components/ui/chip";
 import type { SeriesMatch } from "@/lib/api";
 import type { SeriesDetailState } from "@/hooks/useSeriesDetail";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,8 @@ interface SeriesDetailProps {
   /** Slot for whatever the surrounding dialog wants to say about this series. */
   children?: ReactNode;
 }
+
+const OVERLINE = "text-xs font-medium uppercase tracking-wide text-muted-foreground";
 
 /**
  * The right-hand pane of a series lookup: which title to use, which volume
@@ -46,10 +48,10 @@ export function SeriesDetail({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-2">
-        <Label>Title to use</Label>
-        <div className="flex flex-wrap gap-1.5">
+        <p className={OVERLINE}>Title to use</p>
+        <div role="radiogroup" aria-label="Title to use" className="flex flex-wrap gap-1.5">
           {(
             [
               ["english", selected.title_english],
@@ -58,19 +60,14 @@ export function SeriesDetail({
             ] as const
           ).map(([choice, value]) =>
             value ? (
-              <button
+              <Chip
                 key={choice}
+                selected={titleChoice === choice}
                 onClick={() => onTitleChoice(choice)}
-                className={cn(
-                  "rounded-md border px-2.5 py-1.5 text-xs transition-colors",
-                  titleChoice === choice
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border hover:bg-accent",
-                )}
               >
                 {value}
-                <span className="ml-1.5 opacity-50">{choice}</span>
-              </button>
+                <span className="opacity-50">{choice}</span>
+              </Chip>
             ) : null,
           )}
         </div>
@@ -86,17 +83,17 @@ export function SeriesDetail({
 
           {detail.covers.length > 0 && (
             <section className="flex flex-col gap-2">
-              <Label>Cover ({detail.covers.length} volumes)</Label>
-              <div className="grid grid-cols-6 gap-2">
+              <p className={OVERLINE}>Cover ({detail.covers.length} volumes)</p>
+              <div className="grid grid-cols-6 gap-3">
                 {detail.covers.map((cover) => (
                   <button
                     key={cover.url}
                     onClick={() => onChooseCover(cover.url)}
                     className={cn(
-                      "relative overflow-hidden rounded border-2 transition-colors",
+                      "relative overflow-hidden rounded-md transition-shadow",
                       chosenCover === cover.url
-                        ? "border-primary"
-                        : "border-transparent hover:border-border",
+                        ? "ring-2 ring-primary"
+                        : "ring-1 ring-transparent hover:ring-border",
                     )}
                   >
                     <RemoteImage
@@ -109,7 +106,7 @@ export function SeriesDetail({
                       {cover.volume ? `v${cover.volume}` : "—"}
                     </span>
                     {chosenCover === cover.url && (
-                      <span className="absolute right-0.5 top-0.5 rounded-full bg-primary p-0.5">
+                      <span className="absolute right-1 top-1 rounded-full bg-primary p-0.5">
                         <Check className="size-2.5 text-primary-foreground" />
                       </span>
                     )}
@@ -122,8 +119,8 @@ export function SeriesDetail({
       )}
 
       {selected.description && (
-        <section className="flex flex-col gap-1.5">
-          <Label>Description</Label>
+        <section className="flex flex-col gap-2">
+          <p className={OVERLINE}>Description</p>
           <p className="line-clamp-4 text-xs leading-relaxed text-muted-foreground">
             {selected.description}
           </p>

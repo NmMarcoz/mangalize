@@ -17,7 +17,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useThumbnail } from "@/hooks/useThumbnail";
 import {
   effectiveCover,
-  fileName as baseName,
   type Direction,
   type Metadata,
   type Volume,
@@ -56,7 +55,7 @@ export function MetadataPanel({
   const [searchOpen, setSearchOpen] = useState(false);
 
   return (
-    <aside className="scrollbar-thin flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l border-border bg-card/40 p-4">
+    <aside className="scrollbar-thin flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l border-border bg-card/40 p-5">
       <Button variant="secondary" size="sm" onClick={onFetchMetadata}>
         <Sparkles /> {t("metadataPanel.fetchOnline")}
       </Button>
@@ -91,11 +90,13 @@ export function MetadataPanel({
             {t("coverSearch.search")}
           </Button>
         </div>
-        <p className="text-[11px] leading-snug text-muted-foreground">
-          {volume.cover
-            ? baseName(volume.cover)
-            : t("metadataPanel.usingPageOne")}
-        </p>
+        {/* A chosen cover is already on screen above; only the fallback needs
+            saying, because it is not obvious the first page stands in. */}
+        {!volume.cover && (
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            {t("metadataPanel.usingPageOne")}
+          </p>
+        )}
       </section>
 
       <Separator />
@@ -208,7 +209,7 @@ export function MetadataPanel({
 function CoverPreview({ path }: { path: string | null }) {
   if (!path) {
     return (
-      <div className="flex aspect-[10/14] w-full items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground">
+      <div className="flex h-[300px] w-full items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground">
         <Star className="size-6 opacity-40" />
       </div>
     );
@@ -221,7 +222,7 @@ function CoverImage({ path }: { path: string }) {
   return (
     <div
       ref={ref}
-      className="flex aspect-[10/14] w-full items-center justify-center overflow-hidden rounded-lg border border-border bg-black/30"
+      className="flex h-[300px] w-full items-center justify-center overflow-hidden rounded-lg border border-border bg-black/30"
     >
       {url && (
         <img

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { BookOpen, Check, Clock, Loader2, RotateCcw, Trash2 } from "lucide-react";
+import { BookOpen, Clock, Loader2, RotateCcw, Trash2 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -81,7 +80,7 @@ export function HistoryView({ onRead, onOpenSeries, onError }: HistoryViewProps)
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-4 py-2.5">
+      <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-5 py-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-sm font-semibold">{t("historyView.title")}</h1>
           <p className="truncate text-[11px] text-muted-foreground">
@@ -113,7 +112,7 @@ export function HistoryView({ onRead, onOpenSeries, onError }: HistoryViewProps)
             </p>
           </div>
         ) : (
-          <div className="mx-auto flex max-w-3xl flex-col gap-1.5">
+          <div className="mx-auto flex max-w-3xl flex-col gap-2">
             {entries.map((entry) => (
               <Row
                 key={`${entry.series_id}-${entry.chapter}-${entry.opened_at}`}
@@ -171,9 +170,9 @@ function Row({
   return (
     <div
       ref={ref}
-      className="group flex items-center gap-3 rounded-lg border border-border bg-card p-2.5"
+      className="group flex items-center gap-4 rounded-lg border border-border bg-card px-4 py-3"
     >
-      <div className="flex h-14 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted/40">
+      <div className="flex h-[62px] w-[44px] shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted/40">
         {url ? (
           <img src={url} alt="" className="h-full w-full object-cover" />
         ) : (
@@ -181,7 +180,7 @@ function Row({
         )}
       </div>
 
-      <button onClick={onOpenSeries} className="min-w-0 flex-1 text-left">
+      <button onClick={onOpenSeries} className="flex min-w-0 flex-1 flex-col gap-1 text-left">
         <p className="truncate text-xs font-medium">{entry.series_title}</p>
         <p className="truncate text-[11px] text-muted-foreground">
           {t("historyView.entrySubtitle", {
@@ -196,7 +195,7 @@ function Row({
           })}
         </p>
         {!entry.finished && (
-          <div className="mt-1 h-0.5 w-full max-w-48 rounded-full bg-muted">
+          <div className="mt-0.5 h-0.5 w-full max-w-48 rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-primary/70"
               style={{ width: `${Math.min(100, progress)}%` }}
@@ -204,13 +203,6 @@ function Row({
           </div>
         )}
       </button>
-
-      {entry.finished && (
-        <Badge variant="outline" className="shrink-0">
-          <Check className="size-2.5" />
-          {t("historyView.read")}
-        </Badge>
-      )}
 
       <Hint label={t("historyView.forgetHint")}>
         <Button

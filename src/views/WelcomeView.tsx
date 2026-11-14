@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { BookOpen, FolderOpen, Loader2 } from "lucide-react";
+import { FolderOpen, Loader2 } from "lucide-react";
 
+import { Wordmark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useT } from "@/lib/i18n";
-import { canPickFolders } from "@/lib/platform";
+import { canPickFolders, isMobile } from "@/lib/platform";
 import {
   getSettings,
   setSettings,
@@ -65,13 +66,15 @@ export function WelcomeView({ onDone, onError }: WelcomeViewProps) {
   return (
     <div className="flex h-full items-center justify-center p-8">
       <div className="w-full max-w-lg">
-        <BookOpen className="size-8 text-primary" />
-        <h1 className="mt-4 text-lg font-semibold">{t("welcomeView.title")}</h1>
-        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+        {/* The wordmark at full size, plus tagline, is wider than a phone can
+            hold beside its padding, so it steps down there. */}
+        <Wordmark size={isMobile ? 96 : 120} tagline />
+        <h1 className="mt-8 text-lg font-semibold">{t("welcomeView.title")}</h1>
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
           {canPickFolders ? t("welcomeView.introPicker") : t("welcomeView.introNoPicker")}
         </p>
 
-        <div className="mt-5 flex flex-col gap-1.5">
+        <div className="mt-7 flex flex-col gap-2">
           <Label>{t("welcomeView.buildFolder")}</Label>
           <div className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate rounded-md border border-border bg-background px-3 py-2 font-mono text-[11px]">
@@ -89,7 +92,7 @@ export function WelcomeView({ onDone, onError }: WelcomeViewProps) {
           </p>
         </div>
 
-        <div className="mt-6 flex items-center gap-2">
+        <div className="mt-7 flex items-center gap-2">
           <Button onClick={() => void confirm(folder)} disabled={!folder || saving}>
             {saving && <Loader2 className="animate-spin" />}
             {canPickFolders ? t("welcomeView.useThisFolder") : t("welcomeView.getStarted")}

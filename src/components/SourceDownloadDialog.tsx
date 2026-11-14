@@ -2,10 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useT } from "@/lib/i18n";
@@ -68,32 +72,27 @@ export function SourceDownloadDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
-        <div className="border-b border-border px-4 py-3">
+        <DialogHeader>
           <DialogTitle>
             {t("sourceDownloadDialog.title", { count: chapters.length, sourceName })}
           </DialogTitle>
           <DialogDescription>{t("sourceDownloadDialog.description")}</DialogDescription>
-        </div>
+        </DialogHeader>
 
-        <div className="min-h-0 flex-1 px-4 py-3">
-          <p className="text-xs text-muted-foreground">
+        <DialogBody>
+          <p className="text-sm font-medium">
             {chapters.length === 1
               ? t("sourceDownloadDialog.singleChapter", { number: chapters[0] })
               : t("sourceDownloadDialog.rangeChapters", {
                   first: chapters[0],
                   last: chapters[chapters.length - 1],
-                })}{" "}
-            {t("sourceDownloadDialog.backgroundHint")}
+                })}
           </p>
 
-          {error && (
-            <p className="mt-2 text-xs text-destructive" data-selectable>
-              {error}
-            </p>
-          )}
-        </div>
+          <Callout tone="info">{t("sourceDownloadDialog.backgroundHint")}</Callout>
+        </DialogBody>
 
-        <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
+        <DialogFooter error={error}>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             {t("sourceDownloadDialog.cancel")}
           </Button>
@@ -101,7 +100,7 @@ export function SourceDownloadDialog({
             {starting ? <Loader2 className="animate-spin" /> : <Download />}
             {t("sourceDownloadDialog.download")}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

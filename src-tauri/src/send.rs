@@ -17,7 +17,7 @@ use crate::util::blocking;
 
 /// Keychain coordinates. The service matches the bundle identifier so the entry
 /// is recognisable in Keychain Access or Credential Manager.
-const SERVICE: &str = "dev.Leaf.app";
+const SERVICE: &str = "dev.leaf";
 const ACCOUNT: &str = "smtp-password";
 
 /// The delivery settings plus whether a password is stored, which is all the UI

@@ -6,11 +6,13 @@ import { SeriesSearch } from "@/components/SeriesSearch";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
 import { useSeriesDetail } from "@/hooks/useSeriesDetail";
 import type { SeriesMatch } from "@/lib/api";
 import { libraryAddSeries, type Series } from "@/lib/library";
@@ -84,15 +86,17 @@ export function AddSeriesDialog({ open, onOpenChange, onAdded }: AddSeriesDialog
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85dvh] max-w-4xl">
-        <div className="border-b border-border px-4 py-3">
+        <DialogHeader>
           <DialogTitle>Add a series</DialogTitle>
           <DialogDescription>
             Searches MangaDex, falling back to Kitsu. Adding also pulls the
             published volume layout, so the library can tell you what is missing.
           </DialogDescription>
-        </div>
+        </DialogHeader>
 
-        <div className="flex min-h-0 flex-1">
+        {/* A fixed height, so the dialog does not jump about as results and
+            covers arrive; `flex-auto` still lets it shrink under max-h. */}
+        <DialogBody className="h-[480px] flex-auto flex-row gap-0 overflow-hidden border-t border-border p-0">
           <SeriesSearch
             initialQuery=""
             session={session}
@@ -101,7 +105,7 @@ export function AddSeriesDialog({ open, onOpenChange, onAdded }: AddSeriesDialog
             onError={setError}
           />
 
-          <div className="scrollbar-thin min-w-0 flex-1 overflow-y-auto p-4">
+          <div className="scrollbar-thin min-w-0 flex-1 overflow-y-auto p-6">
             <SeriesDetail
               selected={selected}
               detail={detail}
@@ -112,33 +116,23 @@ export function AddSeriesDialog({ open, onOpenChange, onAdded }: AddSeriesDialog
             >
               {detail.layout.length > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  {detail.layout.length} published volumes,{" "}
-                  {detail.layout.reduce((n, v) => n + v.chapters.length, 0)}{" "}
-                  chapters.
+                  {detail.layout.length} published volumes ·{" "}
+                  {detail.layout.reduce((n, v) => n + v.chapters.length, 0)} chapters
                 </p>
               )}
             </SeriesDetail>
           </div>
-        </div>
+        </DialogBody>
 
-        <Separator />
-
-        <div className="flex items-center gap-3 px-4 py-3">
-          {error && (
-            <p className="flex-1 truncate text-xs text-destructive" title={error}>
-              {error}
-            </p>
-          )}
-          <div className="ml-auto flex gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void add()} disabled={!selected || adding}>
-              {adding ? <Loader2 className="animate-spin" /> : <Plus />}
-              Add to library
-            </Button>
-          </div>
-        </div>
+        <DialogFooter error={error}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => void add()} disabled={!selected || adding}>
+            {adding ? <Loader2 className="animate-spin" /> : <Plus />}
+            Add to library
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

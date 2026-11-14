@@ -42,7 +42,7 @@ export function UpdateBanner({
   return (
     <div
       className={cn(
-        "absolute left-1/2 z-50 flex w-[min(32rem,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 shadow-lg",
+        "absolute left-1/2 z-50 flex w-[min(32rem,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-xl border border-border bg-popover px-4 py-3 text-popover-foreground shadow-2xl",
         // A phone's navigation lives at the bottom of the window, and this was
         // landing on top of it — the tabs stopped responding while an update
         // was on offer, which reads as the app being broken.
@@ -62,7 +62,7 @@ export function UpdateBanner({
             {t("updateBanner.restartNow")}
           </Button>
           <Button variant="ghost" size="icon-sm" onClick={onDismiss}>
-            <X className="size-3" />
+            <X />
           </Button>
         </>
       ) : state.stage === "downloading" ? (
@@ -114,7 +114,7 @@ export function UpdateBanner({
             onClick={onDismiss}
             title={t("updateBanner.notNow")}
           >
-            <X className="size-3" />
+            <X />
           </Button>
         </>
       )}

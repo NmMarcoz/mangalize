@@ -71,8 +71,8 @@ export function SeriesSearch({
   }, [session]);
 
   return (
-    <div className="flex w-80 shrink-0 flex-col border-r border-border">
-      <div className="flex items-center gap-2 p-3">
+    <div className="flex w-[336px] shrink-0 flex-col gap-3 border-r border-border p-4">
+      <div className="flex items-center gap-2">
         <Input
           autoFocus
           value={query}
@@ -87,37 +87,39 @@ export function SeriesSearch({
         </Button>
       </div>
 
-      <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto border-t border-border">
+      {/* The rings on a selected row would be clipped by the scroller's edge
+          without the slight inset. */}
+      <div className="scrollbar-thin -mx-1 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1 py-0.5">
         {results === null && !searching && (
-          <p className="p-4 text-xs text-muted-foreground">Press Enter to search.</p>
+          <p className="py-2 text-xs text-muted-foreground">Press Enter to search.</p>
         )}
         {results?.map((match) => (
           <button
             key={`${match.source}-${match.id}`}
             onClick={() => onSelect(match)}
             className={cn(
-              "flex w-full gap-2.5 border-b border-border/50 p-2.5 text-left transition-colors",
-              selected?.id === match.id ? "bg-primary/10" : "hover:bg-accent",
+              "flex w-full shrink-0 items-center gap-3 rounded-lg p-2.5 text-left transition-colors",
+              selected?.id === match.id ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-accent",
             )}
           >
             {match.thumbnail_url ? (
               <RemoteImage
                 url={match.thumbnail_url}
                 max={96}
-                className="h-16 w-12 shrink-0 rounded"
+                className="h-16 w-11 shrink-0 rounded"
               />
             ) : (
-              <div className="h-16 w-12 shrink-0 rounded bg-muted" />
+              <div className="h-16 w-11 shrink-0 rounded bg-muted" />
             )}
-            <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <p className="truncate text-xs font-medium">
                 {match.title_english ?? match.title_romaji ?? match.title_native}
               </p>
-              <p className="truncate text-[10px] text-muted-foreground">
+              <p className="truncate text-[11px] text-muted-foreground">
                 {match.author ?? "Unknown author"}
                 {match.year ? ` · ${match.year}` : ""}
               </p>
-              <Badge variant="outline" className="mt-1">
+              <Badge variant="outline" className="mt-1 self-start">
                 {sourceLabel(match.source)}
               </Badge>
             </div>

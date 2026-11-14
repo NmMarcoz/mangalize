@@ -63,7 +63,7 @@ pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
     let builder = builder.setup(|app, api: PluginApi<R, ()>| {
         // Resolved by reflection as `<identifier>.<class>`, so this has to
         // match the package `SharePlugin.kt` declares.
-        let handle = api.register_android_plugin("dev.Leaf.app", "SharePlugin")?;
+        let handle = api.register_android_plugin("dev.leaf", "SharePlugin")?;
         app.manage(Share(handle));
         Ok(())
     });

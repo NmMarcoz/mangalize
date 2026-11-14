@@ -3,8 +3,11 @@ import { Loader2, Link } from "lucide-react";
 
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -59,22 +62,27 @@ export function CoverSearchDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
-        <div className="border-b border-border px-4 py-3">
+        <DialogHeader>
           <DialogTitle>{t("coverSearch.title")}</DialogTitle>
           <DialogDescription>{t("coverSearch.description")}</DialogDescription>
-        </div>
+        </DialogHeader>
 
-        {/* Instructions */}
-        <div className="px-4 pt-3 text-xs text-muted-foreground">
-          <ol className="list-decimal space-y-1 pl-4">
-            <li>{t("coverSearch.step1")}</li>
-            <li>{t("coverSearch.step2")}</li>
-            <li>{t("coverSearch.step3")}</li>
+        <DialogBody>
+          <ol className="flex flex-col gap-2.5">
+            {(["coverSearch.step1", "coverSearch.step2", "coverSearch.step3"] as const).map(
+              (key, i) => (
+                <li key={key} className="flex items-start gap-2.5">
+                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium text-muted-foreground">
+                    {i + 1}
+                  </span>
+                  <span className="pt-0.5 text-xs leading-relaxed text-muted-foreground">
+                    {t(key)}
+                  </span>
+                </li>
+              ),
+            )}
           </ol>
-        </div>
 
-        {/* URL input */}
-        <div className="flex gap-2 px-4 pt-2">
           <Input
             value={imageUrl}
             onChange={(e) => setImageUrl(e.target.value)}
@@ -85,29 +93,17 @@ export function CoverSearchDialog({
             disabled={downloading}
             autoFocus
           />
-          <Button
-            variant="secondary"
-            size="icon"
-            onClick={handleImport}
-            disabled={!imageUrl.trim() || downloading}
-          >
-            {downloading ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Link className="size-4" />
-            )}
-          </Button>
-        </div>
+        </DialogBody>
 
-        {error && (
-          <p className="px-4 text-xs text-destructive">{error}</p>
-        )}
-
-        <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
+        <DialogFooter error={error}>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             {t("coverSearch.cancel")}
           </Button>
-        </div>
+          <Button onClick={handleImport} disabled={!imageUrl.trim() || downloading}>
+            {downloading ? <Loader2 className="animate-spin" /> : <Link />}
+            {t("coverSearch.import")}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -1,4 +1,4 @@
-package dev.leaf.app
+package dev.leaf
 
 import android.app.Activity
 import android.content.Intent

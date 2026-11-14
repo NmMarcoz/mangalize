@@ -30,6 +30,8 @@ const dict: PartialDictionary = {
     "batchDownloadDialog.failureLine": "Chapter {number}: {error}",
     "batchDownloadDialog.cancel": "Cancel",
     "batchDownloadDialog.download": "Download {count}",
+    "batchDownloadDialog.patternLabel": "URL pattern",
+    "batchDownloadDialog.backgroundHint": "Runs in the background — you can keep reading.",
   },
   "pt-BR": {
     "batchDownloadDialog.title": "Baixar capítulos faltando",
@@ -60,6 +62,8 @@ const dict: PartialDictionary = {
     "batchDownloadDialog.failureLine": "Capítulo {number}: {error}",
     "batchDownloadDialog.cancel": "Cancelar",
     "batchDownloadDialog.download": "Baixar {count}",
+    "batchDownloadDialog.patternLabel": "Padrão da URL",
+    "batchDownloadDialog.backgroundHint": "Roda em segundo plano — você pode continuar lendo.",
   },
 };
 

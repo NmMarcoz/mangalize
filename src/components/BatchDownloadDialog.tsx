@@ -1,24 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import {
-  AlertTriangle,
-  Check,
-  Download,
-  Loader2,
-  Search,
-} from "lucide-react";
+import { Download, Loader2, Search } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 import { useT } from "@/lib/i18n";
 import {
   downloadBatch,
@@ -120,31 +117,36 @@ export function BatchDownloadDialog({
   return (
     <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <DialogContent className="max-h-[85dvh] max-w-2xl">
-        <div className="border-b border-border px-4 py-3">
+        <DialogHeader>
           <DialogTitle>{t("batchDownloadDialog.title")}</DialogTitle>
           <DialogDescription>
             {t("batchDownloadDialog.description", { count: missing.length })}
           </DialogDescription>
-        </div>
+        </DialogHeader>
 
-        <div className="flex items-center gap-2 px-4 py-3">
-          <Input
-            autoFocus
-            value={url}
-            placeholder={t("batchDownloadDialog.urlPlaceholder")}
-            disabled={busy}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void findChapters();
-            }}
-          />
-          <Button onClick={() => void findChapters()} disabled={busy || !url.trim()}>
-            {stage === "planning" ? <Loader2 className="animate-spin" /> : <Search />}
-            {t("batchDownloadDialog.findChapters")}
-          </Button>
-        </div>
+        <DialogBody>
+          <div className="flex items-center gap-2">
+            <Input
+              autoFocus
+              value={url}
+              placeholder={t("batchDownloadDialog.urlPlaceholder")}
+              disabled={busy}
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void findChapters();
+              }}
+            />
+            {/* Secondary so the footer's Download stays the one primary action. */}
+            <Button
+              variant="secondary"
+              onClick={() => void findChapters()}
+              disabled={busy || !url.trim()}
+            >
+              {stage === "planning" ? <Loader2 className="animate-spin" /> : <Search />}
+              {t("batchDownloadDialog.findChapters")}
+            </Button>
+          </div>
 
-        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto border-t border-border px-4 py-3">
           {stage === "idle" && !error && (
             <p className="text-xs text-muted-foreground">
               {t("batchDownloadDialog.missing", {
@@ -161,73 +163,73 @@ export function BatchDownloadDialog({
           )}
 
           {plan && stage !== "planning" && (
-            <div className="flex flex-col gap-3">
-              {plan.pattern && (
-                <p className="truncate font-mono text-[11px] text-muted-foreground">
-                  {plan.pattern}
-                </p>
-              )}
-
+            <>
               {plan.items.length === 0 ? (
-                <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
-                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
-                  <div>
-                    <p className="font-medium">
-                      {t("batchDownloadDialog.noneReachedTitle")}
-                    </p>
-                    <p className="mt-0.5 text-muted-foreground">
-                      {t("batchDownloadDialog.noneReachedDetail")}
-                    </p>
-                  </div>
-                </div>
+                <Callout tone="warning" title={t("batchDownloadDialog.noneReachedTitle")}>
+                  {t("batchDownloadDialog.noneReachedDetail")}
+                </Callout>
               ) : (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge>
-                    <Check className="size-2.5" />
-                    {t("batchDownloadDialog.chaptersFound", { count: plan.items.length })}
-                  </Badge>
-                  <span className="text-[11px] text-muted-foreground">
-                    {t("batchDownloadDialog.foundBreakdown", {
-                      linked: plan.items.filter((i) => i.found === "linked").length,
-                      guessed: plan.items.filter((i) => i.found === "guessed").length,
-                    })}
-                  </span>
-                </div>
-              )}
-
-              {plan.unresolved.length > 0 && (
-                <p className="text-[11px] text-muted-foreground">
-                  {t("batchDownloadDialog.unresolvedHint", {
-                    summary: summariseRuns(plan.unresolved),
+                <Callout
+                  tone="success"
+                  title={t("batchDownloadDialog.chaptersFound", { count: plan.items.length })}
+                >
+                  {t("batchDownloadDialog.foundBreakdown", {
+                    linked: plan.items.filter((i) => i.found === "linked").length,
+                    guessed: plan.items.filter((i) => i.found === "guessed").length,
                   })}
-                </p>
+                </Callout>
               )}
 
-              {plan.items.length > 0 && (
-                <div className="max-h-48 overflow-y-auto rounded-md border border-border">
-                  {plan.items.map((item) => (
-                    <div
-                      key={item.number}
-                      className="flex items-center gap-2 border-b border-border/50 px-2.5 py-1 text-[11px] last:border-b-0"
-                    >
-                      <span className="w-12 shrink-0 font-mono">{item.number}</span>
-                      <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                        {item.url}
-                      </span>
-                      {item.found === "guessed" && (
-                        <Badge variant="outline" className="text-[9px]">
-                          {t("batchDownloadDialog.patternBadge")}
-                        </Badge>
-                      )}
-                    </div>
-                  ))}
+              {plan.pattern && (
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {t("batchDownloadDialog.patternLabel")}
+                  </p>
+                  <p
+                    className="truncate rounded-md bg-muted px-3 py-2 font-mono text-[11px]"
+                    title={plan.pattern}
+                  >
+                    {plan.pattern}
+                  </p>
                 </div>
               )}
-            </div>
+
+              {(plan.items.length > 0 || plan.unresolved.length > 0) && (
+                <div className="flex flex-col gap-2">
+                  {plan.items.length > 0 && (
+                    <div className="max-h-56 overflow-y-auto rounded-lg border border-border">
+                      {plan.items.map((item) => (
+                        <div
+                          key={item.number}
+                          className="flex items-center gap-3 border-b border-border px-3.5 py-2.5 text-xs last:border-b-0"
+                        >
+                          <span className="w-8 shrink-0 font-mono">{item.number}</span>
+                          <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                            {item.url}
+                          </span>
+                          {item.found === "guessed" && (
+                            <Badge variant="outline">
+                              {t("batchDownloadDialog.patternBadge")}
+                            </Badge>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {plan.unresolved.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      {t("batchDownloadDialog.unresolvedHint", {
+                        summary: summariseRuns(plan.unresolved),
+                      })}
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
           {running && progress && (
-            <div className="mt-3 flex flex-col gap-2">
+            <div className="flex flex-col gap-2">
               <div className="flex items-center gap-3">
                 <Progress
                   value={(progress.index / Math.max(1, progress.total)) * 100}
@@ -255,7 +257,7 @@ export function BatchDownloadDialog({
           )}
 
           {report && (
-            <div className="mt-3 flex flex-col gap-2">
+            <div className="flex flex-col gap-2">
               <p className="text-xs font-medium">
                 {report.cancelled ? `${t("batchDownloadDialog.stopped")} ` : ""}
                 {t("batchDownloadDialog.chaptersDownloaded", {
@@ -279,33 +281,23 @@ export function BatchDownloadDialog({
               ))}
             </div>
           )}
-        </div>
+        </DialogBody>
 
-        <Separator />
+        <DialogFooter error={error} hint={t("batchDownloadDialog.backgroundHint")}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
+            {t("batchDownloadDialog.cancel")}
+          </Button>
 
-        <div className="flex items-center gap-3 px-4 py-3">
-          {error && (
-            <p className="min-w-0 flex-1 truncate text-xs text-destructive" title={error}>
-              {error}
-            </p>
-          )}
-
-          <div className="ml-auto flex gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-              {t("batchDownloadDialog.cancel")}
+          {stage !== "done" && (
+            <Button
+              onClick={() => void run()}
+              disabled={busy || !plan || plan.items.length === 0}
+            >
+              {running ? <Loader2 className="animate-spin" /> : <Download />}
+              {t("batchDownloadDialog.download", { count: plan?.items.length ?? 0 })}
             </Button>
-
-            {stage !== "done" && (
-              <Button
-                onClick={() => void run()}
-                disabled={busy || !plan || plan.items.length === 0}
-              >
-                {running ? <Loader2 className="animate-spin" /> : <Download />}
-                {t("batchDownloadDialog.download", { count: plan?.items.length ?? 0 })}
-              </Button>
-            )}
-          </div>
-        </div>
+          )}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

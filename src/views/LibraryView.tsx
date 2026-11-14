@@ -21,7 +21,6 @@ import {
   sectionOf,
   type LibraryFilter,
 } from "@/components/LibraryFilters";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
 import { useRestoredScroll } from "@/hooks/useRestoredScroll";
@@ -129,7 +128,7 @@ export function LibraryView({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-4 py-2.5">
+      <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-5 py-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-sm font-semibold">{t("libraryView.title")}</h1>
           {canPickFolders ? (
@@ -159,7 +158,7 @@ export function LibraryView({
           </Button>
         </Hint>
         <Button
-          variant={showFilters || isFiltering(filter) ? "default" : "ghost"}
+          variant={showFilters || isFiltering(filter) ? "secondary" : "ghost"}
           size="sm"
           onClick={() =>
             onShelfChange((current) => ({ ...current, showFilters: !current.showFilters }))
@@ -301,19 +300,24 @@ function SeriesCard({
             <BookOpen className="size-6 text-muted-foreground" />
           )}
         </div>
-        <div className="flex flex-col gap-1 p-2">
+        <div className="flex flex-col gap-1 px-3 pb-3 pt-2.5">
           <p className="truncate text-xs font-medium" title={series.title}>
             {series.title}
           </p>
-          <p className="truncate text-[10px] text-muted-foreground">
+          <p className="truncate text-[11px] text-muted-foreground">
             {series.author || t("libraryView.unknownAuthor")}
           </p>
-          <Badge variant={complete ? "default" : "outline"} className="mt-0.5 w-fit">
+          <p
+            className={cn(
+              "truncate text-[10px]",
+              complete ? "font-medium text-primary" : "text-muted-foreground",
+            )}
+          >
             {t("libraryView.chaptersCount", {
               have: series.have_chapters,
               known: series.known_chapters || "?",
             })}
-          </Badge>
+          </p>
         </div>
       </button>
 

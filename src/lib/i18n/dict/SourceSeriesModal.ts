@@ -14,6 +14,7 @@ const dict: PartialDictionary = {
     "sourceSeriesModal.getHint": "Download into your library",
     "sourceSeriesModal.read": "Read",
     "sourceSeriesModal.get": "Get",
+    "sourceSeriesModal.chapterTitle": "Chapter {number}",
   },
   "pt-BR": {
     "sourceSeriesModal.unknownAuthor": "Autor desconhecido",
@@ -28,6 +29,7 @@ const dict: PartialDictionary = {
     "sourceSeriesModal.getHint": "Baixar para a sua biblioteca",
     "sourceSeriesModal.read": "Ler",
     "sourceSeriesModal.get": "Baixar",
+    "sourceSeriesModal.chapterTitle": "Capítulo {number}",
   },
 };
 

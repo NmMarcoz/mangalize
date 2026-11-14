@@ -38,7 +38,7 @@ export function PageGrid({
   onSetCover,
 }: PageGridProps) {
   return (
-    <div className="flex flex-col gap-6 p-5">
+    <div className="flex flex-col gap-6 px-6 pb-6 pt-5">
       {groups.map((group) => {
         const excluded = group.chapter.pages.length - group.chapter.pages.filter((p) => p.excluded === null).length;
         const spreads = group.chapter.pages.filter(
@@ -48,7 +48,7 @@ export function PageGrid({
         return (
           <Fragment key={group.chapter.source}>
             {showHeaders && (
-              <div className="sticky top-0 z-10 -mx-5 flex items-center gap-2 border-b border-border/60 bg-background/85 px-5 py-2 backdrop-blur">
+              <div className="sticky top-0 z-10 -mx-6 flex items-center gap-2 border-b border-border/60 bg-background/85 px-6 py-2 backdrop-blur">
                 <h2 className="text-sm font-semibold">{group.chapter.title}</h2>
                 <Badge variant="outline">
                   {group.chapter.pages.filter((p) => p.excluded === null).length} pages

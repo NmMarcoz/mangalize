@@ -4,6 +4,7 @@ const dict: PartialDictionary = {
   en: {
     "toolbar.backToLibrary": "Back to the library",
     "toolbar.untitledVolume": "Untitled volume",
+    "toolbar.title": "{series} · Volume {volume}",
     "toolbar.chapters": "{count} chapters",
     "toolbar.pages": "{count} pages",
     "toolbar.spreads": "{count} spreads",
@@ -23,6 +24,7 @@ const dict: PartialDictionary = {
   "pt-BR": {
     "toolbar.backToLibrary": "Voltar para a biblioteca",
     "toolbar.untitledVolume": "Volume sem título",
+    "toolbar.title": "{series} · Volume {volume}",
     "toolbar.chapters": "{count} capítulos",
     "toolbar.pages": "{count} páginas",
     "toolbar.spreads": "{count} páginas duplas",

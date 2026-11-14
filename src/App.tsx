@@ -6,6 +6,8 @@ import { exit } from "@tauri-apps/plugin-process";
 import { AlertTriangle, ListChecks, Loader2, X } from "lucide-react";
 
 import { EmptyState } from "@/components/EmptyState";
+import { Splash } from "@/components/Splash";
+import { useTheme } from "@/lib/theme";
 import { Sidebar, type Section } from "@/components/Sidebar";
 import { TaskPanel, useTasks } from "@/components/TaskPanel";
 import { UpdateBanner } from "@/components/UpdateBanner";
@@ -93,6 +95,8 @@ export default function App() {
   const [browse, setBrowse] = useState<BrowseState>(emptyBrowse);
   const [shelf, setShelf] = useState<ShelfState>(emptyShelf);
   const [showTasks, setShowTasks] = useState(false);
+  // Owned here so the OS listener lives as long as the window; Settings edits it.
+  const [theme, setTheme] = useTheme();
   const { tasks, active } = useTasks();
 
   const updater = useUpdater();
@@ -229,7 +233,7 @@ export default function App() {
   /* ------------------------------------------------------------------ render */
 
   const body = () => {
-    if (!settings) return null;
+    if (!settings) return <Splash />;
 
     // Asked once, before anything needs somewhere to go.
     if (!settings.welcomed) {
@@ -311,6 +315,8 @@ export default function App() {
           onError={setError}
           updateStage={updater.state.stage}
           onCheckUpdates={updater.checkNow}
+          theme={theme}
+          onThemeChange={setTheme}
         />
       );
     }
@@ -449,7 +455,7 @@ export default function App() {
             onClick={() => setShowTasks((open) => !open)}
             title="Tasks"
             className={cn(
-              "absolute right-3 top-3 z-40 flex items-center gap-1.5 rounded-full border border-border bg-card/95 px-2.5 py-1 text-[11px] shadow-lg backdrop-blur",
+              "absolute right-3 top-3 z-40 flex items-center gap-1.5 rounded-full border border-border bg-card/95 px-3 py-1.5 text-xs font-medium shadow-lg backdrop-blur",
               active > 0 ? "text-foreground" : "text-muted-foreground",
             )}
           >

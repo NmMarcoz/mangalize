@@ -152,15 +152,19 @@ export function SourceSeriesModal({
     [ensureAdded, onError],
   );
 
+  const altTitles = [details?.title_romaji, details?.title_native]
+    .filter((alt) => alt && alt !== title)
+    .join(" · ");
+
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-h-[88dvh] max-w-4xl">
         <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
-          <div className={cn("flex gap-4 p-5", isMobile && "flex-col")}>
+          <div className={cn("flex gap-6 p-6", isMobile && "flex-col gap-4")}>
             <div
               className={cn(
                 "flex items-center justify-center overflow-hidden rounded-lg bg-muted/40",
-                isMobile ? "h-52 w-36 self-start" : "h-56 w-40 shrink-0",
+                isMobile ? "h-52 w-36 self-start" : "h-[228px] w-40 shrink-0",
               )}
             >
               {(details?.cover_url ?? manga.cover_url) ? (
@@ -174,21 +178,16 @@ export function SourceSeriesModal({
               )}
             </div>
 
-            <div className="flex min-w-0 flex-1 flex-col gap-2">
-              <DialogTitle className="text-base leading-tight">{title}</DialogTitle>
-
-              <p className="text-[11px] text-muted-foreground">
-                {[details?.title_romaji, details?.title_native]
-                  .filter((t) => t && t !== title)
-                  .join(" · ")}
-              </p>
-
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                <span>{details?.author ?? t("sourceSeriesModal.unknownAuthor")}</span>
-                {details?.artist && details.artist !== details.author && (
-                  <span>· {details.artist}</span>
-                )}
+            <div className="flex min-w-0 flex-1 flex-col gap-3 pr-8">
+              <div className="flex flex-col gap-1">
+                <DialogTitle className="leading-tight">{title}</DialogTitle>
+                {altTitles && <p className="text-[11px] text-muted-foreground">{altTitles}</p>}
               </div>
+
+              <p className="text-xs text-muted-foreground">
+                {details?.author ?? t("sourceSeriesModal.unknownAuthor")}
+                {details?.artist && details.artist !== details.author && ` · ${details.artist}`}
+              </p>
 
               {details?.content_rating && (
                 <Badge
@@ -200,14 +199,11 @@ export function SourceSeriesModal({
               )}
 
               {details && details.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1.5">
                   {details.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground"
-                    >
+                    <Badge key={tag} variant="secondary" className="font-normal">
                       {tag}
-                    </span>
+                    </Badge>
                   ))}
                 </div>
               )}
@@ -224,11 +220,11 @@ export function SourceSeriesModal({
 
           <div
             className={cn(
-              "gap-3 px-5 py-3",
-              isMobile ? "flex flex-col items-stretch" : "flex items-end",
+              "gap-4 px-6 py-4",
+              isMobile ? "flex flex-col items-stretch" : "flex items-center",
             )}
           >
-            <p className="flex-1 pb-2 text-[11px] text-muted-foreground">
+            <p className="flex-1 text-[11px] text-muted-foreground">
               {layout && t("sourceSeriesModal.chaptersCount", { count: flat.length })}
             </p>
 
@@ -245,7 +241,7 @@ export function SourceSeriesModal({
             )}
           </div>
 
-          <div className="px-5 pb-5">
+          <div className="px-6 pb-6">
             {layout === null ? (
               <p className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
                 <Loader2 className="size-3.5 animate-spin" />{" "}
@@ -256,10 +252,10 @@ export function SourceSeriesModal({
                 {t("sourceSeriesModal.noChapters")}
               </p>
             ) : (
-              <div className="max-h-72 overflow-y-auto rounded-md border border-border">
+              <div className="-mx-6 max-h-80 overflow-y-auto border-y border-border">
                 {layout.map((volume) => (
                   <div key={volume.volume}>
-                    <p className="sticky top-0 bg-card/95 px-2.5 py-1 text-[10px] font-medium text-muted-foreground backdrop-blur">
+                    <p className="sticky top-0 z-10 bg-muted px-6 py-2 text-[10px] font-medium text-muted-foreground">
                       {t("sourceSeriesModal.volumeHeading", {
                         number: volume.volume,
                         count: volume.chapters.length,
@@ -302,36 +298,34 @@ function ChapterRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 border-b border-border/50 px-2.5 py-1 text-[11px] last:border-b-0",
-        !fetchable && "bg-amber-500/[0.03]",
+        "flex items-center gap-3 border-b border-border px-6 py-2 last:border-b-0",
+        !fetchable && "bg-amber-500/5",
       )}
     >
-      <span className="w-12 shrink-0 font-mono">{chapter.number}</span>
-      <span className="min-w-0 flex-1 truncate text-muted-foreground">
+      <span className="min-w-0 flex-1 truncate text-xs font-medium">
+        {t("sourceSeriesModal.chapterTitle", { number: chapter.number })}
         {!fetchable && (
-          <span className="text-amber-500/80">{t("sourceSeriesModal.notHosted")}</span>
+          <span className="ml-2 text-[11px] font-normal text-amber-500">
+            {t("sourceSeriesModal.notHosted")}
+          </span>
         )}
       </span>
 
       {fetchable && (
-        <>
+        <div className="flex items-center gap-1">
           <Hint label={t("sourceSeriesModal.readHint")}>
             <Button variant="ghost" size="sm" onClick={onRead} disabled={busy}>
-              <Cloud className="size-3" />
+              <Cloud />
               {t("sourceSeriesModal.read")}
             </Button>
           </Hint>
           <Hint label={t("sourceSeriesModal.getHint")}>
             <Button variant="ghost" size="sm" onClick={onGet} disabled={busy}>
-              {busy ? (
-                <Loader2 className="size-3 animate-spin" />
-              ) : (
-                <Download className="size-3" />
-              )}
+              {busy ? <Loader2 className="animate-spin" /> : <Download />}
               {t("sourceSeriesModal.get")}
             </Button>
           </Hint>
-        </>
+        </div>
       )}
     </div>
   );

@@ -4,7 +4,9 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { Check, CloudDownload, FolderOpen, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Chip } from "@/components/ui/chip";
 import { Label } from "@/components/ui/label";
+import type { ThemePreference } from "@/lib/theme";
 import type { UpdateStage } from "@/hooks/useUpdater";
 import {
   Select,
@@ -30,7 +32,16 @@ interface SettingsViewProps {
   /** Android only: the rail that normally carries these is not there. */
   updateStage: UpdateStage;
   onCheckUpdates: () => void;
+  /** Applied immediately rather than on Save: it is chrome, not configuration. */
+  theme: ThemePreference;
+  onThemeChange: (next: ThemePreference) => void;
 }
+
+const THEMES: { value: ThemePreference; label: string }[] = [
+  { value: "system", label: "Match system" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
 
 /** Where things live and what Build does by default. */
 export function SettingsView({
@@ -38,6 +49,8 @@ export function SettingsView({
   onError,
   updateStage,
   onCheckUpdates,
+  theme,
+  onThemeChange,
 }: SettingsViewProps) {
   const [settings, setLocal] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
@@ -77,7 +90,7 @@ export function SettingsView({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-4 py-2.5">
+      <header className="flex shrink-0 items-center gap-3 border-b border-border bg-card/60 px-5 py-3">
         <h1 className="flex-1 text-sm font-semibold">Settings</h1>
         <Button onClick={() => void save()} disabled={!settings || saving}>
           {saving ? <Loader2 className="animate-spin" /> : saved ? <Check /> : null}
@@ -91,7 +104,24 @@ export function SettingsView({
             <Loader2 className="size-3.5 animate-spin" /> Loading…
           </div>
         ) : (
-          <div className="mx-auto flex max-w-2xl flex-col gap-6 p-6">
+          <div className="mx-auto flex max-w-2xl flex-col gap-7 px-6 py-8">
+            <div className="flex flex-col gap-2">
+              <Label>Appearance</Label>
+              <div role="radiogroup" aria-label="Appearance" className="flex gap-2">
+                {THEMES.map((option) => (
+                  <Chip
+                    key={option.value}
+                    selected={theme === option.value}
+                    onClick={() => onThemeChange(option.value)}
+                  >
+                    {option.label}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+
+            <Separator />
+
             <FolderSetting
               label="Library folder"
               hint="Where series, chapters and cover art are stored. Moving this does not move existing files; point it at a folder you have already copied."
@@ -150,7 +180,7 @@ export function SettingsView({
 
             <Separator />
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
               <Label htmlFor="compression">Page size</Label>
               <Select
                 value={settings.compression}
@@ -180,7 +210,7 @@ export function SettingsView({
 
             <Separator />
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
               <Label htmlFor="format">Default format</Label>
               <Select
                 value={settings.default_format}
@@ -202,7 +232,7 @@ export function SettingsView({
             {/* Only on Android. Everywhere else this lives in the rail, which a
                 phone does not have and the bottom bar has no room for. */}
             {isAndroid && (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-2">
                 <Label>Updates</Label>
                 <div className="flex items-center gap-2">
                   <Button
@@ -250,7 +280,7 @@ function FolderSetting({
   onClear?: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       <Label>{label}</Label>
       <div className="flex items-center gap-2">
         <button
